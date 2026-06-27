@@ -1,6 +1,6 @@
-import { sendLessonReminder, sendPaymentReminder } from "./telegram.js";
-import { store } from "./store.js";
-import type { Lesson, Student } from "./types.js";
+import { sendLessonReminder, sendPaymentReminder } from "./telegram";
+import { store } from "./store";
+import type { Lesson, Student } from "./types";
 
 const minuteMs = 60_000;
 

@@ -38,7 +38,12 @@ button {
   padding: 0.75rem 1rem;
 }
 
-button:hover {
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+button:hover:not(:disabled) {
   background: var(--accent-strong);
 }
 
@@ -138,6 +143,14 @@ main {
 .muted,
 .empty {
   color: var(--muted);
+}
+
+.status-message {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
 }
 
 .form-grid {

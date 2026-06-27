@@ -2,7 +2,7 @@ import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { store } from "./store.js";
+import { store } from "./store";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 await rm(join(__dirname, "..", "data", "db.json"), { force: true });

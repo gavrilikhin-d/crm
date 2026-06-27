@@ -5,24 +5,29 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "start": "node dist/server.js",
-    "build": "tsc",
+    "start": "NODE_ENV=production tsx src/server.ts",
+    "build": "next build",
     "typecheck": "tsc --noEmit",
     "seed": "tsx src/seed.ts"
   },
   "dependencies": {
     "@telegraf/types": "^7.1.0",
-    "cors": "^2.8.5",
     "dotenv": "^16.4.7",
-    "express": "^4.21.2",
     "nanoid": "^5.0.9",
+    "next": "^15.3.5",
+    "postcss": "^8.5.15",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
     "telegraf": "^4.16.3"
   },
   "devDependencies": {
-    "@types/cors": "^2.8.17",
-    "@types/express": "^5.0.0",
     "@types/node": "^22.10.5",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
+  },
+  "overrides": {
+    "postcss": "^8.5.15"
   }
 }

@@ -1,7 +1,7 @@
 import { Telegraf } from "telegraf";
 import type { InlineKeyboardMarkup } from "@telegraf/types";
-import { store } from "./store.js";
-import type { Lesson, Student } from "./types.js";
+import { store } from "./store";
+import type { Lesson, Student } from "./types";
 
 let bot: Telegraf | null = null;
 

@@ -16,7 +16,7 @@ import type {
   Student,
   StudentBalance,
   TelegramInteraction
-} from "./types.js";
+} from "./types";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dbPath = join(__dirname, "..", "data", "db.json");
