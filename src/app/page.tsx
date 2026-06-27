@@ -1,7 +1,14 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import type { Database, Lesson, LessonPackage, Student, StudentBalance } from "../types";
+import { CalendarDays, CreditCard, GraduationCap, HelpCircle, RefreshCw, Settings, Users } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import type { Database, Lesson, LessonPackage, Student, StudentBalance } from "@/types";
 
 type Snapshot = Database & {
   balances: StudentBalance[];
@@ -42,7 +49,7 @@ const hourHeight = 76;
 
 export default function Home() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
-  const [message, setMessage] = useState<string>("");
+  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
 
   const students = snapshot?.students ?? [];
@@ -186,96 +193,109 @@ export default function Home() {
   }
 
   const debtLessons = snapshot?.balances.reduce((sum, balance) => sum + balance.debtLessons, 0) ?? 0;
-  const selectedTeacherName = students[0]?.fullName ?? "Teacher schedule";
+  const selectedTeacherName = "Teacher schedule";
 
   return (
-    <div className="scheduler-shell">
-      <aside className="sidebar">
-        <div className="brand">VOCAL</div>
-        <nav className="sidebar-nav" aria-label="Main navigation">
-          <a className="nav-item" href="#payments">
-            <span>●</span> Payments
-          </a>
-          <a className="nav-item" href="#students">
-            <span>●</span> Clients
-          </a>
-          <a className="nav-item active" href="#schedule">
-            <span>●</span> Schedule
-          </a>
-          <a className="nav-item" href="#sessions">
-            <span>●</span> Sessions
-          </a>
+    <div className="mx-auto my-[5.5vh] grid min-h-[820px] w-[88vw] max-w-[1500px] grid-cols-[132px_minmax(1040px,1fr)] bg-white shadow-[0_26px_60px_rgb(68_45_30/12%)] max-[1180px]:my-0 max-[1180px]:w-full max-[1180px]:grid-cols-1">
+      <aside className="flex min-h-[820px] flex-col border-r border-stone-200 px-6 py-8 max-[1180px]:min-h-0 max-[1180px]:border-b max-[1180px]:border-r-0">
+        <div className="mb-20 text-lg font-black tracking-[0.42em] text-orange-600 max-[1180px]:mb-6">VOCAL</div>
+        <nav className="grid gap-5 max-[1180px]:flex max-[1180px]:flex-wrap" aria-label="Main navigation">
+          <SidebarLink href="#payments" icon={<CreditCard className="size-4" />}>
+            Payments
+          </SidebarLink>
+          <SidebarLink href="#students" icon={<Users className="size-4" />}>
+            Clients
+          </SidebarLink>
+          <SidebarLink href="#schedule" icon={<CalendarDays className="size-4" />} active>
+            Schedule
+          </SidebarLink>
+          <SidebarLink href="#sessions" icon={<GraduationCap className="size-4" />}>
+            Sessions
+          </SidebarLink>
         </nav>
-        <div className="sidebar-footer">
-          <a href="#settings">Settings</a>
-          <a href="#help">Help</a>
-          <button className="text-button" type="button" onClick={loadSnapshot} disabled={loading}>
-            Refresh
+        <div className="mt-auto grid gap-3 text-sm text-stone-500 max-[1180px]:mt-6 max-[1180px]:flex">
+          <a className="flex items-center gap-2 hover:text-stone-900" href="#settings">
+            <Settings className="size-4" /> Settings
+          </a>
+          <a className="flex items-center gap-2 hover:text-stone-900" href="#help">
+            <HelpCircle className="size-4" /> Help
+          </a>
+          <button className="flex items-center gap-2 text-left hover:text-stone-900" type="button" onClick={loadSnapshot}>
+            <RefreshCw className="size-4" /> Refresh
           </button>
         </div>
       </aside>
 
-      <main className="scheduler-main">
-        <header className="topbar">
+      <main className="min-w-0">
+        <header className="flex min-h-22 items-center justify-between border-b border-stone-200 px-10 py-5">
           <div>
-            <p className="eyebrow">Lesson Scheduling CRM</p>
-            <h1>{selectedTeacherName}</h1>
+            <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-stone-400">Lesson Scheduling CRM</p>
+            <h1 className="mt-1 text-lg font-bold text-stone-900">{selectedTeacherName}</h1>
           </div>
-          <div className="top-actions">
-            <span className="top-pill">{snapshot?.dashboard.studentsCount ?? 0} students</span>
-            <span className="top-pill danger">{debtLessons} unpaid lessons</span>
-            <a className="primary-link" href="#new-session">
-              Schedule lesson
-            </a>
+          <div className="flex items-center gap-3">
+            <Badge variant="secondary">{snapshot?.dashboard.studentsCount ?? 0} students</Badge>
+            <Badge variant={debtLessons > 0 ? "destructive" : "secondary"}>{debtLessons} unpaid lessons</Badge>
+            <Button asChild>
+              <a href="#new-session">Schedule lesson</a>
+            </Button>
           </div>
         </header>
 
-        <div className="tabs" role="tablist" aria-label="Teacher sections">
-          <button className="tab" type="button">
+        <div className="flex h-13 items-center gap-8 border-b border-stone-200 px-10">
+          <Button variant="ghost" className="h-full rounded-none px-0 text-stone-400">
             Details
-          </button>
-          <button className="tab active" type="button">
+          </Button>
+          <Button variant="ghost" className="h-full rounded-none border-b-2 border-orange-600 px-0 text-stone-900">
             Schedule
-          </button>
-          <button className="tab" type="button">
+          </Button>
+          <Button variant="ghost" className="h-full rounded-none px-0 text-stone-400">
             Past sessions
-          </button>
+          </Button>
         </div>
 
-        {message ? <p className="status-message">{message}</p> : null}
+        {message ? (
+          <div className="border-b border-orange-100 bg-orange-50 px-10 py-3 text-sm text-orange-900">{message}</div>
+        ) : null}
 
-        <section className="schedule-layout" id="schedule">
-          <div className="calendar-panel">
-            <div className="calendar-toolbar">
-              <button className="secondary compact-button" type="button">
+        <section className="grid grid-cols-[minmax(720px,1fr)_330px] gap-6 p-6 px-10 pb-10 max-[1180px]:grid-cols-1" id="schedule">
+          <div className="min-w-0">
+            <div className="mb-3 flex h-12 items-center justify-between">
+              <Button variant="secondary" size="sm">
                 Today
-              </button>
-              <div className="week-range">{formatWeekRange(weekDays)}</div>
-              <button className="secondary compact-button" type="button" onClick={loadSnapshot} disabled={loading}>
+              </Button>
+              <div className="text-xs font-extrabold uppercase tracking-wide text-stone-400">{formatWeekRange(weekDays)}</div>
+              <Button variant="secondary" size="sm" onClick={loadSnapshot} disabled={loading}>
                 {loading ? "Loading..." : "Sync"}
-              </button>
+              </Button>
             </div>
 
-            <div className="calendar-grid">
-              <div className="calendar-corner" />
+            <div className="grid min-h-[680px] grid-cols-[62px_repeat(7,minmax(86px,1fr))] grid-rows-[58px_auto]">
+              <div className="border-b border-stone-300" />
               {weekDays.map((day, index) => (
-                <div className="day-heading" key={day.toISOString()}>
-                  <strong>{weekDayLabels[index]}</strong>
-                  <span>{formatDay(day)}</span>
+                <div className="grid justify-items-center border-b border-stone-300 pt-2" key={day.toISOString()}>
+                  <strong className="text-xs uppercase text-stone-900">{weekDayLabels[index]}</strong>
+                  <span className="text-[0.68rem] font-bold text-stone-400">{formatDay(day)}</span>
                 </div>
               ))}
 
-              <div className="time-axis">
+              <div className="col-start-1 row-start-2">
                 {visibleHours.map((hour) => (
-                  <div className="time-label" key={hour}>
+                  <div className="h-[76px] pt-1 text-xs font-bold text-stone-400" key={hour}>
                     {formatHour(hour)}
                   </div>
                 ))}
               </div>
 
               {weekDays.map((day, dayIndex) => (
-                <div className="day-column" key={day.toISOString()}>
-                  <div className="availability-band" />
+                <div
+                  className="relative min-h-[988px] border-l border-stone-100"
+                  key={day.toISOString()}
+                  style={{
+                    background:
+                      "repeating-linear-gradient(to bottom, transparent 0, transparent 75px, #ebe8e5 75px, #ebe8e5 76px)"
+                  }}
+                >
+                  <div className="absolute inset-x-2 bottom-[76px] top-[76px] bg-teal-100/70" />
                   {weekLessons
                     .filter((lesson) => sameDate(new Date(lesson.startsAt), day))
                     .map((lesson) => (
@@ -292,144 +312,203 @@ export default function Home() {
             </div>
           </div>
 
-          <aside className="right-rail">
-            <section className="quick-card" id="new-session">
-              <div className="card-heading">
-                <h2>Schedule session</h2>
-                <span>{typeLabels.group} ready</span>
-              </div>
-              <form className="stacked-form" onSubmit={handleLessonSubmit}>
-                <input name="startsAt" type="datetime-local" required />
-                <div className="inline-fields">
-                  <select name="lessonType" required defaultValue="individual">
-                    <option value="individual">Individual</option>
-                    <option value="group">Group</option>
-                  </select>
-                  <input name="durationMinutes" type="number" min="1" placeholder="Min" />
-                </div>
-                <select name="studentIds" multiple required>
-                  {students
-                    .filter((student) => student.status === "active")
-                    .map((student) => (
-                      <option key={student.id} value={student.id}>
-                        {student.fullName}
-                      </option>
-                    ))}
-                </select>
-                <button type="submit">Add to calendar</button>
-              </form>
-            </section>
+          <aside className="grid content-start gap-4">
+            <Card id="new-session">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center justify-between text-base">
+                  Schedule session <Badge variant="teal">Group ready</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form className="grid gap-3" onSubmit={handleLessonSubmit}>
+                  <Input name="startsAt" type="datetime-local" required />
+                  <div className="grid grid-cols-2 gap-3">
+                    <Select name="lessonType" required defaultValue="individual">
+                      <option value="individual">Individual</option>
+                      <option value="group">Group</option>
+                    </Select>
+                    <Input name="durationMinutes" type="number" min="1" placeholder="Min" />
+                  </div>
+                  <Select name="studentIds" multiple required>
+                    {students
+                      .filter((student) => student.status === "active")
+                      .map((student) => (
+                        <option key={student.id} value={student.id}>
+                          {student.fullName}
+                        </option>
+                      ))}
+                  </Select>
+                  <Button type="submit">Add to calendar</Button>
+                </form>
+              </CardContent>
+            </Card>
 
-            <section className="quick-card" id="students">
-              <div className="card-heading">
-                <h2>Clients</h2>
-                <span>{students.length}</span>
-              </div>
-              <form className="stacked-form" onSubmit={handleStudentSubmit}>
-                <input name="fullName" placeholder="Full name" required />
-                <input name="phone" placeholder="Phone" required />
-                <input name="telegramUsername" placeholder="Telegram username" />
-                <input name="telegramChatId" placeholder="Telegram chat id" />
-                <input name="defaultLessonPrice" type="number" min="0" placeholder="Single lesson price" />
-                <button className="secondary" type="submit">
-                  Add client
-                </button>
-              </form>
-              <div className="client-list">
-                {students.slice(0, 5).map((student) => {
-                  const balance = getBalance(student.id);
-                  const canSendPaymentReminder =
-                    Boolean(student.telegramChatId) && (balance.remainingLessons < 1 || balance.debtLessons > 0);
-                  return (
-                    <div className="client-row" key={student.id}>
-                      <div>
-                        <strong>{student.fullName}</strong>
-                        <span>{balance.remainingLessons} lessons left</span>
+            <Card id="students">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center justify-between text-base">
+                  Clients <Badge variant="secondary">{students.length}</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-4">
+                <form className="grid gap-3" onSubmit={handleStudentSubmit}>
+                  <Input name="fullName" placeholder="Full name" required />
+                  <Input name="phone" placeholder="Phone" required />
+                  <Input name="telegramUsername" placeholder="Telegram username" />
+                  <Input name="telegramChatId" placeholder="Telegram chat id" />
+                  <Input name="defaultLessonPrice" type="number" min="0" placeholder="Single lesson price" />
+                  <Button variant="secondary" type="submit">
+                    Add client
+                  </Button>
+                </form>
+                <div className="grid gap-2">
+                  {students.slice(0, 5).map((student) => {
+                    const balance = getBalance(student.id);
+                    const canSendPaymentReminder =
+                      Boolean(student.telegramChatId) && (balance.remainingLessons < 1 || balance.debtLessons > 0);
+                    return (
+                      <div className="flex items-center justify-between border-t border-stone-100 pt-2" key={student.id}>
+                        <div>
+                          <strong className="block text-sm">{student.fullName}</strong>
+                          <span className="text-xs text-stone-500">{balance.remainingLessons} lessons left</span>
+                        </div>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          type="button"
+                          disabled={!canSendPaymentReminder}
+                          onClick={() =>
+                            withRefresh(async () => {
+                              const result = await api<{ sent: boolean; reason?: string }>(
+                                `/api/payment-reminders/${student.id}`,
+                                { method: "POST" }
+                              );
+                              return result.sent ? "Payment reminder sent." : result.reason || "Reminder skipped.";
+                            })
+                          }
+                        >
+                          Pay
+                        </Button>
                       </div>
-                      <button
-                        className="icon-button"
-                        type="button"
-                        disabled={!canSendPaymentReminder}
-                        title="Remind about payment"
-                        onClick={() =>
-                          withRefresh(async () => {
-                            const result = await api<{ sent: boolean; reason?: string }>(
-                              `/api/payment-reminders/${student.id}`,
-                              { method: "POST" }
-                            );
-                            return result.sent ? "Payment reminder sent." : result.reason || "Reminder skipped.";
-                          })
-                        }
-                      >
-                        Pay
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-
-            <section className="quick-card" id="payments">
-              <div className="card-heading">
-                <h2>Payments</h2>
-                <span>{payments.length}</span>
-              </div>
-              <form className="stacked-form" onSubmit={handlePaymentSubmit}>
-                <select name="studentId" required defaultValue="">
-                  <option value="">Client</option>
-                  {students
-                    .filter((student) => student.status === "active")
-                    .map((student) => (
-                      <option key={student.id} value={student.id}>
-                        {student.fullName}
-                      </option>
-                    ))}
-                </select>
-                <select name="packageId" defaultValue="">
-                  <option value="">No package</option>
-                  {lessonPackages
-                    .filter((item) => item.active)
-                    .map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name}: {item.lessonCount} / {item.price}
-                      </option>
-                    ))}
-                </select>
-                <div className="inline-fields">
-                  <input name="lessonCount" type="number" min="1" placeholder="Lessons" />
-                  <input name="amount" type="number" min="0" placeholder="Amount" />
+                    );
+                  })}
                 </div>
-                <select name="method" required defaultValue="transfer">
-                  <option value="transfer">Transfer</option>
-                  <option value="cash">Cash</option>
-                  <option value="other">Other</option>
-                </select>
-                <button className="secondary" type="submit">
-                  Add payment
-                </button>
-              </form>
-            </section>
+              </CardContent>
+            </Card>
 
-            <section className="quick-card" id="sessions">
-              <div className="card-heading">
-                <h2>Packages</h2>
-                <span>{lessonPackages.length}</span>
-              </div>
-              <form className="stacked-form" onSubmit={handlePackageSubmit}>
-                <input name="name" placeholder="Package name" required />
-                <div className="inline-fields">
-                  <input name="lessonCount" type="number" min="1" placeholder="Lessons" required />
-                  <input name="price" type="number" min="0" placeholder="Price" required />
-                </div>
-                <button className="secondary" type="submit">
-                  Add package
-                </button>
-              </form>
-            </section>
+            <PaymentCard
+              students={students}
+              lessonPackages={lessonPackages}
+              paymentsCount={payments.length}
+              onSubmit={handlePaymentSubmit}
+            />
+
+            <Card id="sessions">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center justify-between text-base">
+                  Packages <Badge variant="secondary">{lessonPackages.length}</Badge>
+                </CardTitle>
+                <CardDescription>Whole-number lesson bundles.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form className="grid gap-3" onSubmit={handlePackageSubmit}>
+                  <Input name="name" placeholder="Package name" required />
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input name="lessonCount" type="number" min="1" placeholder="Lessons" required />
+                    <Input name="price" type="number" min="0" placeholder="Price" required />
+                  </div>
+                  <Button variant="secondary" type="submit">
+                    Add package
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
           </aside>
         </section>
       </main>
     </div>
+  );
+}
+
+function SidebarLink({
+  href,
+  icon,
+  active,
+  children
+}: {
+  href: string;
+  icon: React.ReactNode;
+  active?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <a
+      className={cn(
+        "-ml-6 flex items-center gap-3 border-l-4 border-transparent pl-5 text-sm font-bold text-stone-500 no-underline transition-colors hover:text-orange-600",
+        active && "border-orange-600 text-orange-600"
+      )}
+      href={href}
+    >
+      {icon}
+      {children}
+    </a>
+  );
+}
+
+function PaymentCard({
+  students,
+  lessonPackages,
+  paymentsCount,
+  onSubmit
+}: {
+  students: Student[];
+  lessonPackages: LessonPackage[];
+  paymentsCount: number;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <Card id="payments">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between text-base">
+          Payments <Badge variant="secondary">{paymentsCount}</Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form className="grid gap-3" onSubmit={onSubmit}>
+          <Select name="studentId" required defaultValue="">
+            <option value="">Client</option>
+            {students
+              .filter((student) => student.status === "active")
+              .map((student) => (
+                <option key={student.id} value={student.id}>
+                  {student.fullName}
+                </option>
+              ))}
+          </Select>
+          <Select name="packageId" defaultValue="">
+            <option value="">No package</option>
+            {lessonPackages
+              .filter((item) => item.active)
+              .map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}: {item.lessonCount} / {item.price}
+                </option>
+              ))}
+          </Select>
+          <div className="grid grid-cols-2 gap-3">
+            <Input name="lessonCount" type="number" min="1" placeholder="Lessons" />
+            <Input name="amount" type="number" min="0" placeholder="Amount" />
+          </div>
+          <Select name="method" required defaultValue="transfer">
+            <option value="transfer">Transfer</option>
+            <option value="cash">Cash</option>
+            <option value="other">Other</option>
+          </Select>
+          <Button variant="secondary" type="submit">
+            Add payment
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -453,18 +532,23 @@ function CalendarLesson({
 
   return (
     <article
-      className={`calendar-lesson ${lesson.effectiveType} ${hasDebt ? "has-debt" : ""}`}
+      className={cn(
+        "absolute left-3 right-3 z-10 grid gap-0.5 overflow-hidden rounded-md p-2 text-white shadow-xl",
+        lesson.effectiveType === "group" ? "bg-teal-700" : "bg-teal-600",
+        hasDebt && "bg-stone-400"
+      )}
       style={{ top, minHeight: height }}
     >
-      <strong>{primaryStudent?.fullName ?? "Lesson"}</strong>
-      <span>
+      <strong className="text-xs leading-tight">{primaryStudent?.fullName ?? "Lesson"}</strong>
+      <span className="text-[0.66rem] leading-tight">
         {formatTime(date)} · {typeLabels[lesson.effectiveType]}
       </span>
-      <small>{lesson.participants.length} participant(s)</small>
-      {converted ? <em>Converted to individual</em> : null}
-      <div className="lesson-actions">
+      <small className="text-[0.66rem] leading-tight">{lesson.participants.length} participant(s)</small>
+      {converted ? <em className="text-[0.66rem] leading-tight">Converted to individual</em> : null}
+      <div className="mt-1 flex gap-1">
         {lesson.participants.slice(0, 2).map((participant) => (
-          <button
+          <Button
+            className="h-6 bg-white/20 px-2 text-[0.62rem] text-white hover:bg-white/30"
             type="button"
             key={participant.id}
             onClick={() =>
@@ -477,9 +561,10 @@ function CalendarLesson({
             }
           >
             ✓
-          </button>
+          </Button>
         ))}
-        <button
+        <Button
+          className="h-6 bg-white/20 px-2 text-[0.62rem] text-white hover:bg-white/30"
           type="button"
           onClick={() =>
             onAction(async () => {
@@ -488,7 +573,7 @@ function CalendarLesson({
           }
         >
           Done
-        </button>
+        </Button>
       </div>
     </article>
   );
