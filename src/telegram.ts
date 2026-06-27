@@ -28,13 +28,22 @@ export function getTelegramBot(): Telegraf | null {
   });
 
   bot.action(/^lesson:(.+):student:(.+):(attend|decline)$/, async (ctx) => {
-    const [, lessonId, studentId, rawAction] = ctx.match;
-    const action = rawAction as "attend" | "decline";
-    const status = action === "attend" ? "confirmed" : "declined";
-    const lesson = await store.setParticipantStatus(lessonId, studentId, status, action);
-    await ctx.answerCbQuery(action === "attend" ? "Отмечено: будете" : "Отмечено: не будете");
-    await ctx.editMessageReplyMarkup(undefined);
-    await ctx.reply(formatParticipantResult(lesson, studentId, action));
+    try {
+      const [, lessonId, studentId, rawAction] = ctx.match;
+      const action = rawAction as "attend" | "decline";
+      const status = action === "attend" ? "confirmed" : "declined";
+      const lesson = await store.setParticipantStatus(lessonId, studentId, status, action);
+      await ctx.answerCbQuery(action === "attend" ? "Отмечено: будете" : "Отмечено: не будете");
+      await ctx.editMessageReplyMarkup(undefined).catch(() => undefined);
+      await ctx.reply(formatParticipantResult(lesson, studentId, action));
+      console.log(`Telegram callback processed: lesson=${lessonId} student=${studentId} action=${action}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown Telegram callback error";
+      console.error("Telegram callback failed:", message);
+      await ctx.answerCbQuery("Не удалось обработать кнопку. Проверьте, что занятие еще существует.", {
+        show_alert: true
+      });
+    }
   });
 
   return bot;
@@ -47,8 +56,19 @@ export async function startTelegramBot(): Promise<void> {
     return;
   }
 
-  await instance.launch();
-  console.log("Telegram bot polling started");
+  console.log("Telegram bot starting polling...");
+
+  try {
+    const botInfo = await withTimeout(instance.telegram.getMe(), 15_000, "Telegram getMe timeout");
+    void instance.launch({ dropPendingUpdates: true }).catch((error) => {
+      const message = error instanceof Error ? error.message : "Unknown Telegram polling error";
+      console.error("Telegram polling stopped with error:", message);
+    });
+    console.log(`Telegram bot polling started as @${botInfo.username}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown Telegram launch error";
+    console.error("Telegram bot failed to start:", message);
+  }
 
   process.once("SIGINT", () => instance.stop("SIGINT"));
   process.once("SIGTERM", () => instance.stop("SIGTERM"));
@@ -65,15 +85,20 @@ export async function sendLessonReminder(student: Student, lesson: Lesson): Prom
   });
 }
 
-export async function sendPaymentReminder(student: Student, debtLessons: number): Promise<void> {
+export async function sendPaymentReminder(student: Student, unpaidLessons: number): Promise<void> {
   const instance = getTelegramBot();
   if (!instance || !student.telegramChatId) {
     return;
   }
 
+  const paymentText =
+    unpaidLessons > 0
+      ? `сейчас не оплачено занятий: ${unpaidLessons}`
+      : "на балансе нет оплаченных занятий";
+
   await instance.telegram.sendMessage(
     student.telegramChatId,
-    `Напоминание об оплате: сейчас не оплачено занятий: ${debtLessons}. Пожалуйста, свяжитесь с преподавателем.`
+    `Напоминание об оплате: ${paymentText}. Пожалуйста, свяжитесь с преподавателем.`
   );
 }
 
@@ -86,6 +111,21 @@ function lessonKeyboard(lessonId: string, studentId: string): InlineKeyboardMark
       ]
     ]
   };
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timeoutId: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), ms);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
 }
 
 function formatLessonReminder(student: Student, lesson: Lesson): string {

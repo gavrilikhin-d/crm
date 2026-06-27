@@ -49,7 +49,7 @@ export async function runReminderTick(): Promise<void> {
   }
 }
 
-export async function sendManualPaymentReminder(studentId: string): Promise<void> {
+export async function sendManualPaymentReminder(studentId: string): Promise<{ sent: boolean; reason?: string }> {
   const db = await store.getSnapshot();
   const student = db.students.find((candidate) => candidate.id === studentId);
   if (!student) {
@@ -58,8 +58,15 @@ export async function sendManualPaymentReminder(studentId: string): Promise<void
 
   const balances = await store.getBalances();
   const balance = balances.find((candidate) => candidate.studentId === studentId);
-  if (!balance || balance.debtLessons <= 0) {
-    return;
+  const unpaidLessons = balance?.debtLessons ?? 0;
+  const hasNoPaidLessons = (balance?.remainingLessons ?? 0) < 1;
+
+  if (!balance || (!hasNoPaidLessons && unpaidLessons <= 0)) {
+    return { sent: false, reason: "У ученика есть оплаченные занятия на балансе." };
+  }
+
+  if (!student.telegramChatId) {
+    return { sent: false, reason: "У ученика не указан Telegram chat id." };
   }
 
   const reminder = await store.upsertReminder({
@@ -71,16 +78,18 @@ export async function sendManualPaymentReminder(studentId: string): Promise<void
   });
 
   try {
-    await sendPaymentReminder(student, balance.debtLessons);
+    await sendPaymentReminder(student, unpaidLessons);
     await store.updateReminder(reminder.id, {
-      status: student.telegramChatId ? "sent" : "skipped",
-      sentAt: student.telegramChatId ? new Date().toISOString() : undefined
+      status: "sent",
+      sentAt: new Date().toISOString()
     });
+    return { sent: true };
   } catch (error) {
     await store.updateReminder(reminder.id, {
       status: "failed",
       error: error instanceof Error ? error.message : "Unknown error"
     });
+    throw error;
   }
 }
 

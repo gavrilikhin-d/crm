@@ -121,8 +121,8 @@ app.post("/api/balance-adjustments", async (req, res, next) => {
 
 app.post("/api/payment-reminders/:studentId", async (req, res, next) => {
   try {
-    await sendManualPaymentReminder(req.params.studentId);
-    res.status(202).json({ ok: true });
+    const result = await sendManualPaymentReminder(req.params.studentId);
+    res.status(202).json({ ok: true, ...result });
   } catch (error) {
     next(error);
   }
@@ -136,10 +136,10 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
 
 await store.load();
 startReminderScheduler();
-await startTelegramBot();
 
 app.listen(port, () => {
   console.log(`CRM app is running on http://localhost:${port}`);
+  void startTelegramBot();
 });
 
 function requireFields(body: Record<string, unknown>, fields: string[]): void {

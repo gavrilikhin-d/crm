@@ -63,10 +63,17 @@ function renderStudents() {
   tbody.innerHTML = state.students
     .map((student) => {
       const balance = getBalance(student.id);
+      const canSendPaymentReminder =
+        Boolean(student.telegramChatId) && (balance.remainingLessons < 1 || balance.debtLessons > 0);
       const telegram = student.telegramChatId
         ? `chat id: ${escapeHtml(student.telegramChatId)}`
         : escapeHtml(student.telegramUsername || "не подключен");
-      const debt = balance.debtLessons > 0 ? `<span class="badge danger">долг ${balance.debtLessons}</span>` : "";
+      const debt =
+        balance.debtLessons > 0
+          ? `<span class="badge danger">долг ${balance.debtLessons}</span>`
+          : balance.remainingLessons < 1
+            ? '<span class="badge warn">нет оплаченных занятий</span>'
+            : "";
 
       return `
         <tr>
@@ -75,7 +82,7 @@ function renderStudents() {
           <td>${balance.remainingLessons} осталось, ${balance.chargedLessons} использовано ${debt}</td>
           <td>${student.status === "active" ? "Активен" : "Неактивен"}</td>
           <td>
-            <button class="secondary" data-payment-reminder="${student.id}" ${balance.debtLessons === 0 ? "disabled" : ""}>
+            <button class="secondary" data-payment-reminder="${student.id}" ${canSendPaymentReminder ? "" : "disabled"}>
               Напомнить об оплате
             </button>
           </td>
@@ -86,7 +93,8 @@ function renderStudents() {
 
   tbody.querySelectorAll("[data-payment-reminder]").forEach((button) => {
     button.addEventListener("click", async () => {
-      await api(`/api/payment-reminders/${button.dataset.paymentReminder}`, { method: "POST" });
+      const result = await api(`/api/payment-reminders/${button.dataset.paymentReminder}`, { method: "POST" });
+      alert(result.sent ? "Напоминание отправлено." : result.reason || "Напоминание не отправлено.");
       await loadSnapshot();
     });
   });
