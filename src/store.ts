@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { nanoid } from "nanoid";
@@ -85,15 +85,17 @@ export function parseReminderMinutes(value?: string): number[] {
 
 export class Store {
   private db: Database | null = null;
+  private loadedMtimeMs = 0;
 
   async load(): Promise<Database> {
-    if (this.db) {
+    if (this.db && !(await this.hasExternalUpdate())) {
       return this.db;
     }
 
     try {
       const raw = await readFile(dbPath, "utf8");
       this.db = JSON.parse(raw) as Database;
+      this.loadedMtimeMs = await this.getDbMtimeMs();
     } catch {
       this.db = defaultDatabase();
       await this.save();
@@ -108,7 +110,10 @@ export class Store {
     }
 
     await mkdir(dirname(dbPath), { recursive: true });
-    await writeFile(dbPath, JSON.stringify(this.db, null, 2));
+    const tmpPath = `${dbPath}.${process.pid}.tmp`;
+    await writeFile(tmpPath, JSON.stringify(this.db, null, 2));
+    await rename(tmpPath, dbPath);
+    this.loadedMtimeMs = await this.getDbMtimeMs();
   }
 
   async getSnapshot(): Promise<Database> {
@@ -418,6 +423,20 @@ export class Store {
       remainingLessons: Math.max(0, available),
       debtLessons: Math.max(0, -available)
     };
+  }
+
+  private async hasExternalUpdate(): Promise<boolean> {
+    const mtimeMs = await this.getDbMtimeMs();
+    return mtimeMs > this.loadedMtimeMs;
+  }
+
+  private async getDbMtimeMs(): Promise<number> {
+    try {
+      const stats = await stat(dbPath);
+      return stats.mtimeMs;
+    } catch {
+      return 0;
+    }
   }
 }
 
