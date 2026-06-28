@@ -20,6 +20,7 @@ import { CurrencyInput } from "@/components/examples/input/special/currency-inpu
 import { LessonOverviewSheet } from "@/components/lesson-overview-sheet";
 import { LessonParticipantSummary } from "@/components/lesson-participant-summary";
 import { ParticipantCardAvatar, ParticipantCardLabel } from "@/components/participant-card-label";
+import { StudentCombobox } from "@/components/student-combobox";
 import { StudentForm } from "@/components/student-form";
 import { TelegramIcon } from "@/components/icons/telegram-icon";
 import { StudentLink } from "@/components/student-link";
@@ -1074,24 +1075,33 @@ function PaymentForm({
   currency: CurrencyCode;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const [selectedStudentId, setSelectedStudentId] = useState("");
   const [selectedPackageId, setSelectedPackageId] = useState("");
   const selectedPackage = lessonPackages.find((item) => item.id === selectedPackageId);
+  const activeStudents = students.filter((student) => student.status === "active");
+
+  function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
+    if (!selectedStudentId) {
+      event.preventDefault();
+      toast.error("Выберите ученика.");
+      return;
+    }
+    onSubmit(event);
+  }
 
   return (
-    <form onSubmit={onSubmit}>
+    <form onSubmit={handleFormSubmit}>
       <FieldGroup className="gap-3">
         <Field>
           <FieldLabel htmlFor="payment-student-id">Ученик</FieldLabel>
-          <NativeSelect id="payment-student-id" name="studentId" required defaultValue="" className="w-full">
-            <NativeSelectOption value="">Ученик</NativeSelectOption>
-            {students
-              .filter((student) => student.status === "active")
-              .map((student) => (
-                <NativeSelectOption key={student.id} value={student.id}>
-                  {student.fullName}
-                </NativeSelectOption>
-              ))}
-          </NativeSelect>
+          <StudentCombobox
+            id="payment-student-id"
+            name="studentId"
+            students={activeStudents}
+            value={selectedStudentId}
+            onValueChange={setSelectedStudentId}
+            placeholder="Выберите ученика"
+          />
         </Field>
         <Field>
           <FieldLabel htmlFor="payment-package-id">Пакет</FieldLabel>
