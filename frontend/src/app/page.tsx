@@ -89,11 +89,6 @@ const statusLabels: Record<string, string> = {
   attended: "Посетил"
 };
 
-const typeLabels: Record<string, string> = {
-  individual: "Индивидуальное",
-  group: "Групповое"
-};
-
 const weekDayLabels = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const scheduleViewLabels: Record<ScheduleView, string> = {
   day: "День",
@@ -569,8 +564,6 @@ export default function Home() {
                 currentTime={currentTime}
                 lessons={dayLessons}
                 getStudent={getStudent}
-                onAction={(action) => withRefresh(action)}
-                onDeleteLesson={handleDeleteLesson}
               />
             ) : null}
 
@@ -581,8 +574,6 @@ export default function Home() {
                 currentTime={currentTime}
                 lessons={weekLessons}
                 getStudent={getStudent}
-                onAction={(action) => withRefresh(action)}
-                onDeleteLesson={handleDeleteLesson}
               />
             ) : null}
 
@@ -1302,17 +1293,13 @@ function DayCalendar({
   calendarRange,
   currentTime,
   lessons,
-  getStudent,
-  onAction,
-  onDeleteLesson
+  getStudent
 }: {
   day: Date;
   calendarRange: CalendarRange;
   currentTime: Date | null;
   lessons: Lesson[];
   getStudent: (studentId: string) => Student | undefined;
-  onAction: (action: () => Promise<void>) => void;
-  onDeleteLesson: (lesson: Lesson) => void;
 }) {
   const isToday = currentTime ? sameDate(day, currentTime) : false;
 
@@ -1330,8 +1317,6 @@ function DayCalendar({
         currentTime={currentTime}
         lessons={lessons}
         getStudent={getStudent}
-        onAction={onAction}
-        onDeleteLesson={onDeleteLesson}
       />
     </div>
   );
@@ -1342,17 +1327,13 @@ function WeekCalendar({
   calendarRange,
   currentTime,
   lessons,
-  getStudent,
-  onAction,
-  onDeleteLesson
+  getStudent
 }: {
   weekDays: Date[];
   calendarRange: CalendarRange;
   currentTime: Date | null;
   lessons: Lesson[];
   getStudent: (studentId: string) => Student | undefined;
-  onAction: (action: () => Promise<void>) => void;
-  onDeleteLesson: (lesson: Lesson) => void;
 }) {
   return (
     <div className="grid min-h-[680px] grid-cols-[62px_repeat(7,minmax(86px,1fr))] grid-rows-[58px_auto]">
@@ -1377,8 +1358,6 @@ function WeekCalendar({
           currentTime={currentTime}
           lessons={lessons.filter((lesson) => sameDate(new Date(lesson.startsAt), day))}
           getStudent={getStudent}
-          onAction={onAction}
-          onDeleteLesson={onDeleteLesson}
         />
       ))}
     </div>
@@ -1402,17 +1381,13 @@ function DayColumn({
   calendarRange,
   currentTime,
   lessons,
-  getStudent,
-  onAction,
-  onDeleteLesson
+  getStudent
 }: {
   day: Date;
   calendarRange: CalendarRange;
   currentTime: Date | null;
   lessons: Lesson[];
   getStudent: (studentId: string) => Student | undefined;
-  onAction: (action: () => Promise<void>) => void;
-  onDeleteLesson: (lesson: Lesson) => void;
 }) {
   const isToday = currentTime ? sameDate(day, currentTime) : false;
   const currentTimeOffset = currentTime && isToday ? getCurrentTimeOffset(currentTime, calendarRange) : null;
@@ -1427,18 +1402,9 @@ function DayColumn({
       }}
     >
       {currentTimeOffset !== null ? <CurrentTimeMarker top={currentTimeOffset} /> : null}
-      {lessons
-        .filter((lesson) => sameDate(new Date(lesson.startsAt), day))
-        .map((lesson) => (
-          <CalendarLesson
-            key={lesson.id}
-            lesson={lesson}
-            calendarRange={calendarRange}
-            getStudent={getStudent}
-            onAction={onAction}
-            onDelete={() => onDeleteLesson(lesson)}
-          />
-        ))}
+      {lessons.map((lesson) => (
+        <CalendarLesson key={lesson.id} lesson={lesson} calendarRange={calendarRange} getStudent={getStudent} />
+      ))}
     </div>
   );
 }
@@ -1492,27 +1458,9 @@ function MonthCalendar({
               {day.getDate()}
             </div>
             <div className="grid gap-1">
-              {dayLessons.slice(0, 4).map((lesson) => {
-                const student = getStudent(lesson.participants[0]?.studentId);
-                return (
-                  <Button
-                    key={lesson.id}
-                    type="button"
-                    size="sm"
-                    className={cn(
-                      "h-auto justify-start gap-2 rounded-md px-2 py-1 text-left text-[0.68rem] font-semibold text-white",
-                      lesson.effectiveType === "group" ? "bg-teal-700" : "bg-teal-600"
-                    )}
-                    onClick={() => onDeleteLesson(lesson)}
-                    title="Нажмите, чтобы удалить занятие"
-                  >
-                    {student ? <StudentAvatar student={student} size="sm" className="size-5 ring-1 ring-white/30" /> : null}
-                    <span className="truncate">
-                      {formatTime(new Date(lesson.startsAt))} {student?.fullName ?? "Занятие"}
-                    </span>
-                  </Button>
-                );
-              })}
+              {dayLessons.slice(0, 4).map((lesson) => (
+                <MonthLessonChip key={lesson.id} lesson={lesson} getStudent={getStudent} onDelete={() => onDeleteLesson(lesson)} />
+              ))}
               {dayLessons.length > 4 ? <span className="text-[0.68rem] text-stone-400">+{dayLessons.length - 4} еще</span> : null}
             </div>
           </div>
@@ -1522,83 +1470,137 @@ function MonthCalendar({
   );
 }
 
+function getLessonPosition(lesson: Lesson, calendarRange: CalendarRange) {
+  const startsAt = new Date(lesson.startsAt);
+  const startsAtMinutes = startsAt.getHours() * 60 + startsAt.getMinutes();
+  const top = ((startsAtMinutes - calendarRange.startHour * 60) / 60) * hourHeight;
+  const height = (lesson.durationMinutes / 60) * hourHeight;
+
+  return { top, height };
+}
+
+function formatTimeRange(start: Date, durationMinutes: number): string {
+  const end = new Date(start.getTime() + durationMinutes * 60_000);
+  return `${formatTime(start)} – ${formatTime(end)}`;
+}
+
+function getLessonBadges(lesson: Lesson) {
+  const converted = lesson.originalType === "group" && lesson.effectiveType === "individual";
+  const badges: Array<{ key: string; label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = [];
+
+  if (converted) {
+    badges.push({ key: "converted", label: "→ индивидуальное", variant: "outline" });
+  }
+
+  return badges;
+}
+
 function CalendarLesson({
   lesson,
   calendarRange,
-  getStudent,
-  onAction,
-  onDelete
+  getStudent
 }: {
   lesson: Lesson;
   calendarRange: CalendarRange;
   getStudent: (studentId: string) => Student | undefined;
-  onAction: (action: () => Promise<void>) => void;
-  onDelete: () => void;
 }) {
-  const date = new Date(lesson.startsAt);
-  const startsAtMinutes = date.getHours() * 60 + date.getMinutes();
-  const top = Math.max(0, ((startsAtMinutes - calendarRange.startHour * 60) / 60) * hourHeight);
-  const height = Math.max(62, (lesson.durationMinutes / 60) * hourHeight - 8);
-  const primaryStudent = getStudent(lesson.participants[0]?.studentId);
-  const converted = lesson.originalType === "group" && lesson.effectiveType === "individual";
-  const hasDebt = lesson.participants.some((participant) => participant.hasDebt);
+  const startsAt = new Date(lesson.startsAt);
+  const { top, height } = getLessonPosition(lesson, calendarRange);
+  const badges = getLessonBadges(lesson);
+  const compact = height < 52;
 
   return (
     <article
-      className={cn(
-        "absolute left-3 right-3 z-10 grid gap-0.5 overflow-hidden rounded-md p-2 text-white shadow-xl",
-        lesson.effectiveType === "group" ? "bg-teal-700" : "bg-teal-600",
-        hasDebt && "bg-stone-400"
-      )}
-      style={{ top, minHeight: height }}
+      className="absolute inset-x-1.5 z-10 flex flex-col gap-1 overflow-hidden rounded-lg border bg-card p-1.5 shadow-sm"
+      style={{ top, height }}
     >
-      <div className="flex items-center gap-2">
-        {primaryStudent ? <StudentAvatar student={primaryStudent} size="sm" className="ring-2 ring-white/30" /> : null}
-        <strong className="text-xs leading-tight">{primaryStudent?.fullName ?? "Занятие"}</strong>
+      <div className="flex items-start justify-between gap-1">
+        <span className="text-[0.68rem] font-semibold tabular-nums leading-tight">
+          {formatTimeRange(startsAt, lesson.durationMinutes)}
+        </span>
+        {badges.length ? (
+          <div className="flex shrink-0 flex-wrap justify-end gap-0.5">
+            {badges.map((badge) => (
+              <Badge key={badge.key} variant={badge.variant} className="px-1 py-0 text-[0.58rem]">
+                {badge.label}
+              </Badge>
+            ))}
+          </div>
+        ) : null}
       </div>
-      <span className="text-[0.66rem] leading-tight">
-        {formatTime(date)} · {typeLabels[lesson.effectiveType]}
-      </span>
-      <small className="text-[0.66rem] leading-tight">{lesson.participants.length} участник(ов)</small>
-      {converted ? <em className="text-[0.66rem] leading-tight">Перешло в индивидуальное</em> : null}
-      <div className="mt-1 flex gap-1">
-        {lesson.participants.slice(0, 2).map((participant) => (
-          <Button
-            className="h-6 bg-white/20 px-2 text-[0.62rem] text-white hover:bg-white/30"
-            type="button"
-            key={participant.id}
-            onClick={() =>
-              onAction(async () => {
-                await api(`/api/lessons/${lesson.id}/participants/${participant.studentId}/status`, {
-                  method: "POST",
-                  body: { status: "confirmed" }
-                });
-              })
-            }
-          >
-            ✓
-          </Button>
-        ))}
-        <Button
-          className="h-6 bg-white/20 px-2 text-[0.62rem] text-white hover:bg-white/30"
-          type="button"
-          onClick={() =>
-            onAction(async () => {
-              await api(`/api/lessons/${lesson.id}/complete`, { method: "POST" });
-            })
+      <div className={cn("flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto", compact && "gap-0")}>
+        {lesson.participants.map((participant) => {
+          const student = getStudent(participant.studentId);
+          if (!student) {
+            return null;
           }
-        >
-          Готово
-        </Button>
-        <Button
-          className="h-6 bg-white/20 px-2 text-[0.62rem] text-white hover:bg-white/30"
-          type="button"
-          onClick={onDelete}
-        >
-          <Trash2 className="size-3" />
-        </Button>
+
+          return (
+            <div key={participant.id} className="flex min-w-0 items-center gap-1.5">
+              <StudentAvatar student={student} size="sm" className={cn(compact ? "size-4" : "size-5")} />
+              {!compact ? (
+                <div className="flex min-w-0 flex-1 items-center gap-1">
+                  <span className="truncate text-[0.68rem] leading-tight">{student.fullName}</span>
+                  {participant.hasDebt ? (
+                    <Badge variant="destructive" className="shrink-0 px-1 py-0 text-[0.55rem]">
+                      Долг
+                    </Badge>
+                  ) : null}
+                </div>
+              ) : participant.hasDebt ? (
+                <span className="truncate text-[0.58rem] font-medium text-destructive">{student.fullName}</span>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
     </article>
+  );
+}
+
+function MonthLessonChip({
+  lesson,
+  getStudent,
+  onDelete
+}: {
+  lesson: Lesson;
+  getStudent: (studentId: string) => Student | undefined;
+  onDelete: () => void;
+}) {
+  const startsAt = new Date(lesson.startsAt);
+  const badges = getLessonBadges(lesson);
+  const participantNames = lesson.participants
+    .map((participant) => {
+      const name = getStudent(participant.studentId)?.fullName;
+      if (!name) {
+        return null;
+      }
+      return participant.hasDebt ? `${name} · долг` : name;
+    })
+    .filter(Boolean)
+    .join(", ");
+
+  return (
+    <button
+      type="button"
+      className="flex w-full flex-col gap-0.5 rounded-md border bg-card px-2 py-1 text-left"
+      onClick={onDelete}
+      title="Нажмите, чтобы удалить занятие"
+    >
+      <div className="flex items-center justify-between gap-1">
+        <span className="text-[0.62rem] font-semibold tabular-nums">{formatTimeRange(startsAt, lesson.durationMinutes)}</span>
+        {badges.length ? (
+          <div className="flex shrink-0 flex-wrap justify-end gap-0.5">
+            {badges.map((badge) => (
+              <Badge key={badge.key} variant={badge.variant} className="px-1 py-0 text-[0.55rem]">
+                {badge.label}
+              </Badge>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      <span className="truncate text-[0.62rem] text-muted-foreground">{participantNames || "Занятие"}</span>
+    </button>
   );
 }
 

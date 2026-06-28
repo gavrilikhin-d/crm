@@ -164,7 +164,7 @@ export class Store {
     for (const lesson of db.lessons) {
       lesson.participants = lesson.participants.filter((participant) => participant.studentId !== id);
       lesson.updatedAt = now();
-      recalculateLesson(lesson, db.settings.individualDurationMinutes);
+      recalculateLesson(lesson, db.settings.individualDurationMinutes, db.settings.groupDurationMinutes);
     }
 
     const emptyLessons = db.lessons.filter((lesson) => lesson.participants.length === 0).map((lesson) => lesson.id);
@@ -290,7 +290,7 @@ export class Store {
       });
     }
 
-    recalculateLesson(lesson, db.settings.individualDurationMinutes);
+    recalculateLesson(lesson, db.settings.individualDurationMinutes, db.settings.groupDurationMinutes);
     await replaceLesson(lesson);
     return lesson;
   }
@@ -318,7 +318,7 @@ export class Store {
 
     lesson.status = "completed";
     lesson.updatedAt = now();
-    recalculateLesson(lesson, db.settings.individualDurationMinutes);
+    recalculateLesson(lesson, db.settings.individualDurationMinutes, db.settings.groupDurationMinutes);
     await replaceLesson(lesson);
     return lesson;
   }

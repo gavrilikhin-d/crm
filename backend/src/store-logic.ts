@@ -63,7 +63,11 @@ export function createTelegramBindToken(db: Database): string {
   return token;
 }
 
-export function recalculateLesson(lesson: Lesson, individualDurationMinutes: number): Lesson {
+export function recalculateLesson(
+  lesson: Lesson,
+  individualDurationMinutes: number,
+  groupDurationMinutes: number
+): Lesson {
   if (lesson.status === "cancelled_by_teacher" || lesson.status === "completed") {
     return lesson;
   }
@@ -73,11 +77,18 @@ export function recalculateLesson(lesson: Lesson, individualDurationMinutes: num
   );
   const confirmedParticipants = lesson.participants.filter((participant) => participant.status === "confirmed");
 
-  if (lesson.originalType === "group" && confirmedParticipants.length === 1) {
+  const shouldBeIndividual =
+    lesson.originalType === "group" &&
+    activeParticipants.length === 1 &&
+    confirmedParticipants.length === 1;
+
+  if (shouldBeIndividual) {
     lesson.effectiveType = "individual";
     lesson.durationMinutes = individualDurationMinutes;
   } else {
     lesson.effectiveType = lesson.originalType;
+    lesson.durationMinutes =
+      lesson.originalType === "group" ? groupDurationMinutes : individualDurationMinutes;
   }
 
   if (activeParticipants.length === 0) {
@@ -164,7 +175,11 @@ export function buildLesson(
     updatedAt: timestamp
   };
 
-  return recalculateLesson(lesson, db.settings.individualDurationMinutes);
+  return recalculateLesson(
+    lesson,
+    db.settings.individualDurationMinutes,
+    db.settings.groupDurationMinutes
+  );
 }
 
 export function hasRecurringLesson(db: Database, scheduleId: string, startsAt: string): boolean {

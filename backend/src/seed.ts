@@ -60,7 +60,6 @@ const weekStart = getCurrentMonday();
 
 const mondayGroup = await store.createLesson({
   startsAt: atWeekTime(weekStart, 0, 15, 0),
-  durationMinutes: 90,
   lessonType: "group",
   studentIds: [anna.id, ivan.id, maria.id]
 });
@@ -70,7 +69,6 @@ await store.completeLesson(mondayGroup.id);
 
 const tuesdayIndividual = await store.createLesson({
   startsAt: atWeekTime(weekStart, 1, 11, 0),
-  durationMinutes: 60,
   lessonType: "individual",
   studentIds: [sophia.id]
 });
@@ -78,7 +76,6 @@ await store.setParticipantStatus(tuesdayIndividual.id, sophia.id, "confirmed");
 
 const tuesdayEvening = await store.createLesson({
   startsAt: atWeekTime(weekStart, 1, 18, 30),
-  durationMinutes: 60,
   lessonType: "individual",
   studentIds: [anna.id]
 });
@@ -86,7 +83,6 @@ await store.setParticipantStatus(tuesdayEvening.id, anna.id, "confirmed");
 
 const wednesdayGroup = await store.createLesson({
   startsAt: atWeekTime(weekStart, 2, 13, 30),
-  durationMinutes: 90,
   lessonType: "group",
   studentIds: [anna.id, ivan.id, sophia.id]
 });
@@ -97,7 +93,6 @@ await store.setParticipantStatus(wednesdayGroup.id, sophia.id, "declined");
 await store
   .createLesson({
     startsAt: atWeekTime(weekStart, 3, 16, 0),
-    durationMinutes: 60,
     lessonType: "individual",
     studentIds: [maria.id]
   })
@@ -105,7 +100,6 @@ await store
 
 const fridayGroup = await store.createLesson({
   startsAt: atWeekTime(weekStart, 4, 12, 0),
-  durationMinutes: 90,
   lessonType: "group",
   studentIds: [anna.id, maria.id, sophia.id]
 });
@@ -114,7 +108,6 @@ await store.setParticipantStatus(fridayGroup.id, maria.id, "confirmed");
 
 const saturdayIndividual = await store.createLesson({
   startsAt: atWeekTime(weekStart, 5, 10, 30),
-  durationMinutes: 60,
   lessonType: "individual",
   studentIds: [ivan.id]
 });
