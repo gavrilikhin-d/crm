@@ -110,6 +110,7 @@ export default function Home() {
   const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
+  const [lessonDialogOpen, setLessonDialogOpen] = useState(false);
 
   const students = snapshot?.students ?? [];
   const lessonPackages = snapshot?.lessonPackages ?? [];
@@ -252,6 +253,7 @@ export default function Home() {
         });
       }
       form.reset();
+      setLessonDialogOpen(false);
       return lessonCount === 1 ? "Занятие добавлено." : `Добавлено ${lessonCount} занятий.`;
     });
   }
@@ -334,6 +336,11 @@ export default function Home() {
 
   function goToToday() {
     setSelectedDate(startOfDay(new Date()));
+  }
+
+  function openLessonDialog() {
+    setActiveSection("schedule");
+    setLessonDialogOpen(true);
   }
 
   const debtLessons = snapshot?.balances.reduce((sum, balance) => sum + balance.debtLessons, 0) ?? 0;
@@ -423,7 +430,7 @@ export default function Home() {
           <div className="flex items-center gap-3">
             <Badge variant="secondary">{snapshot?.dashboard.studentsCount ?? 0} учеников</Badge>
             <Badge variant={debtLessons > 0 ? "destructive" : "secondary"}>{debtLessons} неоплаченных занятий</Badge>
-            <Button type="button" onClick={() => setActiveSection("schedule")}>
+            <Button type="button" onClick={openLessonDialog}>
               Запланировать занятие
             </Button>
           </div>
@@ -468,7 +475,7 @@ export default function Home() {
                 <Button variant="secondary" size="icon" type="button" onClick={() => shiftCalendar(1)} aria-label="Следующий период">
                   <ChevronRight className="size-4" />
                 </Button>
-                <Dialog>
+                <Dialog open={lessonDialogOpen} onOpenChange={setLessonDialogOpen}>
                   <DialogTrigger asChild>
                     <Button size="icon" type="button" aria-label="Создать занятие">
                       <Plus className="size-4" />
