@@ -217,7 +217,20 @@ async function getTelegramProfile(request: IncomingMessage, response: ServerResp
     return;
   }
 
-  jsonOk(response, await store.getTelegramStudentProfile(chatId));
+  jsonOk(response, await store.getTelegramStudentProfile(chatId, { days: parseScheduleDaysParam(url.searchParams.get("days")) }));
+}
+
+function parseScheduleDaysParam(value: string | null): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 90) {
+    throw new Error("Schedule days must be an integer between 1 and 90");
+  }
+
+  return parsed;
 }
 
 async function upsertReminder(request: IncomingMessage, response: ServerResponse) {

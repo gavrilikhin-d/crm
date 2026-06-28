@@ -1,43 +1,59 @@
 import type { Lesson, TelegramStudentProfile } from "@crm/shared";
 
-const dateFormatter = new Intl.DateTimeFormat("ru-RU", {
-  dateStyle: "medium",
-  timeStyle: "short"
-});
+type BotReply = string | { text: string; parse_mode: "HTML" };
 
-function formatBalanceMessage(profile: TelegramStudentProfile): string {
+const weekdayFormatter = new Intl.DateTimeFormat("ru-RU", { weekday: "short" });
+const dayMonthFormatter = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short" });
+const timeFormatter = new Intl.DateTimeFormat("ru-RU", { hour: "numeric", minute: "2-digit" });
+
+function formatBalanceMessage(profile: TelegramStudentProfile): BotReply {
   const { balance } = profile;
-  const lines = [`${profile.student.fullName}, ваш баланс:`];
+  const lines = [`<b>${escapeHtml(profile.student.fullName)}</b>`];
 
   if (balance.remainingLessons > 0) {
-    lines.push(`Осталось занятий: ${balance.remainingLessons}`);
+    lines.push(`Осталось занятий: <b>${balance.remainingLessons}</b>`);
   } else {
     lines.push("Оплаченных занятий не осталось.");
   }
 
   if (balance.debtLessons > 0) {
-    lines.push(`Долг: ${balance.debtLessons} ${pluralLessons(balance.debtLessons)}`);
+    lines.push(`⚠️ Долг: <b>${balance.debtLessons}</b> ${pluralLessons(balance.debtLessons)}`);
   }
 
-  lines.push("", "Команды: /schedule — расписание, /help — помощь");
-  return lines.join("\n");
+  return { text: lines.join("\n"), parse_mode: "HTML" };
 }
 
-function formatScheduleMessage(profile: TelegramStudentProfile): string {
-  const lines = [`${profile.student.fullName}, ближайшие занятия:`];
+function formatScheduleMessage(profile: TelegramStudentProfile): BotReply {
+  const days = profile.scheduleDays;
+  const header = `📅 <b>Занятия на ${days} ${pluralDays(days)}</b>`;
 
   if (!profile.upcomingLessons.length) {
-    lines.push("", "Предстоящих занятий нет.");
-    lines.push("", "Команды: /balance — баланс, /help — помощь");
-    return lines.join("\n");
+    return {
+      text: [
+        header,
+        "",
+        `На ближайшие ${days} ${pluralDays(days)} занятий нет.`,
+        "",
+        `<i>Другой период: /schedule 14</i>`
+      ].join("\n"),
+      parse_mode: "HTML"
+    };
   }
 
-  for (const [index, lesson] of profile.upcomingLessons.entries()) {
-    lines.push("", `${index + 1}. ${formatLessonLine(profile.student.id, lesson)}`);
-  }
+  const now = new Date();
+  const blocks = profile.upcomingLessons.map((lesson) => formatLessonBlock(profile.student.id, lesson, now));
 
-  lines.push("", "Команды: /balance — баланс, /help — помощь");
-  return lines.join("\n");
+  return {
+    text: [
+      header,
+      `<i>${escapeHtml(profile.student.fullName)}</i>`,
+      "",
+      ...blocks,
+      "",
+      `<i>Другой период: /schedule 14</i>`
+    ].join("\n\n"),
+    parse_mode: "HTML"
+  };
 }
 
 function formatNotLinkedMessage(): string {
@@ -47,25 +63,82 @@ function formatNotLinkedMessage(): string {
   ].join("\n");
 }
 
-function formatLessonLine(studentId: string, lesson: Lesson): string {
+function formatLessonBlock(studentId: string, lesson: Lesson, now: Date): string {
   const participant = lesson.participants.find((item) => item.studentId === studentId);
-  const date = dateFormatter.format(new Date(lesson.startsAt));
-  const kind = lesson.effectiveType === "group" ? "групповое" : "индивидуальное";
-  const details = [`${date}`, kind];
+  const when = formatLessonWhen(new Date(lesson.startsAt), now);
+  const kind = lesson.effectiveType === "group" ? "Групповое" : "Индивидуальное";
+  const tags = formatLessonTags(participant, lesson.status);
+
+  return [`<b>${escapeHtml(when)}</b>`, `${kind}${tags.length ? `\n${tags.join(" · ")}` : ""}`].join("\n");
+}
+
+function formatLessonWhen(startsAt: Date, now: Date): string {
+  const time = timeFormatter.format(startsAt);
+
+  if (sameDay(startsAt, now)) {
+    return `Сегодня · ${time}`;
+  }
+
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  if (sameDay(startsAt, tomorrow)) {
+    return `Завтра · ${time}`;
+  }
+
+  const weekday = capitalize(weekdayFormatter.format(startsAt));
+  const dayMonth = dayMonthFormatter.format(startsAt);
+  return `${weekday}, ${dayMonth} · ${time}`;
+}
+
+function formatLessonTags(
+  participant: Lesson["participants"][number] | undefined,
+  lessonStatus: Lesson["status"]
+): string[] {
+  const tags: string[] = [];
+
+  if (lessonStatus === "cancelled_by_student") {
+    tags.push("отменено");
+  } else if (participant?.status === "confirmed") {
+    tags.push("✓ подтверждено");
+  } else if (participant?.status === "declined") {
+    tags.push("✗ не будете");
+  } else if (participant?.status === "awaiting") {
+    tags.push("ожидает ответа");
+  }
 
   if (participant?.hasDebt) {
-    details.push("нет оплаты");
+    tags.push("⚠️ нет оплаты");
   }
 
-  if (lesson.status === "cancelled_by_student") {
-    details.push("отменено");
-  } else if (participant?.status === "confirmed") {
-    details.push("вы подтвердили");
-  } else if (participant?.status === "declined") {
-    details.push("вы отказались");
-  }
+  return tags;
+}
 
-  return details.join(" · ");
+function sameDay(left: Date, right: Date): boolean {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  );
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function escapeHtml(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+function pluralDays(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) {
+    return "день";
+  }
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+    return "дня";
+  }
+  return "дней";
 }
 
 function pluralLessons(count: number): string {
@@ -80,8 +153,4 @@ function pluralLessons(count: number): string {
   return "занятий";
 }
 
-export {
-  formatBalanceMessage,
-  formatNotLinkedMessage,
-  formatScheduleMessage
-};
+export { formatBalanceMessage, formatNotLinkedMessage, formatScheduleMessage, type BotReply };

@@ -1,0 +1,61 @@
+const DEFAULT_SCHEDULE_DAYS = 7;
+const MIN_SCHEDULE_DAYS = 1;
+const MAX_SCHEDULE_DAYS = 90;
+
+const SCHEDULE_COMMANDS = ["schedule", "shedule", "lessons", "расписание"] as const;
+
+function normalizeScheduleDays(value?: number): number {
+  if (value === undefined || !Number.isFinite(value) || !Number.isInteger(value)) {
+    return DEFAULT_SCHEDULE_DAYS;
+  }
+
+  return Math.min(MAX_SCHEDULE_DAYS, Math.max(MIN_SCHEDULE_DAYS, value));
+}
+
+function parseScheduleDaysFromPayload(payload?: string): { days: number; error?: string } {
+  const rawDays = payload?.trim().split(/\s+/)[0];
+  if (!rawDays) {
+    return { days: DEFAULT_SCHEDULE_DAYS };
+  }
+
+  const parsed = Number(rawDays);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+    return {
+      days: DEFAULT_SCHEDULE_DAYS,
+      error: `Укажите число дней от ${MIN_SCHEDULE_DAYS} до ${MAX_SCHEDULE_DAYS}, например: /schedule 14`
+    };
+  }
+
+  if (parsed < MIN_SCHEDULE_DAYS || parsed > MAX_SCHEDULE_DAYS) {
+    return {
+      days: DEFAULT_SCHEDULE_DAYS,
+      error: `Окно должно быть от ${MIN_SCHEDULE_DAYS} до ${MAX_SCHEDULE_DAYS} дней. Пример: /schedule 14`
+    };
+  }
+
+  return { days: parsed };
+}
+
+function parseScheduleDaysFromPhrase(text: string): number | undefined {
+  const match = text.trim().match(/^расписание(?:\s+на)?\s+(\d+)\s*(?:дн(?:я|ей)?)?$/i);
+  if (!match) {
+    return undefined;
+  }
+
+  const parsed = Number(match[1]);
+  if (!Number.isInteger(parsed) || parsed < MIN_SCHEDULE_DAYS || parsed > MAX_SCHEDULE_DAYS) {
+    return undefined;
+  }
+
+  return parsed;
+}
+
+export {
+  DEFAULT_SCHEDULE_DAYS,
+  MAX_SCHEDULE_DAYS,
+  MIN_SCHEDULE_DAYS,
+  SCHEDULE_COMMANDS,
+  normalizeScheduleDays,
+  parseScheduleDaysFromPhrase,
+  parseScheduleDaysFromPayload
+};

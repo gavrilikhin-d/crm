@@ -13,8 +13,16 @@ export async function bindTelegramChat(input: {
   });
 }
 
-export async function getTelegramStudentProfile(chatId: number | string): Promise<TelegramStudentProfile> {
-  return api<TelegramStudentProfile>(`/internal/telegram/profile?chatId=${encodeURIComponent(String(chatId))}`);
+export async function getTelegramStudentProfile(
+  chatId: number | string,
+  options?: { days?: number }
+): Promise<TelegramStudentProfile> {
+  const params = new URLSearchParams({ chatId: String(chatId) });
+  if (options?.days !== undefined) {
+    params.set("days", String(options.days));
+  }
+
+  return api<TelegramStudentProfile>(`/internal/telegram/profile?${params.toString()}`);
 }
 
 export async function setParticipantStatus(input: {

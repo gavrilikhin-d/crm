@@ -4,7 +4,13 @@ import type { Context } from "telegraf";
 import type { Lesson, Student } from "@crm/shared";
 import { bindTelegramChat, getTelegramStudentProfile, setParticipantStatus } from "./backend-client";
 import { formatHelpMessage, registerBotCommands } from "./commands";
-import { formatBalanceMessage, formatNotLinkedMessage, formatScheduleMessage } from "./messages";
+import { formatBalanceMessage, formatNotLinkedMessage, formatScheduleMessage, type BotReply } from "./messages";
+import {
+  DEFAULT_SCHEDULE_DAYS,
+  parseScheduleDaysFromPhrase,
+  parseScheduleDaysFromPayload,
+  SCHEDULE_COMMANDS
+} from "./schedule-days";
 
 let bot: Telegraf | null = null;
 
@@ -40,7 +46,7 @@ export function getTelegramBot(): Telegraf | null {
         [
           `${student.fullName}, Telegram подключен. Теперь сюда будут приходить напоминания о занятиях.`,
           "",
-          "Спросить расписание: /schedule",
+          "Спросить расписание: /schedule (7 дней) или /schedule 14",
           "Спросить баланс: /balance"
         ].join("\n")
       );
@@ -52,8 +58,14 @@ export function getTelegramBot(): Telegraf | null {
     }
   });
 
-  bot.command(["schedule", "lessons", "расписание"], async (ctx) => {
-    await replyWithProfile(ctx, formatScheduleMessage);
+  bot.command([...SCHEDULE_COMMANDS], async (ctx) => {
+    const { days, error } = parseScheduleDaysFromPayload(ctx.payload);
+    if (error) {
+      await ctx.reply(error);
+      return;
+    }
+
+    await replyWithSchedule(ctx, days);
   });
 
   bot.command(["balance", "баланс"], async (ctx) => {
@@ -64,8 +76,18 @@ export function getTelegramBot(): Telegraf | null {
     await ctx.reply(formatHelpMessage());
   });
 
+  bot.hears(/^расписание(?:\s+на)?\s+\d+\s*(?:дн(?:я|ей)?)?$/i, async (ctx) => {
+    if (!ctx.message || !("text" in ctx.message) || typeof ctx.message.text !== "string") {
+      await replyWithSchedule(ctx, DEFAULT_SCHEDULE_DAYS);
+      return;
+    }
+
+    const days = parseScheduleDaysFromPhrase(ctx.message.text) ?? DEFAULT_SCHEDULE_DAYS;
+    await replyWithSchedule(ctx, days);
+  });
+
   bot.hears(/^(расписание|занятия|когда занятие|следующ(?:ее|ие) занят(?:ие|ия))$/i, async (ctx) => {
-    await replyWithProfile(ctx, formatScheduleMessage);
+    await replyWithSchedule(ctx, DEFAULT_SCHEDULE_DAYS);
   });
 
   bot.hears(/^(баланс|сколько осталось|остаток)$/i, async (ctx) => {
@@ -148,9 +170,33 @@ export async function sendPaymentReminder(student: Student, unpaidLessons: numbe
   );
 }
 
+async function replyWithSchedule(ctx: Context, days: number): Promise<void> {
+  if (!ctx.chat) {
+    return;
+  }
+
+  try {
+    const profile = await getTelegramStudentProfile(ctx.chat.id, { days });
+    const reply = formatScheduleMessage(profile);
+    if (typeof reply === "string") {
+      await ctx.reply(reply);
+      return;
+    }
+    await ctx.reply(reply.text, { parse_mode: reply.parse_mode });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown profile error";
+    if (message.includes("not found")) {
+      await ctx.reply(formatNotLinkedMessage());
+      return;
+    }
+    console.error("Telegram schedule query failed:", message);
+    await ctx.reply("Не удалось получить расписание. Попробуйте позже.");
+  }
+}
+
 async function replyWithProfile(
   ctx: Context,
-  format: (profile: Awaited<ReturnType<typeof getTelegramStudentProfile>>) => string
+  format: (profile: Awaited<ReturnType<typeof getTelegramStudentProfile>>) => BotReply
 ): Promise<void> {
   if (!ctx.chat) {
     return;
@@ -158,7 +204,12 @@ async function replyWithProfile(
 
   try {
     const profile = await getTelegramStudentProfile(ctx.chat.id);
-    await ctx.reply(format(profile));
+    const reply = format(profile);
+    if (typeof reply === "string") {
+      await ctx.reply(reply);
+      return;
+    }
+    await ctx.reply(reply.text, { parse_mode: reply.parse_mode });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown profile error";
     if (message.includes("not found")) {

@@ -119,17 +119,24 @@ export class Store {
     return student;
   }
 
-  async getTelegramStudentProfile(chatId: string | number): Promise<TelegramStudentProfile> {
+  async getTelegramStudentProfile(
+    chatId: string | number,
+    options?: { days?: number }
+  ): Promise<TelegramStudentProfile> {
     const db = await this.getSnapshot();
     const student = db.students.find((item) => item.telegramChatId === String(chatId));
     if (!student) {
       throw new Error("Student not found");
     }
 
+    const days = Math.min(90, Math.max(1, options?.days ?? 7));
+    const now = Date.now();
+    const windowEnd = now + days * 24 * 60 * 60 * 1000;
     const balance = getStudentBalance(db, student.id);
     const upcomingLessons = db.lessons
       .filter((lesson) => {
-        if (new Date(lesson.startsAt).getTime() < Date.now()) {
+        const startsAt = new Date(lesson.startsAt).getTime();
+        if (startsAt < now || startsAt > windowEnd) {
           return false;
         }
         if (lesson.status === "cancelled_by_teacher") {
@@ -137,13 +144,13 @@ export class Store {
         }
         return lesson.participants.some((participant) => participant.studentId === student.id);
       })
-      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
-      .slice(0, 10);
+      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
 
     return {
       student: { id: student.id, fullName: student.fullName },
       balance,
-      upcomingLessons
+      upcomingLessons,
+      scheduleDays: days
     };
   }
 

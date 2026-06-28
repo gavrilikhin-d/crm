@@ -159,4 +159,5 @@ export interface TelegramStudentProfile {
   };
   balance: StudentBalance;
   upcomingLessons: Lesson[];
+  scheduleDays: number;
 }
