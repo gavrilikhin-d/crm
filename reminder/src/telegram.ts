@@ -1,5 +1,10 @@
 import { Telegraf } from "telegraf";
-import type { Lesson, Student } from "@crm/shared";
+import type { Lesson, LessonParticipant, Student } from "@crm/shared";
+import {
+  buildLessonReminderKeyboard,
+  formatLessonReminderText,
+  type LessonReminderParticipant
+} from "@crm/shared/lesson-reminder";
 
 let bot: Telegraf | null = null;
 
@@ -13,14 +18,38 @@ function getTelegramBot(): Telegraf | null {
   return bot;
 }
 
-export async function sendLessonReminder(student: Student, lesson: Lesson): Promise<void> {
+export async function sendLessonReminderToChat(input: {
+  chatId: string;
+  lesson: Lesson;
+  members: Array<{ student: Student; participant: LessonParticipant }>;
+  isGroupChat: boolean;
+}): Promise<void> {
   const instance = getTelegramBot();
-  if (!instance || !student.telegramChatId) {
+  if (!instance) {
     return;
   }
 
-  await instance.telegram.sendMessage(student.telegramChatId, formatLessonReminder(student, lesson), {
-    reply_markup: lessonReminderKeyboard(lesson.id, student.id)
+  const participants = input.members.map(({ student, participant }) => ({
+    studentId: student.id,
+    fullName: student.fullName,
+    status: participant.status,
+    hasDebt: participant.hasDebt
+  }));
+
+  await sendReminderMessage(instance, input.chatId, input.lesson, participants, input.isGroupChat);
+}
+
+export async function sendLessonReminder(student: Student, lesson: Lesson): Promise<void> {
+  const participant = lesson.participants.find((item) => item.studentId === student.id);
+  if (!student.telegramChatId || !participant) {
+    return;
+  }
+
+  await sendLessonReminderToChat({
+    chatId: student.telegramChatId,
+    lesson,
+    members: [{ student, participant }],
+    isGroupChat: false
   });
 }
 
@@ -41,27 +70,15 @@ export async function sendPaymentReminder(student: Student, unpaidLessons: numbe
   );
 }
 
-import { lessonReminderKeyboard } from "@crm/shared/lesson-callback";
+async function sendReminderMessage(
+  instance: Telegraf,
+  chatId: string,
+  lesson: Lesson,
+  participants: LessonReminderParticipant[],
+  isGroupChat: boolean
+): Promise<void> {
+  const text = formatLessonReminderText(lesson, participants, { isGroupChat });
+  const replyMarkup = buildLessonReminderKeyboard(lesson.id, participants);
 
-function formatLessonReminder(student: Student, lesson: Lesson): string {
-  const date = new Intl.DateTimeFormat("ru-RU", {
-    dateStyle: "medium",
-    timeStyle: "short"
-  }).format(new Date(lesson.startsAt));
-
-  const kind = lesson.effectiveType === "group" ? "групповое" : "индивидуальное";
-  const participant = lesson.participants.find((item) => item.studentId === student.id);
-  const paymentLine = participant?.hasDebt
-    ? "Важно: по балансу нет оплаченного занятия, пожалуйста, не забудьте оплату."
-    : undefined;
-
-  return [
-    `${student.fullName}, напоминаем о занятии.`,
-    `Когда: ${date}`,
-    `Формат: ${kind}`,
-    paymentLine,
-    "Пожалуйста, подтвердите участие."
-  ]
-    .filter(Boolean)
-    .join("\n");
+  await instance.telegram.sendMessage(chatId, text, replyMarkup ? { reply_markup: replyMarkup } : undefined);
 }

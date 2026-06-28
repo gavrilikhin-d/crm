@@ -1,9 +1,14 @@
 import { Telegraf } from "telegraf";
-import type { InlineKeyboardMarkup } from "@telegraf/types";
 import type { Context } from "telegraf";
 import type { Lesson, Student } from "@crm/shared";
-import { lessonReminderKeyboard, parseLessonCallback } from "@crm/shared/lesson-callback";
-import { bindTelegramChat, getTelegramStudentProfile, setParticipantStatus } from "./backend-client";
+import {
+  buildLessonReminderKeyboard,
+  formatLessonReminderText,
+  isTelegramGroupChat,
+  type LessonReminderParticipant
+} from "@crm/shared/lesson-reminder";
+import { parseLessonCallback } from "@crm/shared/lesson-callback";
+import { bindTelegramChat, getLessonReminderState, getTelegramStudentProfile, setParticipantStatus } from "./backend-client";
 import { formatHelpMessage, registerBotCommands } from "./commands";
 import { formatBalanceMessage, formatNotLinkedMessage, formatScheduleMessage, type BotReply } from "./messages";
 import {
@@ -153,12 +158,30 @@ export function getTelegramBot(): Telegraf | null {
       const status = action === "attend" ? "confirmed" : "declined";
       const lesson = await setParticipantStatus({ lessonId, studentId, status, action });
       await ctx.answerCbQuery(action === "attend" ? "Отмечено: будете" : "Отмечено: не будете");
-      await ctx.editMessageReplyMarkup(undefined).catch(() => undefined);
-      await ctx.reply(formatParticipantResult(lesson, studentId, action));
+
+      const chatId = ctx.chat?.id;
+      const isGroup = chatId !== undefined && isTelegramGroupChat(chatId);
+
+      if (isGroup && chatId !== undefined) {
+        const reminderState = await getLessonReminderState(lessonId, chatId);
+        await ctx
+          .editMessageText(reminderState.text, {
+            reply_markup: reminderState.replyMarkup
+          })
+          .catch(() => undefined);
+      } else {
+        await ctx.editMessageReplyMarkup(undefined).catch(() => undefined);
+        await ctx.reply(formatParticipantResult(lesson, studentId, action));
+      }
+
       console.log(`Telegram callback processed: lesson=${lessonId} student=${studentId} action=${action}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown Telegram callback error";
       console.error("Telegram callback failed:", message);
+      if (message.includes("not found")) {
+        await ctx.answerCbQuery("Telegram не подключен к вашему профилю.", { show_alert: true });
+        return;
+      }
       await ctx.answerCbQuery("Не удалось обработать кнопку. Проверьте, что занятие еще существует.", {
         show_alert: true
       });
@@ -196,12 +219,25 @@ export async function startTelegramBot(): Promise<void> {
 
 export async function sendLessonReminder(student: Student, lesson: Lesson): Promise<void> {
   const instance = getTelegramBot();
-  if (!instance || !student.telegramChatId) {
+  const participant = lesson.participants.find((item) => item.studentId === student.id);
+  if (!instance || !student.telegramChatId || !participant) {
     return;
   }
 
-  await instance.telegram.sendMessage(student.telegramChatId, formatLessonReminder(student, lesson), {
-    reply_markup: lessonKeyboard(lesson.id, student.id)
+  const participants: LessonReminderParticipant[] = [
+    {
+      studentId: student.id,
+      fullName: student.fullName,
+      status: participant.status,
+      hasDebt: participant.hasDebt
+    }
+  ];
+
+  const text = formatLessonReminderText(lesson, participants, { isGroupChat: false });
+  const replyMarkup = buildLessonReminderKeyboard(lesson.id, participants);
+
+  await instance.telegram.sendMessage(student.telegramChatId, text, {
+    reply_markup: replyMarkup
   });
 }
 
@@ -279,10 +315,6 @@ function isPrivateChat(ctx: Context): boolean {
   return ctx.chat?.type === "private";
 }
 
-function lessonKeyboard(lessonId: string, studentId: string): InlineKeyboardMarkup {
-  return lessonReminderKeyboard(lessonId, studentId);
-}
-
 function getStartPayload(message: unknown): string | undefined {
   if (!message || typeof message !== "object" || !("text" in message) || typeof message.text !== "string") {
     return undefined;
@@ -305,29 +337,6 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, message: string):
       clearTimeout(timeoutId);
     }
   }
-}
-
-function formatLessonReminder(student: Student, lesson: Lesson): string {
-  const date = new Intl.DateTimeFormat("ru-RU", {
-    dateStyle: "medium",
-    timeStyle: "short"
-  }).format(new Date(lesson.startsAt));
-
-  const kind = lesson.effectiveType === "group" ? "групповое" : "индивидуальное";
-  const participant = lesson.participants.find((item) => item.studentId === student.id);
-  const paymentLine = participant?.hasDebt
-    ? "Важно: по балансу нет оплаченного занятия, пожалуйста, не забудьте оплату."
-    : undefined;
-
-  return [
-    `${student.fullName}, напоминаем о занятии.`,
-    `Когда: ${date}`,
-    `Формат: ${kind}`,
-    paymentLine,
-    "Пожалуйста, подтвердите участие."
-  ]
-    .filter(Boolean)
-    .join("\n");
 }
 
 function formatParticipantResult(lesson: Lesson, studentId: string, action: string): string {

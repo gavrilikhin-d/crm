@@ -17,6 +17,12 @@ import type {
 } from "@crm/shared";
 import { isSupportedCurrency } from "@crm/shared/currency";
 import {
+  buildLessonReminderKeyboard,
+  formatLessonReminderText,
+  isTelegramGroupChat,
+  type LessonReminderParticipant
+} from "@crm/shared/lesson-reminder";
+import {
   deleteStudentAvatar,
   ensureAvatarsDir,
   readStudentAvatar,
@@ -168,6 +174,45 @@ export class Store {
       upcomingLessons,
       scheduleDays: days
     };
+  }
+
+  async getLessonReminderState(
+    lessonId: string,
+    chatId: string | number
+  ): Promise<{ text: string; replyMarkup?: ReturnType<typeof buildLessonReminderKeyboard> }> {
+    const db = await this.getSnapshot();
+    const lesson = mustFind(db.lessons, lessonId, "Lesson");
+    const participants = this.buildLessonReminderParticipants(db, lesson, chatId);
+    const isGroupChat = isTelegramGroupChat(chatId) || participants.length > 1;
+
+    return {
+      text: formatLessonReminderText(lesson, participants, { isGroupChat }),
+      replyMarkup: buildLessonReminderKeyboard(lesson.id, participants)
+    };
+  }
+
+  buildLessonReminderParticipants(
+    db: Database,
+    lesson: Lesson,
+    chatId: string | number
+  ): LessonReminderParticipant[] {
+    const chatIdValue = String(chatId);
+
+    return lesson.participants.flatMap((participant) => {
+      const student = db.students.find((item) => item.id === participant.studentId);
+      if (!student || student.telegramChatId !== chatIdValue) {
+        return [];
+      }
+
+      return [
+        {
+          studentId: student.id,
+          fullName: student.fullName,
+          status: participant.status,
+          hasDebt: participant.hasDebt
+        }
+      ];
+    });
   }
 
   async updateStudent(
