@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   ChevronLeft,
@@ -19,6 +19,21 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger
+} from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import type { Database, Lesson, LessonPackage, Student, StudentBalance } from "@/types";
 
@@ -290,55 +305,82 @@ export default function Home() {
   };
 
   return (
-    <div className="grid min-h-screen w-screen grid-cols-[132px_minmax(0,1fr)] bg-white max-[900px]:grid-cols-1">
-      <aside className="flex min-h-screen flex-col border-r border-stone-200 px-6 py-8 max-[900px]:min-h-0 max-[900px]:border-b max-[900px]:border-r-0">
-        <div className="mb-20 text-lg font-black tracking-[0.42em] text-orange-600 max-[900px]:mb-6">VOCAL</div>
-        <nav className="grid gap-5 max-[900px]:flex max-[900px]:flex-wrap" aria-label="Основная навигация">
-          <SidebarLink
-            icon={<CreditCard className="size-4" />}
-            active={activeSection === "payments"}
-            onClick={() => setActiveSection("payments")}
-          >
-            Оплаты
-          </SidebarLink>
-          <SidebarLink
-            icon={<Users className="size-4" />}
-            active={activeSection === "clients"}
-            onClick={() => setActiveSection("clients")}
-          >
-            Ученики
-          </SidebarLink>
-          <SidebarLink
-            icon={<CalendarDays className="size-4" />}
-            active={activeSection === "schedule"}
-            onClick={() => setActiveSection("schedule")}
-          >
-            Расписание
-          </SidebarLink>
-          <SidebarLink
-            icon={<GraduationCap className="size-4" />}
-            active={activeSection === "sessions"}
-            onClick={() => setActiveSection("sessions")}
-          >
-            Пакеты
-          </SidebarLink>
-        </nav>
-        <div className="mt-auto grid gap-3 text-sm text-stone-500 max-[900px]:mt-6 max-[900px]:flex">
-          <a className="flex items-center gap-2 hover:text-stone-900" href="#settings">
-            <Settings className="size-4" /> Настройки
-          </a>
-          <a className="flex items-center gap-2 hover:text-stone-900" href="#help">
-            <HelpCircle className="size-4" /> Помощь
-          </a>
-          <button className="flex items-center gap-2 text-left hover:text-stone-900" type="button" onClick={loadSnapshot}>
-            <RefreshCw className="size-4" /> Обновить
-          </button>
-        </div>
-      </aside>
+    <SidebarProvider>
+      <Sidebar collapsible="icon" className="border-r border-stone-200">
+        <SidebarHeader className="px-4 py-6">
+          <div className="text-lg font-black tracking-[0.42em] text-orange-600 group-data-[collapsible=icon]:tracking-normal">
+            VOCAL
+          </div>
+        </SidebarHeader>
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu aria-label="Основная навигация">
+                <SidebarLink
+                  icon={<CreditCard className="size-4" />}
+                  active={activeSection === "payments"}
+                  onClick={() => setActiveSection("payments")}
+                >
+                  Оплаты
+                </SidebarLink>
+                <SidebarLink
+                  icon={<Users className="size-4" />}
+                  active={activeSection === "clients"}
+                  onClick={() => setActiveSection("clients")}
+                >
+                  Ученики
+                </SidebarLink>
+                <SidebarLink
+                  icon={<CalendarDays className="size-4" />}
+                  active={activeSection === "schedule"}
+                  onClick={() => setActiveSection("schedule")}
+                >
+                  Расписание
+                </SidebarLink>
+                <SidebarLink
+                  icon={<GraduationCap className="size-4" />}
+                  active={activeSection === "sessions"}
+                  onClick={() => setActiveSection("sessions")}
+                >
+                  Пакеты
+                </SidebarLink>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
+        <SidebarFooter>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild tooltip="Настройки">
+                <a href="#settings">
+                  <Settings className="size-4" />
+                  <span>Настройки</span>
+                </a>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild tooltip="Помощь">
+                <a href="#help">
+                  <HelpCircle className="size-4" />
+                  <span>Помощь</span>
+                </a>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton type="button" tooltip="Обновить" onClick={loadSnapshot}>
+                <RefreshCw className="size-4" />
+                <span>Обновить</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+        <SidebarRail />
+      </Sidebar>
 
-      <main className="min-w-0 overflow-x-auto">
+      <SidebarInset className="min-w-0 overflow-x-auto bg-white">
         <header className="flex min-h-22 items-center justify-between border-b border-stone-200 px-10 py-5">
-          <div>
+          <div className="flex items-center gap-3">
+            <SidebarTrigger className="-ml-2" />
             <h1 className="mt-1 text-lg font-bold text-stone-900">{activeTitle[activeSection]}</h1>
           </div>
           <div className="flex items-center gap-3">
@@ -497,7 +539,7 @@ export default function Home() {
             onDeletePackage={handleDeletePackage}
           />
         ) : null}
-      </main>
+      </SidebarInset>
 
       <Modal open={activeModal === "student"} title="Добавить ученика" onClose={() => setActiveModal(null)}>
         <StudentForm onSubmit={handleStudentSubmit} />
@@ -510,7 +552,7 @@ export default function Home() {
       <Modal open={activeModal === "package"} title="Добавить пакет" onClose={() => setActiveModal(null)}>
         <PackageForm onSubmit={handlePackageSubmit} />
       </Modal>
-    </div>
+    </SidebarProvider>
   );
 }
 
@@ -520,23 +562,28 @@ function SidebarLink({
   onClick,
   children
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   active?: boolean;
   onClick: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "-ml-6 flex items-center gap-3 border-l-4 border-transparent bg-transparent py-0 pl-5 text-left text-sm font-bold text-stone-500 shadow-none transition-colors hover:bg-transparent hover:text-orange-600",
-        active && "border-orange-600 text-orange-600"
-      )}
-    >
-      {icon}
-      {children}
-    </button>
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        type="button"
+        isActive={active}
+        tooltip={typeof children === "string" ? children : undefined}
+        onClick={onClick}
+        className={cn(
+          "h-10 font-bold text-stone-500 hover:bg-orange-50 hover:text-orange-700",
+          "data-[active=true]:bg-orange-50 data-[active=true]:text-orange-700",
+          active && "text-orange-700"
+        )}
+      >
+        {icon}
+        <span>{children}</span>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
   );
 }
 
