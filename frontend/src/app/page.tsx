@@ -86,8 +86,8 @@ const scheduleViewLabels: Record<ScheduleView, string> = {
   week: "Неделя",
   month: "Месяц"
 };
-const visibleHours = Array.from({ length: 13 }, (_, index) => index + 9);
-const calendarStartHour = 9;
+const defaultCalendarStartHour = 9;
+const defaultCalendarEndHour = 22;
 const hourHeight = 76;
 const lessonDurationByType = {
   group: 90,
@@ -95,6 +95,12 @@ const lessonDurationByType = {
 } as const;
 const defaultRecurringLessonCount = 4;
 const maxRecurringLessonCount = 24;
+
+type CalendarRange = {
+  startHour: number;
+  endHour: number;
+  hours: number[];
+};
 
 export default function Home() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
@@ -134,6 +140,18 @@ export default function Home() {
   const dayLessons = useMemo(
     () => lessons.filter((lesson) => sameDate(new Date(lesson.startsAt), selectedDate)),
     [lessons, selectedDate]
+  );
+  const dayCalendarRange = useMemo(
+    () => getCalendarRange(dayLessons, currentTime && sameDate(selectedDate, currentTime) ? currentTime : undefined),
+    [currentTime, dayLessons, selectedDate]
+  );
+  const weekCalendarRange = useMemo(
+    () =>
+      getCalendarRange(
+        weekLessons,
+        currentTime && weekDays.some((day) => sameDate(day, currentTime)) ? currentTime : undefined
+      ),
+    [currentTime, weekDays, weekLessons]
   );
   const monthLessons = useMemo(
     () =>
@@ -469,6 +487,7 @@ export default function Home() {
             {scheduleView === "day" ? (
               <DayCalendar
                 day={selectedDate}
+                calendarRange={dayCalendarRange}
                 currentTime={currentTime}
                 lessons={dayLessons}
                 getStudent={getStudent}
@@ -480,6 +499,7 @@ export default function Home() {
             {scheduleView === "week" ? (
               <WeekCalendar
                 weekDays={weekDays}
+                calendarRange={weekCalendarRange}
                 currentTime={currentTime}
                 lessons={weekLessons}
                 getStudent={getStudent}
@@ -971,6 +991,7 @@ function PackageForm({ onSubmit }: { onSubmit: (event: FormEvent<HTMLFormElement
 
 function DayCalendar({
   day,
+  calendarRange,
   currentTime,
   lessons,
   getStudent,
@@ -978,6 +999,7 @@ function DayCalendar({
   onDeleteLesson
 }: {
   day: Date;
+  calendarRange: CalendarRange;
   currentTime: Date | null;
   lessons: Lesson[];
   getStudent: (studentId: string) => Student | undefined;
@@ -998,9 +1020,10 @@ function DayCalendar({
         <strong className={cn("text-xs uppercase", isToday ? "text-teal-900" : "text-stone-900")}>{formatWeekday(day)}</strong>
         <span className={cn("text-[0.68rem] font-bold", isToday ? "text-teal-700" : "text-stone-400")}>{formatDay(day)}</span>
       </div>
-      <TimeAxis />
+      <TimeAxis calendarRange={calendarRange} />
       <DayColumn
         day={day}
+        calendarRange={calendarRange}
         currentTime={currentTime}
         lessons={lessons}
         getStudent={getStudent}
@@ -1013,6 +1036,7 @@ function DayCalendar({
 
 function WeekCalendar({
   weekDays,
+  calendarRange,
   currentTime,
   lessons,
   getStudent,
@@ -1020,6 +1044,7 @@ function WeekCalendar({
   onDeleteLesson
 }: {
   weekDays: Date[];
+  calendarRange: CalendarRange;
   currentTime: Date | null;
   lessons: Lesson[];
   getStudent: (studentId: string) => Student | undefined;
@@ -1046,11 +1071,12 @@ function WeekCalendar({
           </div>
         );
       })}
-      <TimeAxis />
+      <TimeAxis calendarRange={calendarRange} />
       {weekDays.map((day) => (
         <DayColumn
           key={day.toISOString()}
           day={day}
+          calendarRange={calendarRange}
           currentTime={currentTime}
           lessons={lessons.filter((lesson) => sameDate(new Date(lesson.startsAt), day))}
           getStudent={getStudent}
@@ -1062,10 +1088,10 @@ function WeekCalendar({
   );
 }
 
-function TimeAxis() {
+function TimeAxis({ calendarRange }: { calendarRange: CalendarRange }) {
   return (
     <div className="col-start-1 row-start-2">
-      {visibleHours.map((hour) => (
+      {calendarRange.hours.map((hour) => (
         <div className="h-[76px] pt-1 text-xs font-bold text-stone-400" key={hour}>
           {formatHour(hour)}
         </div>
@@ -1076,6 +1102,7 @@ function TimeAxis() {
 
 function DayColumn({
   day,
+  calendarRange,
   currentTime,
   lessons,
   getStudent,
@@ -1083,6 +1110,7 @@ function DayColumn({
   onDeleteLesson
 }: {
   day: Date;
+  calendarRange: CalendarRange;
   currentTime: Date | null;
   lessons: Lesson[];
   getStudent: (studentId: string) => Student | undefined;
@@ -1090,12 +1118,14 @@ function DayColumn({
   onDeleteLesson: (lesson: Lesson) => void;
 }) {
   const isToday = currentTime ? sameDate(day, currentTime) : false;
-  const currentTimeOffset = currentTime && isToday ? getCurrentTimeOffset(currentTime) : null;
+  const currentTimeOffset = currentTime && isToday ? getCurrentTimeOffset(currentTime, calendarRange) : null;
+  const columnHeight = calendarRange.hours.length * hourHeight;
 
   return (
     <div
-      className={cn("relative min-h-[988px] border-l border-stone-100", isToday && "bg-teal-50/40")}
+      className={cn("relative border-l border-stone-100", isToday && "bg-teal-50/40")}
       style={{
+        minHeight: columnHeight,
         backgroundImage: "repeating-linear-gradient(to bottom, transparent 0, transparent 75px, #ebe8e5 75px, #ebe8e5 76px)"
       }}
     >
@@ -1107,6 +1137,7 @@ function DayColumn({
           <CalendarLesson
             key={lesson.id}
             lesson={lesson}
+            calendarRange={calendarRange}
             getStudent={getStudent}
             onAction={onAction}
             onDelete={() => onDeleteLesson(lesson)}
@@ -1194,18 +1225,20 @@ function MonthCalendar({
 
 function CalendarLesson({
   lesson,
+  calendarRange,
   getStudent,
   onAction,
   onDelete
 }: {
   lesson: Lesson;
+  calendarRange: CalendarRange;
   getStudent: (studentId: string) => Student | undefined;
   onAction: (action: () => Promise<void>) => void;
   onDelete: () => void;
 }) {
   const date = new Date(lesson.startsAt);
   const startsAtMinutes = date.getHours() * 60 + date.getMinutes();
-  const top = Math.max(0, ((startsAtMinutes - calendarStartHour * 60) / 60) * hourHeight);
+  const top = Math.max(0, ((startsAtMinutes - calendarRange.startHour * 60) / 60) * hourHeight);
   const height = Math.max(62, (lesson.durationMinutes / 60) * hourHeight - 8);
   const primaryStudent = getStudent(lesson.participants[0]?.studentId);
   const converted = lesson.originalType === "group" && lesson.effectiveType === "individual";
@@ -1354,10 +1387,32 @@ function formatDateTimeLocal(value: Date): string {
   return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`;
 }
 
-function getCurrentTimeOffset(value: Date): number | null {
+function getCalendarRange(lessons: Lesson[], currentTime?: Date): CalendarRange {
+  const lessonStartHours = lessons.map((lesson) => new Date(lesson.startsAt).getHours());
+  const lessonEndHours = lessons.map((lesson) => {
+    const startsAt = new Date(lesson.startsAt);
+    const endMinutes = startsAt.getHours() * 60 + startsAt.getMinutes() + lesson.durationMinutes;
+    return Math.ceil(endMinutes / 60);
+  });
+  const currentHour = currentTime?.getHours();
+  const startHour = clamp(Math.min(defaultCalendarStartHour, ...lessonStartHours, currentHour ?? defaultCalendarStartHour), 0, 23);
+  const endHour = clamp(
+    Math.max(defaultCalendarEndHour, ...lessonEndHours, currentHour !== undefined ? currentHour + 1 : defaultCalendarEndHour),
+    startHour + 1,
+    24
+  );
+
+  return {
+    startHour,
+    endHour,
+    hours: Array.from({ length: endHour - startHour }, (_, index) => startHour + index)
+  };
+}
+
+function getCurrentTimeOffset(value: Date, calendarRange: CalendarRange): number | null {
   const currentMinutes = value.getHours() * 60 + value.getMinutes();
-  const calendarStartMinutes = calendarStartHour * 60;
-  const calendarEndMinutes = calendarStartMinutes + visibleHours.length * 60;
+  const calendarStartMinutes = calendarRange.startHour * 60;
+  const calendarEndMinutes = calendarRange.endHour * 60;
 
   if (currentMinutes < calendarStartMinutes || currentMinutes >= calendarEndMinutes) {
     return null;
