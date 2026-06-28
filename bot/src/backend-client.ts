@@ -41,18 +41,6 @@ export async function setParticipantStatus(input: {
   });
 }
 
-export async function getLessonReminderState(
-  lessonId: string,
-  chatId: number | string
-): Promise<{ text: string; replyMarkup?: { inline_keyboard: Array<Array<{ text: string; callback_data: string }>> } }> {
-  const params = new URLSearchParams({
-    lessonId: String(lessonId),
-    chatId: String(chatId)
-  });
-
-  return api(`/internal/telegram/lesson-reminder?${params.toString()}`);
-}
-
 async function api<T>(path: string, options?: { method?: string; body?: unknown }): Promise<T> {
   const response = await fetch(`${backendUrl}${path}`, {
     method: options?.method ?? "GET",

@@ -1,14 +1,8 @@
-import { sendLessonReminderToChat, sendPaymentReminder } from "./telegram";
+import { sendLessonReminder, sendPaymentReminder } from "./telegram";
 import { getBalances, getSnapshot, updateReminder, upsertReminder } from "./backend-client";
-import { isTelegramGroupChat } from "@crm/shared/lesson-reminder";
-import type { Lesson, LessonParticipant, Student } from "@crm/shared";
+import type { Lesson, Student } from "@crm/shared";
 
 const minuteMs = 60_000;
-
-type ReminderMember = {
-  student: Student;
-  participant: LessonParticipant;
-};
 
 export function startReminderScheduler(): void {
   console.log("Reminder scheduler started");
@@ -39,20 +33,21 @@ export async function runReminderTick(): Promise<void> {
         continue;
       }
 
-      const chatGroups = groupReminderMembers(db.students, lesson);
-      for (const [chatId, members] of chatGroups) {
-        const isGroupChat = isTelegramGroupChat(chatId) || members.length > 1;
-        const dedupeKey = isGroupChat
-          ? `lesson:${lesson.id}:chat:${chatId}:${leadMinutes}`
-          : `lesson:${lesson.id}:${members[0].student.id}:${leadMinutes}`;
+      for (const participant of lesson.participants) {
+        if (participant.status === "declined") {
+          continue;
+        }
+
+        const student = db.students.find((candidate) => candidate.id === participant.studentId);
+        if (!student) {
+          continue;
+        }
 
         await sendReminderOnce({
-          chatId,
+          student,
           lesson,
-          members,
-          isGroupChat,
           scheduledFor: new Date(scheduledFor).toISOString(),
-          dedupeKey
+          dedupeKey: `lesson:${lesson.id}:${student.id}:${leadMinutes}`
         });
       }
     }
@@ -103,40 +98,16 @@ export async function sendManualPaymentReminder(studentId: string): Promise<{ se
   }
 }
 
-function groupReminderMembers(students: Student[], lesson: Lesson): Map<string, ReminderMember[]> {
-  const chatGroups = new Map<string, ReminderMember[]>();
-
-  for (const participant of lesson.participants) {
-    if (participant.status === "declined") {
-      continue;
-    }
-
-    const student = students.find((candidate) => candidate.id === participant.studentId);
-    if (!student?.telegramChatId) {
-      continue;
-    }
-
-    const chatId = student.telegramChatId;
-    const members = chatGroups.get(chatId) ?? [];
-    members.push({ student, participant });
-    chatGroups.set(chatId, members);
-  }
-
-  return chatGroups;
-}
-
 async function sendReminderOnce(input: {
-  chatId: string;
+  student: Student;
   lesson: Lesson;
-  members: ReminderMember[];
-  isGroupChat: boolean;
   scheduledFor: string;
   dedupeKey: string;
 }): Promise<void> {
   const reminder = await upsertReminder({
     type: "lesson",
     lessonId: input.lesson.id,
-    studentId: input.isGroupChat ? undefined : input.members[0]?.student.id,
+    studentId: input.student.id,
     scheduledFor: input.scheduledFor,
     status: "pending",
     dedupeKey: input.dedupeKey
@@ -147,15 +118,10 @@ async function sendReminderOnce(input: {
   }
 
   try {
-    await sendLessonReminderToChat({
-      chatId: input.chatId,
-      lesson: input.lesson,
-      members: input.members,
-      isGroupChat: input.isGroupChat
-    });
+    await sendLessonReminder(input.student, input.lesson);
     await updateReminder(reminder.id, {
-      status: "sent",
-      sentAt: new Date().toISOString()
+      status: input.student.telegramChatId ? "sent" : "skipped",
+      sentAt: input.student.telegramChatId ? new Date().toISOString() : undefined
     });
   } catch (error) {
     await updateReminder(reminder.id, {

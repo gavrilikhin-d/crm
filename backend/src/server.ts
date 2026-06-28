@@ -39,7 +39,6 @@ const routes: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
 
   route("POST", /^\/internal\/telegram\/bind$/, bindTelegram),
   route("GET", /^\/internal\/telegram\/profile$/, getTelegramProfile),
-  route("GET", /^\/internal\/telegram\/lesson-reminder$/, getLessonReminderState),
   route("POST", /^\/internal\/reminders$/, upsertReminder),
   route("PATCH", /^\/internal\/reminders\/([^/]+)$/, updateReminder)
 ];
@@ -227,18 +226,6 @@ async function getTelegramProfile(request: IncomingMessage, response: ServerResp
   }
 
   jsonOk(response, await store.getTelegramStudentProfile(userId, { days: parseScheduleDaysParam(url.searchParams.get("days")) }));
-}
-
-async function getLessonReminderState(request: IncomingMessage, response: ServerResponse) {
-  const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
-  const lessonId = url.searchParams.get("lessonId");
-  const chatId = url.searchParams.get("chatId");
-  if (!lessonId || !chatId) {
-    jsonError(response, new Error("Missing required fields: lessonId, chatId"));
-    return;
-  }
-
-  jsonOk(response, await store.getLessonReminderState(lessonId, chatId));
 }
 
 function parseScheduleDaysParam(value: string | null): number | undefined {

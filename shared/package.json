@@ -7,8 +7,7 @@
     ".": "./src/types.ts",
     "./currency": "./src/currency.ts",
     "./student-initials": "./src/student-initials.ts",
-    "./lesson-callback": "./src/lesson-callback.ts",
-    "./lesson-reminder": "./src/lesson-reminder.ts"
+    "./lesson-callback": "./src/lesson-callback.ts"
   },
   "types": "./src/types.ts",
   "scripts": {
