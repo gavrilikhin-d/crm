@@ -7,6 +7,7 @@ import type { Student } from "@crm/shared";
 import { getStudentInitials } from "@crm/shared/student-initials";
 import { Avatar, AvatarBadge, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
+import { t } from "@/i18n";
 
 type StudentLike = Pick<Student, "id" | "fullName" | "avatarUrl" | "updatedAt">;
 
@@ -69,14 +70,14 @@ function StudentAvatarUpload({
 
     try {
       if (!file.type.startsWith("image/")) {
-        throw new Error("Выберите изображение.");
+        throw new Error(t("avatar.selectImage"));
       }
       if (file.size > 2 * 1024 * 1024) {
-        throw new Error("Изображение должно быть не больше 2 МБ.");
+        throw new Error(t("avatar.maxSize"));
       }
       await onUpload(student.id, file);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось загрузить аватар.");
+      toast.error(error instanceof Error ? error.message : t("avatar.uploadFailed"));
     }
   }
 
@@ -85,7 +86,7 @@ function StudentAvatarUpload({
       type="button"
       className={cn("relative shrink-0 rounded-full", className)}
       onClick={() => inputRef.current?.click()}
-      aria-label={`Загрузить аватар для ${student.fullName}`}
+      aria-label={t("avatar.uploadForAria", { name: student.fullName })}
     >
       <StudentAvatar student={student} size={size} className="cursor-pointer" />
       <input ref={inputRef} type="file" accept="image/*" className="sr-only" onChange={(event) => void handleChange(event)} />

@@ -10,6 +10,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
+import { useI18n } from "@/i18n/context"
 
 const hours = Array.from({ length: 24 }, (_, index) => index)
 const minutes = Array.from({ length: 12 }, (_, index) => index * 5)
@@ -45,6 +46,7 @@ type DateTimePickerProps = {
 }
 
 export function DateTimePicker({ id, name, defaultValue, required, className }: DateTimePickerProps) {
+  const { t } = useI18n()
   const initial = useMemo(() => parseDateTimeLocalValue(defaultValue), [defaultValue])
   const [open, setOpen] = useState(false)
   const [date, setDate] = useState<Date | undefined>(initial.date)
@@ -62,7 +64,7 @@ export function DateTimePicker({ id, name, defaultValue, required, className }: 
 
   const label = date
     ? `${format(date, "d MMMM yyyy", { locale: ru })}, ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`
-    : "Выберите дату и время"
+    : t("dateTime.placeholder")
 
   return (
     <>
@@ -91,7 +93,7 @@ export function DateTimePicker({ id, name, defaultValue, required, className }: 
           <div className="flex items-center gap-2 border-t p-3">
             <ClockIcon className="text-muted-foreground" aria-hidden="true" />
             <NativeSelect
-              aria-label="Час"
+              aria-label={t("dateTime.hourAria")}
               value={String(hour)}
               onChange={(event) => setHour(Number(event.currentTarget.value))}
               className="flex-1"
@@ -104,7 +106,7 @@ export function DateTimePicker({ id, name, defaultValue, required, className }: 
             </NativeSelect>
             <span className="text-muted-foreground">:</span>
             <NativeSelect
-              aria-label="Минуты"
+              aria-label={t("dateTime.minuteAria")}
               value={String(minute)}
               onChange={(event) => setMinute(Number(event.currentTarget.value))}
               className="flex-1"

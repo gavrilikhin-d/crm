@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/i18n/context";
 
 function StudentCombobox({
   students,
@@ -22,7 +23,7 @@ function StudentCombobox({
   onValueChange,
   name,
   id,
-  placeholder = "Выберите ученика",
+  placeholder,
   disabled
 }: {
   students: Student[];
@@ -33,6 +34,7 @@ function StudentCombobox({
   placeholder?: string;
   disabled?: boolean;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const selectedStudent = students.find((student) => student.id === value);
 
@@ -56,16 +58,16 @@ function StudentCombobox({
                 <span className="truncate">{selectedStudent.fullName}</span>
               </span>
             ) : (
-              placeholder
+              (placeholder ?? t("combobox.selectStudent"))
             )}
             <ChevronsUpDown data-icon="inline-end" />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
           <Command>
-            <CommandInput placeholder="Найти ученика..." />
+            <CommandInput placeholder={t("combobox.searchStudent")} />
             <CommandList>
-              <CommandEmpty>Ученик не найден.</CommandEmpty>
+              <CommandEmpty>{t("combobox.studentNotFound")}</CommandEmpty>
               <CommandGroup>
                 {students.map((student) => (
                   <CommandItem

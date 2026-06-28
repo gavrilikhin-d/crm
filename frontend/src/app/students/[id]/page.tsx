@@ -17,53 +17,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { api } from "@/lib/api";
 import { readFileAsDataUrl } from "@/lib/files";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/i18n/context";
+import { formatFullDate, formatLongDate } from "@/i18n/format";
+import {
+  getLessonStatusLabel,
+  getLessonTypeLabel,
+  getPaymentMethodLabel,
+  getStudentStatusLabel,
+  getWeekdayShortLabels
+} from "@/i18n/labels";
 
 type Snapshot = Database & {
   balances: StudentBalance[];
 };
-
-const studentStatusLabels = {
-  active: "Активный",
-  inactive: "Неактивный"
-} as const;
-
-const paymentMethodLabels = {
-  cash: "Наличные",
-  transfer: "Перевод",
-  other: "Другое"
-} as const;
-
-const lessonStatusLabels: Record<string, string> = {
-  scheduled: "Запланировано",
-  confirmed: "Подтверждено",
-  cancelled_by_student: "Отменено учеником",
-  cancelled_by_teacher: "Отменено преподавателем",
-  completed: "Проведено",
-  missed: "Пропуск"
-};
-
-const lessonTypeLabels = {
-  individual: "Индивидуальное",
-  group: "Групповое"
-} as const;
-
-const weekdayLabels = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
-
-function formatFullDate(value: string): string {
-  return new Intl.DateTimeFormat("ru-RU", {
-    dateStyle: "medium",
-    timeStyle: "short"
-  }).format(new Date(value));
-}
-
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat("ru-RU", { dateStyle: "long" }).format(new Date(value));
-}
-
-function formatRecurringSchedule(schedule: RecurringSchedule): string {
-  const weekday = weekdayLabels[schedule.weekday] ?? "—";
-  return `Каждую ${weekday} в ${schedule.time}, ${lessonTypeLabels[schedule.lessonType]}`;
-}
 
 function getTelegramBindUrl(student: Student): string | undefined {
   const username = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME?.replace(/^@/, "");
@@ -75,6 +41,8 @@ function getTelegramBindUrl(student: Student): string | undefined {
 
 export default function StudentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const { t } = useI18n();
+  const weekdayLabels = getWeekdayShortLabels("sun");
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -87,9 +55,11 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
 
   useEffect(() => {
     void loadSnapshot()
-      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить данные"))
+      .catch((loadError) =>
+        setError(loadError instanceof Error ? loadError.message : t("toast.loadFailed"))
+      )
       .finally(() => setLoading(false));
-  }, [loadSnapshot]);
+  }, [loadSnapshot, t]);
 
   const student = snapshot?.students.find((item) => item.id === id);
   const currency = resolveCurrency(snapshot?.settings.currency);
@@ -142,19 +112,19 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
       await api(`/api/students/${id}`, { method: "PATCH", body });
       await loadSnapshot();
       setEditing(false);
-      toast.success("Данные ученика обновлены.");
+      toast.success(t("toast.studentUpdated"));
     } catch (updateError) {
-      toast.error(updateError instanceof Error ? updateError.message : "Не удалось сохранить изменения.");
+      toast.error(updateError instanceof Error ? updateError.message : t("toast.saveFailed"));
     }
   }
 
   async function copyTelegramBindText(text: string) {
     await navigator.clipboard.writeText(text);
-    toast.success("Ссылка скопирована, перешлите её ученику");
+    toast.success(t("toast.telegramLinkCopied"));
   }
 
   if (loading) {
-    return <main className="mx-auto max-w-5xl p-6 text-sm text-muted-foreground">Загрузка...</main>;
+    return <main className="mx-auto max-w-5xl p-6 text-sm text-muted-foreground">{t("common.loading")}</main>;
   }
 
   if (error) {
@@ -171,36 +141,45 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
         <Button variant="ghost" asChild>
           <Link href="/">
             <ArrowLeft data-icon="inline-start" />
-            Назад
+            {t("common.back")}
           </Link>
         </Button>
-        <p className="mt-4 text-muted-foreground">Ученик не найден.</p>
+        <p className="mt-4 text-muted-foreground">{t("student.notFound")}</p>
       </main>
     );
   }
 
   const telegramBindUrl = getTelegramBindUrl(student);
 
+  function formatRecurringSchedule(schedule: RecurringSchedule): string {
+    const weekday = weekdayLabels[schedule.weekday] ?? "—";
+    return t("studentPage.recurringSchedule", {
+      weekday,
+      time: schedule.time,
+      type: getLessonTypeLabel(schedule.lessonType)
+    });
+  }
+
   return (
     <main className="mx-auto flex max-w-5xl flex-col gap-6 p-6 pb-10">
       <Button variant="ghost" className="w-fit" asChild>
         <Link href="/">
           <ArrowLeft data-icon="inline-start" />
-          Назад
+          {t("common.back")}
         </Link>
       </Button>
 
       {editing ? (
         <Card>
           <CardHeader>
-            <CardTitle>Редактирование</CardTitle>
-            <CardDescription>Имя и аватар ученика</CardDescription>
+            <CardTitle>{t("student.edit.title")}</CardTitle>
+            <CardDescription>{t("student.edit.description")}</CardDescription>
           </CardHeader>
           <CardContent>
             <StudentForm
               key={student.updatedAt}
               student={student}
-              submitLabel="Сохранить"
+              submitLabel={t("form.save")}
               onSubmit={handleStudentUpdate}
               onCancel={() => setEditing(false)}
             />
@@ -214,9 +193,11 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-semibold">{student.fullName}</h1>
                 <Badge variant={student.status === "active" ? "secondary" : "outline"}>
-                  {studentStatusLabels[student.status]}
+                  {getStudentStatusLabel(student.status)}
                 </Badge>
-                {balance.debtLessons > 0 ? <Badge variant="destructive">Долг: {balance.debtLessons}</Badge> : null}
+                {balance.debtLessons > 0 ? (
+                  <Badge variant="destructive">{t("badge.debtWithCount", { count: balance.debtLessons })}</Badge>
+                ) : null}
               </div>
               <div className="grid gap-2 text-sm sm:grid-cols-2">
                 <p className="flex items-center gap-1.5">
@@ -224,7 +205,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
                   {student.telegramChatId ? (
                     <span className="inline-flex items-center gap-1">
                       <TelegramIcon className="size-3.5 shrink-0" />
-                      {student.telegramUsername ? `@${student.telegramUsername}` : "Подключен"}
+                      {student.telegramUsername ? `@${student.telegramUsername}` : t("student.telegramConnected")}
                     </span>
                   ) : telegramBindUrl ? (
                     <Button
@@ -234,32 +215,32 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
                       onClick={() => void copyTelegramBindText(telegramBindUrl)}
                     >
                       <TelegramIcon data-icon="inline-start" />
-                      Подключить Telegram
+                      {t("student.connectTelegram")}
                     </Button>
                   ) : (
-                    "Не подключен"
+                    t("student.telegramNotConnected")
                   )}
                 </p>
                 <p>
-                  <span className="text-muted-foreground">Цена занятия: </span>
+                  <span className="text-muted-foreground">{t("student.lessonPrice")}</span>
                   {formatMoney(student.defaultLessonPrice, currency)}
                 </p>
                 <p>
-                  <span className="text-muted-foreground">Добавлен: </span>
-                  {formatDate(student.createdAt)}
+                  <span className="text-muted-foreground">{t("student.addedAt")}</span>
+                  {formatLongDate(student.createdAt)}
                 </p>
               </div>
             </div>
             <div className="flex shrink-0 flex-col gap-3">
               <Button variant="outline" size="sm" type="button" onClick={() => setEditing(true)}>
                 <Pencil data-icon="inline-start" />
-                Редактировать
+                {t("student.edit.button")}
               </Button>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-1">
-                <BalanceStat label="Осталось" value={String(balance.remainingLessons)} highlight={balance.remainingLessons < 1} />
-                <BalanceStat label="Использовано" value={String(balance.chargedLessons)} />
-                <BalanceStat label="Оплачено занятий" value={String(balance.paidLessons)} />
-                <BalanceStat label="Долг" value={String(balance.debtLessons)} highlight={balance.debtLessons > 0} />
+                <BalanceStat label={t("balance.remaining")} value={String(balance.remainingLessons)} highlight={balance.remainingLessons < 1} />
+                <BalanceStat label={t("balance.used")} value={String(balance.chargedLessons)} />
+                <BalanceStat label={t("balance.paidLessons")} value={String(balance.paidLessons)} />
+                <BalanceStat label={t("balance.debt")} value={String(balance.debtLessons)} highlight={balance.debtLessons > 0} />
               </div>
             </div>
           </CardContent>
@@ -268,18 +249,18 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
 
       <Card>
         <CardHeader>
-          <CardTitle>Оплаты</CardTitle>
-          <CardDescription>{payments.length} записей</CardDescription>
+          <CardTitle>{t("studentPage.paymentsTitle")}</CardTitle>
+          <CardDescription>{t("common.recordsCount", { count: payments.length })}</CardDescription>
         </CardHeader>
         <CardContent>
           {payments.length ? (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Дата</TableHead>
-                  <TableHead>Занятий</TableHead>
-                  <TableHead>Способ</TableHead>
-                  <TableHead className="text-right">Сумма</TableHead>
+                  <TableHead>{t("table.date")}</TableHead>
+                  <TableHead>{t("table.lessonCount")}</TableHead>
+                  <TableHead>{t("table.method")}</TableHead>
+                  <TableHead className="text-right">{t("table.amount")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -287,12 +268,12 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
                   <TableRow key={payment.id}>
                     <TableCell>{formatFullDate(payment.paidAt)}</TableCell>
                     <TableCell>{payment.lessonCount}</TableCell>
-                    <TableCell>{paymentMethodLabels[payment.method]}</TableCell>
+                    <TableCell>{getPaymentMethodLabel(payment.method)}</TableCell>
                     <TableCell className="text-right font-medium">
                       {formatMoney(payment.amount, currency)}
                       {payment.packageId ? (
                         <p className="text-xs font-normal text-muted-foreground">
-                          {packagesById.get(payment.packageId)?.name ?? "Пакет"}
+                          {packagesById.get(payment.packageId)?.name ?? t("payments.packageFallback")}
                         </p>
                       ) : null}
                     </TableCell>
@@ -301,15 +282,15 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
               </TableBody>
             </Table>
           ) : (
-            <p className="text-sm text-muted-foreground">Оплат пока нет.</p>
+            <p className="text-sm text-muted-foreground">{t("studentPage.paymentsEmpty")}</p>
           )}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Повторяющиеся занятия</CardTitle>
-          <CardDescription>{recurringSchedules.length} расписаний</CardDescription>
+          <CardTitle>{t("studentPage.recurringTitle")}</CardTitle>
+          <CardDescription>{t("common.schedulesCount", { count: recurringSchedules.length })}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {recurringSchedules.length ? (
@@ -317,19 +298,29 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
               <div key={schedule.id} className="rounded-lg border p-3 text-sm">
                 <p className="font-medium">{formatRecurringSchedule(schedule)}</p>
                 <p className="mt-1 text-muted-foreground">
-                  С {formatDate(schedule.activeFrom)}
-                  {schedule.activeTo ? ` по ${formatDate(schedule.activeTo)}` : ""}
+                  {t("common.fromDate", { date: formatLongDate(schedule.activeFrom) })}
+                  {schedule.activeTo ? t("common.toDate", { date: formatLongDate(schedule.activeTo) }) : ""}
                 </p>
               </div>
             ))
           ) : (
-            <p className="text-sm text-muted-foreground">Не участвует в повторяющихся занятиях.</p>
+            <p className="text-sm text-muted-foreground">{t("studentPage.recurringEmpty")}</p>
           )}
         </CardContent>
       </Card>
 
-      <LessonSection title="Предстоящие занятия" lessons={upcomingLessons} studentId={id} emptyText="Предстоящих занятий нет." />
-      <LessonSection title="Прошедшие занятия" lessons={pastLessons} studentId={id} emptyText="Прошедших занятий нет." />
+      <LessonSection
+        title={t("studentPage.upcomingLessons")}
+        lessons={upcomingLessons}
+        studentId={id}
+        emptyText={t("studentPage.upcomingEmpty")}
+      />
+      <LessonSection
+        title={t("studentPage.pastLessons")}
+        lessons={pastLessons}
+        studentId={id}
+        emptyText={t("studentPage.pastEmpty")}
+      />
     </main>
   );
 }
@@ -362,11 +353,13 @@ function LessonSection({
   studentId: string;
   emptyText: string;
 }) {
+  const { t } = useI18n();
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
-        <CardDescription>{lessons.length} занятий</CardDescription>
+        <CardDescription>{t("common.lessonsCount", { count: lessons.length })}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {lessons.length ? (
@@ -382,15 +375,15 @@ function LessonSection({
                   <div>
                     <p className="font-medium">{formatFullDate(lesson.startsAt)}</p>
                     <p className="text-sm text-muted-foreground">
-                      {lessonTypeLabels[lesson.effectiveType]}, {lesson.durationMinutes} мин
+                      {getLessonTypeLabel(lesson.effectiveType)}, {t("common.minutes", { count: lesson.durationMinutes })}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-1">
-                    <Badge variant="secondary">{lessonStatusLabels[lesson.status] ?? lesson.status}</Badge>
+                    <Badge variant="secondary">{getLessonStatusLabel(lesson.status)}</Badge>
                     <ParticipantStatusBadge status={participant.status} className="text-[0.65rem]" />
                     {participant.hasDebt ? (
                       <Badge variant="destructive" className="text-[0.65rem]">
-                        Долг
+                        {t("badge.debt")}
                       </Badge>
                     ) : null}
                   </div>

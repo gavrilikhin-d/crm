@@ -1,13 +1,5 @@
 import type { ParticipantStatus } from "@crm/shared";
 
-const participantStatusLabels: Record<ParticipantStatus, string> = {
-  awaiting: "Ожидает ответа",
-  confirmed: "Подтверждено",
-  declined: "Отказался",
-  missed: "Пропуск",
-  attended: "Посетил"
-};
-
 const participantStatusBadgeClass: Record<ParticipantStatus, string> = {
   awaiting:
     "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/50 dark:text-amber-300",
@@ -20,4 +12,4 @@ const participantStatusBadgeClass: Record<ParticipantStatus, string> = {
     "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900/50 dark:bg-sky-950/50 dark:text-sky-300"
 };
 
-export { participantStatusBadgeClass, participantStatusLabels };
+export { participantStatusBadgeClass };

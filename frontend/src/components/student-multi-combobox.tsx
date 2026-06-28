@@ -14,6 +14,7 @@ import {
   CommandList
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useI18n } from "@/i18n/context";
 
 function StudentMultiCombobox({
   students,
@@ -21,7 +22,7 @@ function StudentMultiCombobox({
   onValueChange,
   name,
   id,
-  placeholder = "Добавить ученика",
+  placeholder,
   disabled
 }: {
   students: Student[];
@@ -32,6 +33,7 @@ function StudentMultiCombobox({
   placeholder?: string;
   disabled?: boolean;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const selectedStudents = students.filter((student) => value.includes(student.id));
 
@@ -65,15 +67,15 @@ function StudentMultiCombobox({
             disabled={disabled}
             className="w-full justify-between font-normal"
           >
-            {placeholder}
+            {placeholder ?? t("combobox.addStudent")}
             <ChevronsUpDown data-icon="inline-end" />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
           <Command>
-            <CommandInput placeholder="Найти ученика..." />
+            <CommandInput placeholder={t("combobox.searchStudent")} />
             <CommandList>
-              <CommandEmpty>Ученик не найден.</CommandEmpty>
+              <CommandEmpty>{t("combobox.studentNotFound")}</CommandEmpty>
               <CommandGroup>
                 {students.map((student) => (
                   <CommandItem
@@ -103,7 +105,7 @@ function StudentMultiCombobox({
               <button
                 type="button"
                 className="rounded-sm p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                aria-label={`Убрать ${student.fullName}`}
+                aria-label={t("combobox.removeStudentAria", { name: student.fullName })}
                 onClick={() => removeStudent(student.id)}
               >
                 <X className="size-3.5" />

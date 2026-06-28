@@ -63,6 +63,16 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { api } from "@/lib/api";
 import { readFileAsDataUrl } from "@/lib/files";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/i18n/context";
+import {
+  formatDay,
+  formatFullDate,
+  formatMonth,
+  formatTime,
+  formatWeekRange,
+  formatWeekday
+} from "@/i18n/format";
+import { getPaymentMethodLabel, getWeekdayShortLabels } from "@/i18n/labels";
 import type {
   AppSettings,
   Database,
@@ -89,12 +99,6 @@ type ActiveSection = "schedule" | "clients" | "payments" | "sessions" | "setting
 type ScheduleView = "day" | "week" | "month";
 type ActiveModal = "student" | "payment" | "package" | null;
 
-const weekDayLabels = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
-const scheduleViewLabels: Record<ScheduleView, string> = {
-  day: "День",
-  week: "Неделя",
-  month: "Месяц"
-};
 const defaultCalendarStartHour = 9;
 const defaultCalendarEndHour = 22;
 const hourHeight = 76;
@@ -110,6 +114,12 @@ type CalendarRange = {
 };
 
 export default function Home() {
+  const { t } = useI18n();
+  const scheduleViewLabels: Record<ScheduleView, string> = {
+    day: t("calendar.view.day"),
+    week: t("calendar.view.week"),
+    month: t("calendar.view.month")
+  };
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<ActiveSection>("schedule");
@@ -209,7 +219,7 @@ export default function Home() {
     try {
       setSnapshot(await api<Snapshot>("/api/snapshot"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось загрузить данные.");
+      toast.error(error instanceof Error ? error.message : t("toast.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -223,7 +233,7 @@ export default function Home() {
       }
       await loadSnapshot();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Действие не выполнено.");
+      toast.error(error instanceof Error ? error.message : t("toast.actionFailed"));
     }
   }
 
@@ -251,7 +261,7 @@ export default function Home() {
       }
       await api("/api/students", { method: "POST", body });
       setActiveModal(null);
-      return "Ученик добавлен.";
+      return t("toast.studentAdded");
     });
   }
 
@@ -268,7 +278,7 @@ export default function Home() {
       }
       await api(`/api/students/${studentId}`, { method: "PATCH", body });
       setEditingStudent(null);
-      return "Данные ученика обновлены.";
+      return t("toast.studentUpdated");
     });
   }
 
@@ -278,7 +288,7 @@ export default function Home() {
     const data = formData(form);
     const studentIds = new FormData(form).getAll("studentIds").map(String);
     if (!studentIds.length) {
-      toast.error("Выберите хотя бы одного ученика.");
+      toast.error(t("toast.selectAtLeastOneStudent"));
       return;
     }
     const lessonType = studentIds.length > 1 ? "group" : "individual";
@@ -299,7 +309,7 @@ export default function Home() {
       form.reset();
       setLessonFormKey((key) => key + 1);
       setLessonDialogOpen(false);
-      return repeatWeekly ? "Создано повторяющееся занятие." : "Занятие добавлено.";
+      return repeatWeekly ? t("toast.recurringLessonCreated") : t("toast.lessonAdded");
     });
   }
 
@@ -311,7 +321,7 @@ export default function Home() {
 
     if (!hasPackage) {
       if (!data.lessonCount || !data.amount) {
-        toast.error("Укажите количество занятий и сумму.");
+        toast.error(t("toast.enterLessonCountAndAmount"));
         return;
       }
     }
@@ -329,7 +339,7 @@ export default function Home() {
       await api("/api/payments", { method: "POST", body: data });
       form.reset();
       setActiveModal(null);
-      return "Оплата добавлена.";
+      return t("toast.paymentAdded");
     });
   }
 
@@ -343,7 +353,7 @@ export default function Home() {
       await api("/api/lesson-packages", { method: "POST", body: data });
       form.reset();
       setActiveModal(null);
-      return "Пакет добавлен.";
+      return t("toast.packageAdded");
     });
   }
 
@@ -356,18 +366,18 @@ export default function Home() {
         method: "PATCH",
         body: { currency: nextCurrency }
       });
-      return "Валюта обновлена.";
+      return t("toast.currencyUpdated");
     });
   }
 
   async function handleDeleteStudent(student: Student) {
-    if (!window.confirm(`Удалить ученика ${student.fullName}? Его оплаты и участия в занятиях тоже будут удалены.`)) {
+    if (!window.confirm(t("confirm.deleteStudent", { name: student.fullName }))) {
       return;
     }
 
     await withRefresh(async () => {
       await api(`/api/students/${student.id}`, { method: "DELETE" });
-      return "Ученик удален.";
+      return t("toast.studentDeleted");
     });
   }
 
@@ -376,19 +386,19 @@ export default function Home() {
   }
 
   async function handleRemoveParticipant(lessonId: string, studentId: string, studentName: string) {
-    if (!window.confirm(`Убрать ${studentName} с этого занятия?`)) {
+    if (!window.confirm(t("confirm.removeParticipant", { name: studentName }))) {
       return;
     }
 
     await withRefresh(async () => {
       await api(`/api/lessons/${lessonId}/participants/${studentId}`, { method: "DELETE" });
-      return `${studentName} убран(а) с занятия.`;
+      return t("toast.participantRemoved", { name: studentName });
     });
   }
 
   async function handleDeleteLessonFromSheet(lesson: Lesson, scope: RecurringDeleteScope) {
     if (!lesson.recurringScheduleId) {
-      if (!window.confirm(`Удалить занятие ${formatFullDate(lesson.startsAt)}?`)) {
+      if (!window.confirm(t("confirm.deleteLesson", { date: formatFullDate(lesson.startsAt) }))) {
         return;
       }
     }
@@ -399,9 +409,9 @@ export default function Home() {
 
   async function deleteLessonWithScope(lesson: Lesson, scope: RecurringDeleteScope) {
     const messages: Record<RecurringDeleteScope, string> = {
-      single: "Занятие удалено.",
-      following: "Это и последующие занятия удалены.",
-      all: "Вся серия занятий удалена."
+      single: t("toast.lessonDeletedSingle"),
+      following: t("toast.lessonDeletedFollowing"),
+      all: t("toast.lessonDeletedAll")
     };
 
     await withRefresh(async () => {
@@ -411,13 +421,13 @@ export default function Home() {
   }
 
   async function handleDeletePackage(lessonPackage: LessonPackage) {
-    if (!window.confirm(`Удалить пакет "${lessonPackage.name}"? Уже внесенные оплаты сохранят количество занятий.`)) {
+    if (!window.confirm(t("confirm.deletePackage", { name: lessonPackage.name }))) {
       return;
     }
 
     await withRefresh(async () => {
       await api(`/api/lesson-packages/${lessonPackage.id}`, { method: "DELETE" });
-      return "Пакет удален.";
+      return t("toast.packageDeleted");
     });
   }
 
@@ -435,11 +445,11 @@ export default function Home() {
   }
 
   const activeTitle: Record<ActiveSection, string> = {
-    schedule: "Расписание",
-    clients: "Ученики",
-    payments: "Оплаты",
-    sessions: "Пакеты занятий",
-    settings: "Настройки"
+    schedule: t("section.schedule"),
+    clients: t("section.students"),
+    payments: t("section.payments"),
+    sessions: t("section.packages"),
+    settings: t("section.settings")
   };
 
   return (
@@ -456,34 +466,34 @@ export default function Home() {
         <SidebarContent>
           <SidebarGroup>
             <SidebarGroupContent>
-              <SidebarMenu aria-label="Основная навигация">
+              <SidebarMenu aria-label={t("nav.mainAria")}>
                 <SidebarLink
                   icon={<CreditCard className="size-4" />}
                   active={activeSection === "payments"}
                   onClick={() => setActiveSection("payments")}
                 >
-                  Оплаты
+                  {t("nav.payments")}
                 </SidebarLink>
                 <SidebarLink
                   icon={<Users className="size-4" />}
                   active={activeSection === "clients"}
                   onClick={() => setActiveSection("clients")}
                 >
-                  Ученики
+                  {t("nav.students")}
                 </SidebarLink>
                 <SidebarLink
                   icon={<CalendarDays className="size-4" />}
                   active={activeSection === "schedule"}
                   onClick={() => setActiveSection("schedule")}
                 >
-                  Расписание
+                  {t("nav.schedule")}
                 </SidebarLink>
                 <SidebarLink
                   icon={<GraduationCap className="size-4" />}
                   active={activeSection === "sessions"}
                   onClick={() => setActiveSection("sessions")}
                 >
-                  Пакеты
+                  {t("nav.packages")}
                 </SidebarLink>
               </SidebarMenu>
             </SidebarGroupContent>
@@ -493,19 +503,19 @@ export default function Home() {
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton
-                tooltip="Настройки"
+                tooltip={t("nav.settings")}
                 isActive={activeSection === "settings"}
                 onClick={() => setActiveSection("settings")}
               >
                 <Settings className="size-4" />
-                <span>Настройки</span>
+                <span>{t("nav.settings")}</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="Помощь">
+              <SidebarMenuButton asChild tooltip={t("nav.help")}>
                 <a href="#help">
                   <HelpCircle className="size-4" />
-                  <span>Помощь</span>
+                  <span>{t("nav.help")}</span>
                 </a>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -522,7 +532,7 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-3">
             <Button type="button" onClick={openLessonDialog}>
-              Запланировать занятие
+              {t("calendar.scheduleLesson")}
             </Button>
           </div>
         </header>
@@ -557,24 +567,24 @@ export default function Home() {
               </div>
               
               <div className="flex items-center gap-2">
-                <Button variant="secondary" size="icon" type="button" onClick={() => shiftCalendar(-1)} aria-label="Предыдущий период">
+                <Button variant="secondary" size="icon" type="button" onClick={() => shiftCalendar(-1)} aria-label={t("calendar.prevPeriod")}>
                   <ChevronLeft className="size-4" />
                 </Button>
                 <Button variant="secondary" size="sm" type="button" onClick={goToToday}>
-                  Сегодня
+                  {t("calendar.today")}
                 </Button>
-                <Button variant="secondary" size="icon" type="button" onClick={() => shiftCalendar(1)} aria-label="Следующий период">
+                <Button variant="secondary" size="icon" type="button" onClick={() => shiftCalendar(1)} aria-label={t("calendar.nextPeriod")}>
                   <ChevronRight className="size-4" />
                 </Button>
                 <Dialog open={lessonDialogOpen} onOpenChange={setLessonDialogOpen}>
                   <DialogTrigger asChild>
-                    <Button size="icon" type="button" aria-label="Создать занятие">
+                    <Button size="icon" type="button" aria-label={t("calendar.createLesson")}>
                       <Plus className="size-4" />
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="sm:max-w-md">
                     <DialogHeader>
-                      <DialogTitle>Создать занятие</DialogTitle>
+                      <DialogTitle>{t("calendar.createLessonTitle")}</DialogTitle>
                     </DialogHeader>
                     <LessonForm
                       key={lessonFormKey}
@@ -661,22 +671,22 @@ export default function Home() {
         ) : null}
       </SidebarInset>
 
-      <Modal open={activeModal === "student"} title="Добавить ученика" onClose={() => setActiveModal(null)}>
-        <StudentForm key={studentFormKey} submitLabel="Добавить ученика" onSubmit={handleStudentCreate} />
+      <Modal open={activeModal === "student"} title={t("modal.addStudent")} onClose={() => setActiveModal(null)}>
+        <StudentForm key={studentFormKey} submitLabel={t("form.addStudent")} onSubmit={handleStudentCreate} />
       </Modal>
 
-      <Modal open={!!editingStudent} title="Редактировать ученика" onClose={() => setEditingStudent(null)}>
+      <Modal open={!!editingStudent} title={t("modal.editStudent")} onClose={() => setEditingStudent(null)}>
         {editingStudent ? (
           <StudentForm
             key={editingStudent.id}
             student={editingStudent}
-            submitLabel="Сохранить"
+            submitLabel={t("form.save")}
             onSubmit={(payload) => handleStudentUpdate(editingStudent.id, payload)}
           />
         ) : null}
       </Modal>
 
-      <Modal open={activeModal === "payment"} title="Добавить оплату" onClose={() => setActiveModal(null)}>
+      <Modal open={activeModal === "payment"} title={t("modal.addPayment")} onClose={() => setActiveModal(null)}>
         <PaymentForm
           key={paymentFormKey}
           students={students}
@@ -686,7 +696,7 @@ export default function Home() {
         />
       </Modal>
 
-      <Modal open={activeModal === "package"} title="Добавить пакет" onClose={() => setActiveModal(null)}>
+      <Modal open={activeModal === "package"} title={t("modal.addPackage")} onClose={() => setActiveModal(null)}>
         <PackageForm currency={currency} onSubmit={handlePackageSubmit} />
       </Modal>
 
@@ -756,9 +766,11 @@ function ClientsView({
   onEditStudent: (student: Student) => void;
   onDeleteStudent: (student: Student) => void;
 }) {
+  const { t } = useI18n();
+
   async function copyTelegramBindText(text: string) {
     await navigator.clipboard.writeText(text);
-    toast.success("Ссылка скопирована, перешлите её ученику");
+    toast.success(t("toast.telegramLinkCopied"));
   }
 
   return (
@@ -766,8 +778,8 @@ function ClientsView({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
-            Ученики <Badge variant="secondary">{students.length}</Badge>
-            <Button size="icon" type="button" onClick={onAddStudent} aria-label="Добавить ученика">
+            {t("clients.title")} <Badge variant="secondary">{students.length}</Badge>
+            <Button size="icon" type="button" onClick={onAddStudent} aria-label={t("clients.addStudentAria")}>
               <Plus className="size-4" />
             </Button>
           </CardTitle>
@@ -788,7 +800,7 @@ function ClientsView({
                   {student.telegramChatId ? (
                     <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                       <TelegramIcon className="size-3.5 shrink-0" />
-                      {student.telegramUsername ? `@${student.telegramUsername}` : "Telegram подключен"}
+                      {student.telegramUsername ? `@${student.telegramUsername}` : t("clients.telegramConnected")}
                     </p>
                   ) : telegramBindUrl ? (
                     <Button
@@ -799,16 +811,16 @@ function ClientsView({
                       onClick={() => void copyTelegramBindText(telegramBindUrl)}
                     >
                       <TelegramIcon data-icon="inline-start" />
-                      Подключить Telegram
+                      {t("clients.connectTelegram")}
                     </Button>
                   ) : (
                     <Badge variant="secondary" className="mt-1">
-                      Укажите Telegram bot username
+                      {t("clients.telegramBotUsernameMissing")}
                     </Badge>
                   )}
                 </div>
                 <div className="flex justify-end gap-2">
-                  <Button variant="ghost" size="icon" type="button" onClick={() => onEditStudent(student)} aria-label={`Редактировать ${student.fullName}`}>
+                  <Button variant="ghost" size="icon" type="button" onClick={() => onEditStudent(student)} aria-label={t("clients.editStudentAria", { name: student.fullName })}>
                     <Pencil className="size-4" />
                   </Button>
                   <Button variant="ghost" size="icon" type="button" onClick={() => onDeleteStudent(student)}>
@@ -836,26 +848,28 @@ function PaymentsView({
   getStudent: (studentId: string) => Student | undefined;
   onAddPayment: () => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <section className="p-6 px-10 pb-10">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
-            История оплат <Badge variant="secondary">{payments.length}</Badge>
-            <Button size="icon" type="button" onClick={onAddPayment} aria-label="Добавить оплату">
+            {t("payments.title")} <Badge variant="secondary">{payments.length}</Badge>
+            <Button size="icon" type="button" onClick={onAddPayment} aria-label={t("payments.addPaymentAria")}>
               <Plus className="size-4" />
             </Button>
           </CardTitle>
-          <CardDescription>Оплаты за разовые занятия и пакеты.</CardDescription>
+          <CardDescription>{t("payments.description")}</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Ученик</TableHead>
-                <TableHead>Дата</TableHead>
-                <TableHead>Занятий</TableHead>
-                <TableHead className="text-right">Сумма</TableHead>
+                <TableHead>{t("table.student")}</TableHead>
+                <TableHead>{t("table.date")}</TableHead>
+                <TableHead>{t("table.lessonCount")}</TableHead>
+                <TableHead className="text-right">{t("table.amount")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -871,7 +885,7 @@ function PaymentsView({
                           <span>{student.fullName}</span>
                         </StudentLink>
                       ) : (
-                        <span>Ученик удален</span>
+                        <span>{t("payments.studentDeleted")}</span>
                       )}
                     </div>
                   </TableCell>
@@ -900,13 +914,15 @@ function SessionsView({
   onAddPackage: () => void;
   onDeletePackage: (lessonPackage: LessonPackage) => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <section className="p-6 px-10 pb-10">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
-            Пакеты занятий <Badge variant="secondary">{lessonPackages.length}</Badge>
-            <Button size="icon" type="button" onClick={onAddPackage} aria-label="Добавить пакет">
+            {t("section.packages")} <Badge variant="secondary">{lessonPackages.length}</Badge>
+            <Button size="icon" type="button" onClick={onAddPackage} aria-label={t("packages.addPackageAria")}>
               <Plus className="size-4" />
             </Button>
           </CardTitle>
@@ -927,7 +943,8 @@ function SessionsView({
                       {formatMoney(lessonPackage.price, currency)}
                     </span>
                     <span className="text-sm text-muted-foreground">
-                      {formatMoney(unitPrice, currency)}/занятие
+                      {formatMoney(unitPrice, currency)}
+                      {t("packages.perLesson")}
                     </span>
                   </div>
                   <Button
@@ -936,7 +953,7 @@ function SessionsView({
                     type="button"
                     className="text-muted-foreground"
                     onClick={() => onDeletePackage(lessonPackage)}
-                    aria-label={`Удалить пакет ${lessonPackage.name}`}
+                    aria-label={t("packages.deletePackageAria", { name: lessonPackage.name })}
                   >
                     <Trash2 className="size-4" />
                   </Button>
@@ -982,13 +999,14 @@ function LessonForm({
   defaultStartsAt: string;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const { t } = useI18n();
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const activeStudents = students.filter((student) => student.status === "active");
 
   function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
     if (!selectedStudentIds.length) {
       event.preventDefault();
-      toast.error("Выберите хотя бы одного ученика.");
+      toast.error(t("toast.selectAtLeastOneStudent"));
       return;
     }
     onSubmit(event);
@@ -998,19 +1016,19 @@ function LessonForm({
     <form onSubmit={handleFormSubmit}>
       <FieldGroup className="gap-4">
         <Field>
-          <FieldLabel htmlFor="lesson-starts-at">Дата и время</FieldLabel>
+          <FieldLabel htmlFor="lesson-starts-at">{t("form.dateTime")}</FieldLabel>
           <DateTimePicker id="lesson-starts-at" name="startsAt" defaultValue={defaultStartsAt} required />
         </Field>
 
         <Field>
-          <FieldLabel htmlFor="lesson-students">Ученики</FieldLabel>
+          <FieldLabel htmlFor="lesson-students">{t("form.students")}</FieldLabel>
           <StudentMultiCombobox
             id="lesson-students"
             name="studentIds"
             students={activeStudents}
             value={selectedStudentIds}
             onValueChange={setSelectedStudentIds}
-            placeholder="Добавить ученика"
+            placeholder={t("form.addStudent")}
             disabled={!activeStudents.length}
           />
         </Field>
@@ -1018,12 +1036,12 @@ function LessonForm({
         <Field orientation="horizontal">
           <Checkbox id="lesson-repeat-weekly" name="repeatWeekly" />
           <FieldContent>
-            <FieldLabel htmlFor="lesson-repeat-weekly">Повторять еженедельно</FieldLabel>
+            <FieldLabel htmlFor="lesson-repeat-weekly">{t("form.repeatWeekly")}</FieldLabel>
           </FieldContent>
         </Field>
 
         <Button type="submit" disabled={!activeStudents.length || !selectedStudentIds.length}>
-          Добавить в календарь
+          {t("form.addToCalendar")}
         </Button>
       </FieldGroup>
     </form>
@@ -1037,20 +1055,22 @@ function SettingsView({
   currency: CurrencyCode;
   onCurrencyChange: (currency: CurrencyCode) => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <section className="p-6 px-10 pb-10" id="settings">
       <Card className="max-w-xl">
         <CardHeader>
-          <CardTitle>Настройки</CardTitle>
-          <CardDescription>Общие параметры приложения.</CardDescription>
+          <CardTitle>{t("settings.title")}</CardTitle>
+          <CardDescription>{t("settings.description")}</CardDescription>
         </CardHeader>
         <CardContent>
           <FieldGroup>
             <Field>
-              <FieldLabel htmlFor="settings-currency">Валюта</FieldLabel>
+              <FieldLabel htmlFor="settings-currency">{t("settings.currency")}</FieldLabel>
               <Select value={currency} onValueChange={(value) => onCurrencyChange(value as CurrencyCode)}>
                 <SelectTrigger id="settings-currency" className="w-full">
-                  <SelectValue placeholder="Выберите валюту" />
+                  <SelectValue placeholder={t("settings.selectCurrency")} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
@@ -1062,9 +1082,7 @@ function SettingsView({
                   </SelectGroup>
                 </SelectContent>
               </Select>
-              <FieldDescription>
-                Суммы в оплатах и пакетах отображаются в выбранной валюте. По умолчанию — белорусский рубль.
-              </FieldDescription>
+              <FieldDescription>{t("settings.currencyHint")}</FieldDescription>
             </Field>
           </FieldGroup>
         </CardContent>
@@ -1084,6 +1102,7 @@ function PaymentForm({
   currency: CurrencyCode;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const { t } = useI18n();
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [selectedPackageId, setSelectedPackageId] = useState("");
   const selectedPackage = lessonPackages.find((item) => item.id === selectedPackageId);
@@ -1092,7 +1111,7 @@ function PaymentForm({
   function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
     if (!selectedStudentId) {
       event.preventDefault();
-      toast.error("Выберите ученика.");
+      toast.error(t("toast.selectStudent"));
       return;
     }
     onSubmit(event);
@@ -1102,18 +1121,18 @@ function PaymentForm({
     <form onSubmit={handleFormSubmit}>
       <FieldGroup className="gap-3">
         <Field>
-          <FieldLabel htmlFor="payment-student-id">Ученик</FieldLabel>
+          <FieldLabel htmlFor="payment-student-id">{t("form.student")}</FieldLabel>
           <StudentCombobox
             id="payment-student-id"
             name="studentId"
             students={activeStudents}
             value={selectedStudentId}
             onValueChange={setSelectedStudentId}
-            placeholder="Выберите ученика"
+            placeholder={t("form.selectStudent")}
           />
         </Field>
         <Field>
-          <FieldLabel htmlFor="payment-package-id">Пакет</FieldLabel>
+          <FieldLabel htmlFor="payment-package-id">{t("form.package")}</FieldLabel>
           <NativeSelect
             id="payment-package-id"
             name="packageId"
@@ -1121,7 +1140,7 @@ function PaymentForm({
             onChange={(event) => setSelectedPackageId(event.target.value)}
             className="w-full"
           >
-            <NativeSelectOption value="">Без пакета</NativeSelectOption>
+            <NativeSelectOption value="">{t("form.noPackage")}</NativeSelectOption>
             {lessonPackages
               .filter((item) => item.active)
               .map((item) => (
@@ -1132,31 +1151,34 @@ function PaymentForm({
           </NativeSelect>
           {selectedPackage ? (
             <FieldDescription>
-              {selectedPackage.lessonCount} занятий · {formatMoney(selectedPackage.price, currency)}
+              {t("packages.summary", {
+                count: selectedPackage.lessonCount,
+                price: formatMoney(selectedPackage.price, currency)
+              })}
             </FieldDescription>
           ) : null}
         </Field>
         {!selectedPackageId ? (
           <FieldGroup className="grid grid-cols-2 gap-3">
             <Field>
-              <FieldLabel htmlFor="payment-lesson-count">Занятий</FieldLabel>
-              <Input id="payment-lesson-count" name="lessonCount" type="number" min="1" placeholder="Занятий" required />
+              <FieldLabel htmlFor="payment-lesson-count">{t("form.lessonCount")}</FieldLabel>
+              <Input id="payment-lesson-count" name="lessonCount" type="number" min="1" placeholder={t("form.lessonCount")} required />
             </Field>
             <Field>
-              <FieldLabel htmlFor="payment-amount">Сумма</FieldLabel>
+              <FieldLabel htmlFor="payment-amount">{t("form.amount")}</FieldLabel>
               <CurrencyInput id="payment-amount" name="amount" currency={currency} placeholder="0" required />
             </Field>
           </FieldGroup>
         ) : null}
         <Field>
-          <FieldLabel htmlFor="payment-method">Способ оплаты</FieldLabel>
+          <FieldLabel htmlFor="payment-method">{t("form.paymentMethod")}</FieldLabel>
           <NativeSelect id="payment-method" name="method" required defaultValue="transfer" className="w-full">
-            <NativeSelectOption value="transfer">Перевод</NativeSelectOption>
-            <NativeSelectOption value="cash">Наличные</NativeSelectOption>
-            <NativeSelectOption value="other">Другое</NativeSelectOption>
+            <NativeSelectOption value="transfer">{getPaymentMethodLabel("transfer")}</NativeSelectOption>
+            <NativeSelectOption value="cash">{getPaymentMethodLabel("cash")}</NativeSelectOption>
+            <NativeSelectOption value="other">{getPaymentMethodLabel("other")}</NativeSelectOption>
           </NativeSelect>
         </Field>
-        <Button type="submit">Добавить оплату</Button>
+        <Button type="submit">{t("form.addPayment")}</Button>
       </FieldGroup>
     </form>
   );
@@ -1169,24 +1191,26 @@ function PackageForm({
   currency: CurrencyCode;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <form onSubmit={onSubmit}>
       <FieldGroup className="gap-3">
         <Field>
-          <FieldLabel htmlFor="package-name">Название пакета</FieldLabel>
-          <Input id="package-name" name="name" placeholder="Название пакета" required />
+          <FieldLabel htmlFor="package-name">{t("form.packageName")}</FieldLabel>
+          <Input id="package-name" name="name" placeholder={t("form.packageName")} required />
         </Field>
         <FieldGroup className="grid grid-cols-2 gap-3">
           <Field>
-            <FieldLabel htmlFor="package-lesson-count">Занятий</FieldLabel>
-            <Input id="package-lesson-count" name="lessonCount" type="number" min="1" placeholder="Занятий" required />
+            <FieldLabel htmlFor="package-lesson-count">{t("form.lessonCount")}</FieldLabel>
+            <Input id="package-lesson-count" name="lessonCount" type="number" min="1" placeholder={t("form.lessonCount")} required />
           </Field>
           <Field>
-            <FieldLabel htmlFor="package-price">Цена</FieldLabel>
+            <FieldLabel htmlFor="package-price">{t("form.price")}</FieldLabel>
             <CurrencyInput id="package-price" name="price" currency={currency} placeholder="0" required />
           </Field>
         </FieldGroup>
-        <Button type="submit">Добавить пакет</Button>
+        <Button type="submit">{t("form.addPackage")}</Button>
       </FieldGroup>
     </form>
   );
@@ -1251,6 +1275,8 @@ function WeekCalendar({
   getStudent: (studentId: string) => Student | undefined;
   onSelectLesson: (lesson: Lesson) => void;
 }) {
+  const weekDayLabels = getWeekdayShortLabels("mon");
+
   return (
     <div className="grid min-h-[680px] grid-cols-[62px_repeat(7,minmax(86px,1fr))] grid-rows-[58px_auto]">
       <div className="border-b border-stone-300" />
@@ -1372,6 +1398,9 @@ function MonthCalendar({
   getStudent: (studentId: string) => Student | undefined;
   onSelectLesson: (lesson: Lesson) => void;
 }) {
+  const { t } = useI18n();
+  const weekDayLabels = getWeekdayShortLabels("mon");
+
   return (
     <div className="grid grid-cols-7 overflow-hidden rounded-xl border border-stone-200">
       {weekDayLabels.map((day) => (
@@ -1405,7 +1434,11 @@ function MonthCalendar({
                   onSelect={() => onSelectLesson(lesson)}
                 />
               ))}
-              {dayLessons.length > 4 ? <span className="text-[0.68rem] text-stone-400">+{dayLessons.length - 4} еще</span> : null}
+              {dayLessons.length > 4 ? (
+                <span className="text-[0.68rem] text-stone-400">
+                  {t("calendar.moreLessons", { count: dayLessons.length - 4 })}
+                </span>
+              ) : null}
             </div>
           </div>
         );
@@ -1439,6 +1472,7 @@ function CalendarLesson({
   getStudent: (studentId: string) => Student | undefined;
   onSelect: () => void;
 }) {
+  const { t } = useI18n();
   const startsAt = new Date(lesson.startsAt);
   const { top, height } = getLessonPosition(lesson, calendarRange);
   const compact = height < 52;
@@ -1478,7 +1512,7 @@ function CalendarLesson({
                     variant="destructive"
                     className={cn("shrink-0 px-1 py-0", compact ? "text-[0.5rem]" : "text-[0.55rem]")}
                   >
-                    Долг
+                    {t("badge.debt")}
                   </Badge>
                 ) : null}
               </div>
@@ -1499,6 +1533,7 @@ function MonthLessonChip({
   getStudent: (studentId: string) => Student | undefined;
   onSelect: () => void;
 }) {
+  const { t } = useI18n();
   const startsAt = new Date(lesson.startsAt);
 
   return (
@@ -1528,7 +1563,7 @@ function MonthLessonChip({
               </div>
               {participant.hasDebt ? (
                 <Badge variant="destructive" className="shrink-0 px-1 py-0 text-[0.5rem]">
-                  Долг
+                  {t("badge.debt")}
                 </Badge>
               ) : null}
             </div>
@@ -1643,36 +1678,6 @@ function getCurrentTimeOffset(value: Date, calendarRange: CalendarRange): number
   return ((currentMinutes - calendarStartMinutes) / 60) * hourHeight;
 }
 
-function formatDay(value: Date): string {
-  return new Intl.DateTimeFormat("ru-RU", { month: "short", day: "numeric" }).format(value);
-}
-
-function formatWeekday(value: Date): string {
-  return new Intl.DateTimeFormat("ru-RU", { weekday: "short" }).format(value);
-}
-
-function formatMonth(value: Date): string {
-  return new Intl.DateTimeFormat("ru-RU", { month: "long", year: "numeric" }).format(value);
-}
-
-function formatWeekRange(days: Date[]): string {
-  return `${formatDay(days[0])} - ${formatDay(days[6])}`;
-}
-
 function formatHour(hour: number): string {
   return `${hour}:00`;
-}
-
-function formatTime(value: Date): string {
-  return new Intl.DateTimeFormat("ru-RU", {
-    hour: "numeric",
-    minute: "2-digit"
-  }).format(value);
-}
-
-function formatFullDate(value: string): string {
-  return new Intl.DateTimeFormat("ru-RU", {
-    dateStyle: "medium",
-    timeStyle: "short"
-  }).format(new Date(value));
 }

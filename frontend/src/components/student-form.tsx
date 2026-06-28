@@ -7,6 +7,7 @@ import { AvatarPicker } from "@/components/avatar-picker";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { useI18n } from "@/i18n/context";
 
 function StudentForm({
   student,
@@ -19,6 +20,7 @@ function StudentForm({
   onSubmit: (payload: { fullName: string; avatarFile: File | null; removeAvatar: boolean }) => void | Promise<void>;
   onCancel?: () => void;
 }) {
+  const { t } = useI18n();
   const [fullName, setFullName] = useState(student?.fullName ?? "");
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [removeAvatar, setRemoveAvatar] = useState(false);
@@ -63,7 +65,7 @@ function StudentForm({
     event.preventDefault();
     const trimmedName = fullName.trim();
     if (!trimmedName) {
-      toast.error("Укажите ФИО.");
+      toast.error(t("form.fullNameRequired"));
       return;
     }
     await onSubmit({ fullName: trimmedName, avatarFile, removeAvatar });
@@ -79,11 +81,11 @@ function StudentForm({
           onClear={previewSrc ? handleClearAvatar : undefined}
         />
         <Field>
-          <FieldLabel htmlFor="student-full-name">ФИО</FieldLabel>
+          <FieldLabel htmlFor="student-full-name">{t("form.fullName")}</FieldLabel>
           <Input
             id="student-full-name"
             name="fullName"
-            placeholder="ФИО"
+            placeholder={t("form.fullName")}
             required
             value={fullName}
             onChange={(event) => setFullName(event.target.value)}
@@ -93,7 +95,7 @@ function StudentForm({
           <Button type="submit">{submitLabel}</Button>
           {onCancel ? (
             <Button type="button" variant="outline" onClick={onCancel}>
-              Отмена
+              {t("form.cancel")}
             </Button>
           ) : null}
         </div>

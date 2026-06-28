@@ -1,5 +1,6 @@
 import type { ParticipantStatus } from "@crm/shared";
-import { participantStatusBadgeClass, participantStatusLabels } from "@/lib/participant-status";
+import { getParticipantStatusLabel } from "@/i18n/labels";
+import { participantStatusBadgeClass } from "@/lib/participant-status";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -12,7 +13,7 @@ function ParticipantStatusBadge({
 }) {
   return (
     <Badge variant="outline" className={cn(participantStatusBadgeClass[status], className)}>
-      {participantStatusLabels[status]}
+      {getParticipantStatusLabel(status)}
     </Badge>
   );
 }

@@ -7,15 +7,16 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { FieldDescription } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
+import { t } from "@/i18n";
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
 function validateAvatarFile(file: File): void {
   if (!file.type.startsWith("image/")) {
-    throw new Error("Выберите изображение.");
+    throw new Error(t("avatar.selectImage"));
   }
   if (file.size > MAX_AVATAR_BYTES) {
-    throw new Error("Изображение должно быть не больше 2 МБ.");
+    throw new Error(t("avatar.maxSize"));
   }
 }
 
@@ -44,7 +45,7 @@ function AvatarPicker({
       validateAvatarFile(file);
       onFileSelect(file);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось загрузить аватар.");
+      toast.error(error instanceof Error ? error.message : t("avatar.uploadFailed"));
     }
   }
 
@@ -76,10 +77,10 @@ function AvatarPicker({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        aria-label="Загрузить аватар"
+        aria-label={t("avatar.uploadAria")}
       >
         <Avatar size="lg" className="size-20 cursor-pointer">
-          {previewSrc ? <AvatarImage src={previewSrc} alt={fullName || "Аватар"} /> : null}
+          {previewSrc ? <AvatarImage src={previewSrc} alt={fullName || t("avatar.defaultAlt")} /> : null}
           <AvatarFallback className="text-lg">{getStudentInitials(fullName || "?")}</AvatarFallback>
         </Avatar>
       </button>
@@ -93,12 +94,10 @@ function AvatarPicker({
           event.target.value = "";
         }}
       />
-      <FieldDescription className="text-center">
-        Перетащите изображение или нажмите для выбора
-      </FieldDescription>
+      <FieldDescription className="text-center">{t("avatar.dropHint")}</FieldDescription>
       {previewSrc && onClear ? (
         <Button type="button" variant="ghost" size="sm" onClick={onClear}>
-          Убрать фото
+          {t("avatar.removePhoto")}
         </Button>
       ) : null}
     </div>

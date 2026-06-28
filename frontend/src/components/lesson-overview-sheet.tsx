@@ -16,47 +16,13 @@ import {
   SheetHeader,
   SheetTitle
 } from "@/components/ui/sheet";
-
-const lessonStatusLabels: Record<string, string> = {
-  scheduled: "Запланировано",
-  confirmed: "Подтверждено",
-  cancelled_by_student: "Отменено учеником",
-  cancelled_by_teacher: "Отменено преподавателем",
-  completed: "Проведено",
-  missed: "Пропуск"
-};
-
-const lessonTypeLabels: Record<LessonType, string> = {
-  individual: "Индивидуальное",
-  group: "Групповое"
-};
-
-const weekdayLabels = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
-
-function formatTime(value: Date): string {
-  return new Intl.DateTimeFormat("ru-RU", {
-    hour: "numeric",
-    minute: "2-digit"
-  }).format(value);
-}
-
-function formatFullDate(value: string): string {
-  return new Intl.DateTimeFormat("ru-RU", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric"
-  }).format(new Date(value));
-}
+import { useI18n } from "@/i18n/context";
+import { formatFullDate, formatTime } from "@/i18n/format";
+import { getLessonStatusLabel, getLessonTypeLabel, getWeekdayShortLabels } from "@/i18n/labels";
 
 function formatTimeRange(start: Date, durationMinutes: number): string {
   const end = new Date(start.getTime() + durationMinutes * 60_000);
   return `${formatTime(start)} – ${formatTime(end)}`;
-}
-
-function formatRecurringSchedule(schedule: RecurringSchedule): string {
-  const weekday = weekdayLabels[schedule.weekday] ?? "—";
-  return `Каждую неделю, ${weekday} в ${schedule.time}`;
 }
 
 function LessonOverviewSheet({
@@ -76,6 +42,14 @@ function LessonOverviewSheet({
   onRemoveParticipant: (lessonId: string, studentId: string, studentName: string) => Promise<void>;
   onDeleteLesson: (lesson: Lesson, scope: RecurringDeleteScope) => Promise<void>;
 }) {
+  const { t } = useI18n();
+  const weekdayLabels = getWeekdayShortLabels("sun");
+
+  function formatRecurringSchedule(schedule: RecurringSchedule): string {
+    const weekday = weekdayLabels[schedule.weekday] ?? "—";
+    return t("lessonOverview.recurring", { weekday, time: schedule.time });
+  }
+
   if (!lesson) {
     return null;
   }
@@ -94,15 +68,15 @@ function LessonOverviewSheet({
 
         <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4">
           <div className="flex flex-wrap gap-2">
-            <Badge variant="secondary">{lessonStatusLabels[lesson.status] ?? lesson.status}</Badge>
-            <Badge variant="outline">{lessonTypeLabels[lesson.effectiveType]}</Badge>
-            {converted ? <Badge variant="outline">Было групповым</Badge> : null}
+            <Badge variant="secondary">{getLessonStatusLabel(lesson.status)}</Badge>
+            <Badge variant="outline">{getLessonTypeLabel(lesson.effectiveType)}</Badge>
+            {converted ? <Badge variant="outline">{t("lessonOverview.wasGroup")}</Badge> : null}
           </div>
 
           <div className="flex flex-col gap-1 text-sm">
             <p>
-              <span className="text-muted-foreground">Формат: </span>
-              {lessonTypeLabels[lesson.effectiveType]}, {lesson.durationMinutes} мин
+              <span className="text-muted-foreground">{t("common.formatLabel")}</span>
+              {getLessonTypeLabel(lesson.effectiveType)}, {t("common.minutes", { count: lesson.durationMinutes })}
             </p>
             {recurringSchedule ? (
               <p className="flex items-center gap-1.5">
@@ -110,14 +84,14 @@ function LessonOverviewSheet({
                 <span>{formatRecurringSchedule(recurringSchedule)}</span>
               </p>
             ) : (
-              <p className="text-muted-foreground">Разовое занятие</p>
+              <p className="text-muted-foreground">{t("lessonOverview.oneOff")}</p>
             )}
           </div>
 
           <Separator />
 
           <div className="flex flex-col gap-3">
-            <h3 className="text-sm font-medium">Участники</h3>
+            <h3 className="text-sm font-medium">{t("lessonOverview.participants")}</h3>
             {lesson.participants.map((participant) => {
               const student = getStudent(participant.studentId);
               if (!student) {
@@ -137,7 +111,7 @@ function LessonOverviewSheet({
                       <ParticipantStatusBadge status={participant.status} className="text-[0.65rem]" />
                       {participant.hasDebt ? (
                         <Badge variant="destructive" className="text-[0.65rem]">
-                          Долг
+                          {t("badge.debt")}
                         </Badge>
                       ) : null}
                     </div>
@@ -147,7 +121,7 @@ function LessonOverviewSheet({
                       variant="ghost"
                       size="icon"
                       type="button"
-                      aria-label={`Убрать ${student.fullName} с занятия`}
+                      aria-label={t("lessonOverview.removeParticipantAria", { name: student.fullName })}
                       onClick={() => void onRemoveParticipant(lesson.id, student.id, student.fullName)}
                     >
                       <Trash2 className="size-4" />
@@ -162,20 +136,20 @@ function LessonOverviewSheet({
         <SheetFooter className="border-t pt-4">
           {lesson.recurringScheduleId ? (
             <div className="flex w-full flex-col gap-2">
-              <p className="text-sm text-muted-foreground">Удалить занятие</p>
+              <p className="text-sm text-muted-foreground">{t("lessonOverview.delete.title")}</p>
               <Button type="button" variant="outline" onClick={() => void onDeleteLesson(lesson, "single")}>
-                Только это занятие
+                {t("lessonOverview.delete.single")}
               </Button>
               <Button type="button" variant="outline" onClick={() => void onDeleteLesson(lesson, "following")}>
-                Это и все последующие
+                {t("lessonOverview.delete.following")}
               </Button>
               <Button type="button" variant="destructive" onClick={() => void onDeleteLesson(lesson, "all")}>
-                Всю серию
+                {t("lessonOverview.delete.all")}
               </Button>
             </div>
           ) : (
             <Button type="button" variant="destructive" className="w-full" onClick={() => void onDeleteLesson(lesson, "single")}>
-              Удалить занятие
+              {t("lessonOverview.delete.button")}
             </Button>
           )}
         </SheetFooter>
