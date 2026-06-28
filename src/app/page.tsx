@@ -8,6 +8,7 @@ import {
   CreditCard,
   GraduationCap,
   HelpCircle,
+  Plus,
   RefreshCw,
   Settings,
   Trash2,
@@ -38,6 +39,7 @@ type ApiOptions = {
 
 type ActiveSection = "schedule" | "clients" | "payments" | "sessions";
 type ScheduleView = "day" | "week" | "month";
+type ActiveModal = "student" | "payment" | "package" | null;
 
 const statusLabels: Record<string, string> = {
   scheduled: "Запланировано",
@@ -73,6 +75,7 @@ export default function Home() {
   const [activeSection, setActiveSection] = useState<ActiveSection>("schedule");
   const [scheduleView, setScheduleView] = useState<ScheduleView>("week");
   const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
+  const [activeModal, setActiveModal] = useState<ActiveModal>(null);
 
   const students = snapshot?.students ?? [];
   const lessonPackages = snapshot?.lessonPackages ?? [];
@@ -168,6 +171,7 @@ export default function Home() {
     await withRefresh(async () => {
       await api("/api/students", { method: "POST", body: data });
       form.reset();
+      setActiveModal(null);
       return "Ученик добавлен.";
     });
   }
@@ -210,6 +214,7 @@ export default function Home() {
     await withRefresh(async () => {
       await api("/api/payments", { method: "POST", body: data });
       form.reset();
+      setActiveModal(null);
       return "Оплата добавлена.";
     });
   }
@@ -223,6 +228,7 @@ export default function Home() {
     await withRefresh(async () => {
       await api("/api/lesson-packages", { method: "POST", body: data });
       form.reset();
+      setActiveModal(null);
       return "Пакет добавлен.";
     });
   }
@@ -461,7 +467,7 @@ export default function Home() {
           <ClientsView
             students={students}
             getBalance={getBalance}
-            onStudentSubmit={handleStudentSubmit}
+            onAddStudent={() => setActiveModal("student")}
             onDeleteStudent={handleDeleteStudent}
             onAction={(action) => withRefresh(action)}
           />
@@ -469,23 +475,32 @@ export default function Home() {
 
         {activeSection === "payments" ? (
           <PaymentsView
-            students={students}
-            lessonPackages={lessonPackages}
             payments={payments}
             getStudent={getStudent}
-            onPaymentSubmit={handlePaymentSubmit}
-            onPackageSubmit={handlePackageSubmit}
+            onAddPayment={() => setActiveModal("payment")}
           />
         ) : null}
 
         {activeSection === "sessions" ? (
           <SessionsView
             lessonPackages={lessonPackages}
-            onPackageSubmit={handlePackageSubmit}
+            onAddPackage={() => setActiveModal("package")}
             onDeletePackage={handleDeletePackage}
           />
         ) : null}
       </main>
+
+      <Modal open={activeModal === "student"} title="Добавить ученика" onClose={() => setActiveModal(null)}>
+        <StudentForm onSubmit={handleStudentSubmit} />
+      </Modal>
+
+      <Modal open={activeModal === "payment"} title="Добавить оплату" onClose={() => setActiveModal(null)}>
+        <PaymentForm students={students} lessonPackages={lessonPackages} onSubmit={handlePaymentSubmit} />
+      </Modal>
+
+      <Modal open={activeModal === "package"} title="Добавить пакет" onClose={() => setActiveModal(null)}>
+        <PackageForm onSubmit={handlePackageSubmit} />
+      </Modal>
     </div>
   );
 }
@@ -519,39 +534,25 @@ function SidebarLink({
 function ClientsView({
   students,
   getBalance,
-  onStudentSubmit,
+  onAddStudent,
   onDeleteStudent,
   onAction
 }: {
   students: Student[];
   getBalance: (studentId: string) => StudentBalance;
-  onStudentSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onAddStudent: () => void;
   onDeleteStudent: (student: Student) => void;
   onAction: (action: () => Promise<string | void>) => void;
 }) {
   return (
-    <section className="grid grid-cols-[360px_minmax(0,1fr)] gap-6 p-6 px-10 pb-10 max-[900px]:grid-cols-1">
-      <Card>
-        <CardHeader>
-          <CardTitle>Добавить ученика</CardTitle>
-          <CardDescription>Ученики находятся отдельно от календаря занятий.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form className="grid gap-3" onSubmit={onStudentSubmit}>
-            <Input name="fullName" placeholder="ФИО" required />
-            <Input name="phone" placeholder="Телефон" required />
-            <Input name="telegramUsername" placeholder="Имя пользователя в Telegram" />
-            <Input name="telegramChatId" placeholder="Telegram chat id" />
-            <Input name="defaultLessonPrice" type="number" min="0" placeholder="Цена разового занятия" />
-            <Button type="submit">Добавить ученика</Button>
-          </form>
-        </CardContent>
-      </Card>
-
+    <section className="p-6 px-10 pb-10">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             Ученики <Badge variant="secondary">{students.length}</Badge>
+            <Button size="icon" type="button" onClick={onAddStudent} aria-label="Добавить ученика">
+              <Plus className="size-4" />
+            </Button>
           </CardTitle>
           <CardDescription>Баланс считается в целых занятиях.</CardDescription>
         </CardHeader>
@@ -607,49 +608,25 @@ function ClientsView({
 }
 
 function PaymentsView({
-  students,
-  lessonPackages,
   payments,
   getStudent,
-  onPaymentSubmit,
-  onPackageSubmit
+  onAddPayment
 }: {
-  students: Student[];
-  lessonPackages: LessonPackage[];
   payments: Snapshot["payments"];
   getStudent: (studentId: string) => Student | undefined;
-  onPaymentSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onPackageSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onAddPayment: () => void;
 }) {
   return (
-    <section className="grid grid-cols-[360px_minmax(0,1fr)] gap-6 p-6 px-10 pb-10 max-[900px]:grid-cols-1">
-      <div className="grid content-start gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Добавить оплату</CardTitle>
-            <CardDescription>Оплата может быть за одно занятие или за пакет.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <PaymentForm students={students} lessonPackages={lessonPackages} onSubmit={onPaymentSubmit} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Добавить пакет</CardTitle>
-            <CardDescription>Пакеты всегда содержат целое число занятий.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <PackageForm onSubmit={onPackageSubmit} />
-          </CardContent>
-        </Card>
-      </div>
-
+    <section className="p-6 px-10 pb-10">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             История оплат <Badge variant="secondary">{payments.length}</Badge>
+            <Button size="icon" type="button" onClick={onAddPayment} aria-label="Добавить оплату">
+              <Plus className="size-4" />
+            </Button>
           </CardTitle>
+          <CardDescription>Оплаты за разовые занятия и пакеты.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3">
           {payments.map((payment) => (
@@ -670,30 +647,24 @@ function PaymentsView({
 
 function SessionsView({
   lessonPackages,
-  onPackageSubmit,
+  onAddPackage,
   onDeletePackage
 }: {
   lessonPackages: LessonPackage[];
-  onPackageSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onAddPackage: () => void;
   onDeletePackage: (lessonPackage: LessonPackage) => void;
 }) {
   return (
-    <section className="grid grid-cols-[360px_minmax(0,1fr)] gap-6 p-6 px-10 pb-10 max-[900px]:grid-cols-1">
-      <Card>
-        <CardHeader>
-          <CardTitle>Добавить пакет</CardTitle>
-          <CardDescription>Например, пакеты на 4 или 8 занятий.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <PackageForm onSubmit={onPackageSubmit} />
-        </CardContent>
-      </Card>
-
+    <section className="p-6 px-10 pb-10">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             Пакеты занятий <Badge variant="secondary">{lessonPackages.length}</Badge>
+            <Button size="icon" type="button" onClick={onAddPackage} aria-label="Добавить пакет">
+              <Plus className="size-4" />
+            </Button>
           </CardTitle>
+          <CardDescription>Например, пакеты на 4 или 8 занятий.</CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-3 gap-4">
           {lessonPackages.map((lessonPackage) => (
@@ -715,6 +686,51 @@ function SessionsView({
         </CardContent>
       </Card>
     </section>
+  );
+}
+
+function Modal({
+  open,
+  title,
+  onClose,
+  children
+}: {
+  open: boolean;
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true">
+      <Card className="w-full max-w-md shadow-2xl">
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            {title}
+            <Button variant="ghost" size="sm" type="button" onClick={onClose}>
+              Закрыть
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>{children}</CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function StudentForm({ onSubmit }: { onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  return (
+    <form className="grid gap-3" onSubmit={onSubmit}>
+      <Input name="fullName" placeholder="ФИО" required />
+      <Input name="phone" placeholder="Телефон" required />
+      <Input name="telegramUsername" placeholder="Имя пользователя в Telegram" />
+      <Input name="telegramChatId" placeholder="Telegram chat id" />
+      <Input name="defaultLessonPrice" type="number" min="0" placeholder="Цена разового занятия" />
+      <Button type="submit">Добавить ученика</Button>
+    </form>
   );
 }
 
