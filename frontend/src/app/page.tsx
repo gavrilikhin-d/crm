@@ -699,7 +699,6 @@ function ClientsView({
               <Plus className="size-4" />
             </Button>
           </CardTitle>
-          <CardDescription>Баланс считается в целых занятиях.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3">
           {students.map((student) => {
