@@ -13,6 +13,7 @@
   ],
   "scripts": {
     "dev": "bun --filter @crm/frontend dev",
+    "dev:all": "bun run dev:backend & bun run dev:frontend & bun run dev:bot & bun run dev:reminder & wait",
     "dev:frontend": "bun --filter @crm/frontend dev",
     "dev:backend": "bun --filter @crm/backend dev",
     "dev:bot": "bun --filter @crm/bot dev",

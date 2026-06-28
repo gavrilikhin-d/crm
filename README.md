@@ -19,15 +19,16 @@ MVP для преподавателя/репетитора: ученики, ин
 bun install
 cp .env.example .env
 bun run seed
-bun run dev:backend
-bun run dev:frontend
+bun run start:all
 ```
 
 После запуска кабинет будет доступен на `http://localhost:3000`.
 
-Telegram-бот и напоминания запускаются отдельными процессами:
+Для запуска отдельных процессов:
 
 ```bash
+bun run dev:backend
+bun run dev:frontend
 bun run dev:bot
 bun run dev:reminder
 ```
