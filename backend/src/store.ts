@@ -12,6 +12,7 @@ import type {
   Payment,
   PaymentMethod,
   RecurringSchedule,
+  RecurringDeleteScope,
   Reminder,
   Student,
   StudentBalance,
@@ -366,21 +367,47 @@ export class Store {
     return lesson;
   }
 
-  async deleteLesson(lessonId: string): Promise<void> {
+  async deleteLesson(lessonId: string, scope: RecurringDeleteScope = "single"): Promise<void> {
     const db = await this.load();
     const lesson = mustFind(db.lessons, lessonId, "Lesson");
 
-    if (lesson.recurringScheduleId) {
-      const schedule = db.recurringSchedules.find((item) => item.id === lesson.recurringScheduleId);
-      if (schedule) {
-        schedule.skippedOccurrences = [...(schedule.skippedOccurrences ?? []), lesson.startsAt];
-        schedule.updatedAt = now();
-      }
+    if (!lesson.recurringScheduleId) {
+      removeLessonRecords(db, lessonId);
+      await this.save();
+      return;
     }
 
-    db.lessons = db.lessons.filter((item) => item.id !== lessonId);
-    db.reminders = db.reminders.filter((reminder) => reminder.lessonId !== lessonId);
-    db.telegramInteractions = db.telegramInteractions.filter((interaction) => interaction.lessonId !== lessonId);
+    const schedule = mustFind(db.recurringSchedules, lesson.recurringScheduleId, "RecurringSchedule");
+    const lessonTime = new Date(lesson.startsAt).getTime();
+    const timestamp = now();
+
+    if (scope === "single") {
+      schedule.skippedOccurrences = [...(schedule.skippedOccurrences ?? []), lesson.startsAt];
+      schedule.updatedAt = timestamp;
+      removeLessonRecords(db, lessonId);
+    } else if (scope === "following") {
+      const activeTo = new Date(lesson.startsAt);
+      activeTo.setMilliseconds(activeTo.getMilliseconds() - 1);
+      schedule.activeTo = activeTo.toISOString();
+      schedule.updatedAt = timestamp;
+
+      const lessonIds = db.lessons
+        .filter(
+          (item) =>
+            item.recurringScheduleId === schedule.id && new Date(item.startsAt).getTime() >= lessonTime
+        )
+        .map((item) => item.id);
+
+      lessonIds.forEach((id) => removeLessonRecords(db, id));
+    } else {
+      const lessonIds = db.lessons
+        .filter((item) => item.recurringScheduleId === schedule.id)
+        .map((item) => item.id);
+
+      lessonIds.forEach((id) => removeLessonRecords(db, id));
+      db.recurringSchedules = db.recurringSchedules.filter((item) => item.id !== schedule.id);
+    }
+
     await this.save();
   }
 
@@ -505,14 +532,15 @@ export class Store {
     horizonEnd.setDate(horizonEnd.getDate() + RECURRING_HORIZON_WEEKS * 7);
 
     for (const schedule of db.recurringSchedules) {
-      if (schedule.activeTo && new Date(schedule.activeTo).getTime() < Date.now()) {
-        continue;
-      }
-
+      const activeToTime = schedule.activeTo ? new Date(schedule.activeTo).getTime() : undefined;
       const skipped = new Set(schedule.skippedOccurrences ?? []);
       let occurrence = new Date(schedule.activeFrom);
 
       while (occurrence.getTime() <= horizonEnd.getTime()) {
+        if (activeToTime !== undefined && occurrence.getTime() > activeToTime) {
+          break;
+        }
+
         const startsAt = occurrence.toISOString();
 
         if (
@@ -551,6 +579,12 @@ export class Store {
       return 0;
     }
   }
+}
+
+function removeLessonRecords(db: Database, lessonId: string): void {
+  db.lessons = db.lessons.filter((lesson) => lesson.id !== lessonId);
+  db.reminders = db.reminders.filter((reminder) => reminder.lessonId !== lessonId);
+  db.telegramInteractions = db.telegramInteractions.filter((interaction) => interaction.lessonId !== lessonId);
 }
 
 function optional(value?: string): string | undefined {

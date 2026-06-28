@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import type { LessonType, PaymentMethod, Reminder } from "@crm/shared";
+import type { LessonType, PaymentMethod, RecurringDeleteScope, Reminder } from "@crm/shared";
 import { store } from "./store";
 
 type Handler = (
@@ -131,9 +131,18 @@ async function createLesson(request: IncomingMessage, response: ServerResponse) 
   }), 201);
 }
 
-async function deleteLesson(_request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray) {
-  await store.deleteLesson(match[1]);
+async function deleteLesson(request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray) {
+  const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+  const scope = parseRecurringDeleteScope(url.searchParams.get("scope"));
+  await store.deleteLesson(match[1], scope);
   jsonOk(response, { ok: true });
+}
+
+function parseRecurringDeleteScope(value: string | null): RecurringDeleteScope {
+  if (value === "following" || value === "all") {
+    return value;
+  }
+  return "single";
 }
 
 async function cancelLesson(_request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray) {

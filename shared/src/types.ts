@@ -23,6 +23,8 @@ export type ReminderStatus = "pending" | "sent" | "skipped" | "failed";
 
 export type PaymentMethod = "cash" | "transfer" | "other";
 
+export type RecurringDeleteScope = "single" | "following" | "all";
+
 export interface Student {
   id: string;
   fullName: string;

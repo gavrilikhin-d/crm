@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Field, FieldContent, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -43,7 +43,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
-import type { Database, Lesson, LessonPackage, Student, StudentBalance } from "@crm/shared";
+import type { Database, Lesson, LessonPackage, RecurringDeleteScope, Student, StudentBalance } from "@crm/shared";
 
 type Snapshot = Database & {
   balances: StudentBalance[];
@@ -111,6 +111,7 @@ export default function Home() {
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [lessonDialogOpen, setLessonDialogOpen] = useState(false);
   const [lessonFormKey, setLessonFormKey] = useState(0);
+  const [deleteLessonTarget, setDeleteLessonTarget] = useState<Lesson | null>(null);
 
   const students = snapshot?.students ?? [];
   const lessonPackages = snapshot?.lessonPackages ?? [];
@@ -306,14 +307,30 @@ export default function Home() {
   }
 
   async function handleDeleteLesson(lesson: Lesson) {
+    if (lesson.recurringScheduleId) {
+      setDeleteLessonTarget(lesson);
+      return;
+    }
+
     if (!window.confirm(`Удалить занятие ${formatFullDate(lesson.startsAt)}?`)) {
       return;
     }
 
+    await deleteLessonWithScope(lesson, "single");
+  }
+
+  async function deleteLessonWithScope(lesson: Lesson, scope: RecurringDeleteScope) {
+    const messages: Record<RecurringDeleteScope, string> = {
+      single: "Занятие удалено.",
+      following: "Это и последующие занятия удалены.",
+      all: "Вся серия занятий удалена."
+    };
+
     await withRefresh(async () => {
-      await api(`/api/lessons/${lesson.id}`, { method: "DELETE" });
-      return "Занятие удалено.";
+      await api(`/api/lessons/${lesson.id}?scope=${scope}`, { method: "DELETE" });
+      return messages[scope];
     });
+    setDeleteLessonTarget(null);
   }
 
   async function handleDeletePackage(lessonPackage: LessonPackage) {
@@ -566,6 +583,44 @@ export default function Home() {
       <Modal open={activeModal === "package"} title="Добавить пакет" onClose={() => setActiveModal(null)}>
         <PackageForm onSubmit={handlePackageSubmit} />
       </Modal>
+
+      <Dialog open={!!deleteLessonTarget} onOpenChange={(open) => !open && setDeleteLessonTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Удалить повторяющееся занятие</DialogTitle>
+            <DialogDescription>
+              {deleteLessonTarget ? formatFullDate(deleteLessonTarget.startsAt) : null}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => deleteLessonTarget && void deleteLessonWithScope(deleteLessonTarget, "single")}
+            >
+              Только это занятие
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => deleteLessonTarget && void deleteLessonWithScope(deleteLessonTarget, "following")}
+            >
+              Это и все последующие
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => deleteLessonTarget && void deleteLessonWithScope(deleteLessonTarget, "all")}
+            >
+              Все занятия серии
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setDeleteLessonTarget(null)}>
+              Отмена
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Toaster />
     </SidebarProvider>
   );
