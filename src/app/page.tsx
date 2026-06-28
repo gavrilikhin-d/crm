@@ -25,6 +25,8 @@ type ApiOptions = {
   body?: Record<string, unknown>;
 };
 
+type ActiveSection = "schedule" | "clients" | "payments" | "sessions";
+
 const statusLabels: Record<string, string> = {
   scheduled: "Scheduled",
   confirmed: "Confirmed",
@@ -51,6 +53,7 @@ export default function Home() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [activeSection, setActiveSection] = useState<ActiveSection>("schedule");
 
   const students = snapshot?.students ?? [];
   const lessonPackages = snapshot?.lessonPackages ?? [];
@@ -193,23 +196,44 @@ export default function Home() {
   }
 
   const debtLessons = snapshot?.balances.reduce((sum, balance) => sum + balance.debtLessons, 0) ?? 0;
-  const selectedTeacherName = "Teacher schedule";
+  const activeTitle: Record<ActiveSection, string> = {
+    schedule: "Teacher schedule",
+    clients: "Clients",
+    payments: "Payments",
+    sessions: "Lesson packages"
+  };
 
   return (
     <div className="mx-auto my-[5.5vh] grid min-h-[820px] w-[88vw] max-w-[1500px] grid-cols-[132px_minmax(1040px,1fr)] bg-white shadow-[0_26px_60px_rgb(68_45_30/12%)] max-[1180px]:my-0 max-[1180px]:w-full max-[1180px]:grid-cols-1">
       <aside className="flex min-h-[820px] flex-col border-r border-stone-200 px-6 py-8 max-[1180px]:min-h-0 max-[1180px]:border-b max-[1180px]:border-r-0">
         <div className="mb-20 text-lg font-black tracking-[0.42em] text-orange-600 max-[1180px]:mb-6">VOCAL</div>
         <nav className="grid gap-5 max-[1180px]:flex max-[1180px]:flex-wrap" aria-label="Main navigation">
-          <SidebarLink href="#payments" icon={<CreditCard className="size-4" />}>
+          <SidebarLink
+            icon={<CreditCard className="size-4" />}
+            active={activeSection === "payments"}
+            onClick={() => setActiveSection("payments")}
+          >
             Payments
           </SidebarLink>
-          <SidebarLink href="#students" icon={<Users className="size-4" />}>
+          <SidebarLink
+            icon={<Users className="size-4" />}
+            active={activeSection === "clients"}
+            onClick={() => setActiveSection("clients")}
+          >
             Clients
           </SidebarLink>
-          <SidebarLink href="#schedule" icon={<CalendarDays className="size-4" />} active>
+          <SidebarLink
+            icon={<CalendarDays className="size-4" />}
+            active={activeSection === "schedule"}
+            onClick={() => setActiveSection("schedule")}
+          >
             Schedule
           </SidebarLink>
-          <SidebarLink href="#sessions" icon={<GraduationCap className="size-4" />}>
+          <SidebarLink
+            icon={<GraduationCap className="size-4" />}
+            active={activeSection === "sessions"}
+            onClick={() => setActiveSection("sessions")}
+          >
             Sessions
           </SidebarLink>
         </nav>
@@ -230,13 +254,13 @@ export default function Home() {
         <header className="flex min-h-22 items-center justify-between border-b border-stone-200 px-10 py-5">
           <div>
             <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-stone-400">Lesson Scheduling CRM</p>
-            <h1 className="mt-1 text-lg font-bold text-stone-900">{selectedTeacherName}</h1>
+            <h1 className="mt-1 text-lg font-bold text-stone-900">{activeTitle[activeSection]}</h1>
           </div>
           <div className="flex items-center gap-3">
             <Badge variant="secondary">{snapshot?.dashboard.studentsCount ?? 0} students</Badge>
             <Badge variant={debtLessons > 0 ? "destructive" : "secondary"}>{debtLessons} unpaid lessons</Badge>
-            <Button asChild>
-              <a href="#new-session">Schedule lesson</a>
+            <Button type="button" onClick={() => setActiveSection("schedule")}>
+              Schedule lesson
             </Button>
           </div>
         </header>
@@ -246,7 +270,7 @@ export default function Home() {
             Details
           </Button>
           <Button variant="ghost" className="h-full rounded-none border-b-2 border-orange-600 px-0 text-stone-900">
-            Schedule
+            {activeTitle[activeSection]}
           </Button>
           <Button variant="ghost" className="h-full rounded-none px-0 text-stone-400">
             Past sessions
@@ -257,6 +281,7 @@ export default function Home() {
           <div className="border-b border-orange-100 bg-orange-50 px-10 py-3 text-sm text-orange-900">{message}</div>
         ) : null}
 
+        {activeSection === "schedule" ? (
         <section className="grid grid-cols-[minmax(720px,1fr)_330px] gap-6 p-6 px-10 pb-10 max-[1180px]:grid-cols-1" id="schedule">
           <div className="min-w-0">
             <div className="mb-3 flex h-12 items-center justify-between">
@@ -343,172 +368,319 @@ export default function Home() {
               </CardContent>
             </Card>
 
-            <Card id="students">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center justify-between text-base">
-                  Clients <Badge variant="secondary">{students.length}</Badge>
-                </CardTitle>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Week overview</CardTitle>
+                <CardDescription>{weekLessons.length} sessions scheduled this week.</CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-4">
-                <form className="grid gap-3" onSubmit={handleStudentSubmit}>
-                  <Input name="fullName" placeholder="Full name" required />
-                  <Input name="phone" placeholder="Phone" required />
-                  <Input name="telegramUsername" placeholder="Telegram username" />
-                  <Input name="telegramChatId" placeholder="Telegram chat id" />
-                  <Input name="defaultLessonPrice" type="number" min="0" placeholder="Single lesson price" />
-                  <Button variant="secondary" type="submit">
-                    Add client
-                  </Button>
-                </form>
-                <div className="grid gap-2">
-                  {students.slice(0, 5).map((student) => {
-                    const balance = getBalance(student.id);
-                    const canSendPaymentReminder =
-                      Boolean(student.telegramChatId) && (balance.remainingLessons < 1 || balance.debtLessons > 0);
-                    return (
-                      <div className="flex items-center justify-between border-t border-stone-100 pt-2" key={student.id}>
-                        <div>
-                          <strong className="block text-sm">{student.fullName}</strong>
-                          <span className="text-xs text-stone-500">{balance.remainingLessons} lessons left</span>
-                        </div>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          type="button"
-                          disabled={!canSendPaymentReminder}
-                          onClick={() =>
-                            withRefresh(async () => {
-                              const result = await api<{ sent: boolean; reason?: string }>(
-                                `/api/payment-reminders/${student.id}`,
-                                { method: "POST" }
-                              );
-                              return result.sent ? "Payment reminder sent." : result.reason || "Reminder skipped.";
-                            })
-                          }
-                        >
-                          Pay
-                        </Button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-
-            <PaymentCard
-              students={students}
-              lessonPackages={lessonPackages}
-              paymentsCount={payments.length}
-              onSubmit={handlePaymentSubmit}
-            />
-
-            <Card id="sessions">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center justify-between text-base">
-                  Packages <Badge variant="secondary">{lessonPackages.length}</Badge>
-                </CardTitle>
-                <CardDescription>Whole-number lesson bundles.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form className="grid gap-3" onSubmit={handlePackageSubmit}>
-                  <Input name="name" placeholder="Package name" required />
-                  <div className="grid grid-cols-2 gap-3">
-                    <Input name="lessonCount" type="number" min="1" placeholder="Lessons" required />
-                    <Input name="price" type="number" min="0" placeholder="Price" required />
-                  </div>
-                  <Button variant="secondary" type="submit">
-                    Add package
-                  </Button>
-                </form>
+              <CardContent className="grid gap-2">
+                <Badge variant="teal">{weekLessons.filter((lesson) => lesson.effectiveType === "group").length} group</Badge>
+                <Badge variant="secondary">
+                  {weekLessons.filter((lesson) => lesson.effectiveType === "individual").length} individual
+                </Badge>
               </CardContent>
             </Card>
           </aside>
         </section>
+        ) : null}
+
+        {activeSection === "clients" ? (
+          <ClientsView
+            students={students}
+            getBalance={getBalance}
+            onStudentSubmit={handleStudentSubmit}
+            onAction={(action) => withRefresh(action)}
+          />
+        ) : null}
+
+        {activeSection === "payments" ? (
+          <PaymentsView
+            students={students}
+            lessonPackages={lessonPackages}
+            payments={payments}
+            getStudent={getStudent}
+            onPaymentSubmit={handlePaymentSubmit}
+            onPackageSubmit={handlePackageSubmit}
+          />
+        ) : null}
+
+        {activeSection === "sessions" ? (
+          <SessionsView lessonPackages={lessonPackages} onPackageSubmit={handlePackageSubmit} />
+        ) : null}
       </main>
     </div>
   );
 }
 
 function SidebarLink({
-  href,
   icon,
   active,
+  onClick,
   children
 }: {
-  href: string;
   icon: React.ReactNode;
   active?: boolean;
+  onClick: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <a
+    <button
+      type="button"
+      onClick={onClick}
       className={cn(
-        "-ml-6 flex items-center gap-3 border-l-4 border-transparent pl-5 text-sm font-bold text-stone-500 no-underline transition-colors hover:text-orange-600",
+        "-ml-6 flex items-center gap-3 border-l-4 border-transparent bg-transparent py-0 pl-5 text-left text-sm font-bold text-stone-500 shadow-none transition-colors hover:bg-transparent hover:text-orange-600",
         active && "border-orange-600 text-orange-600"
       )}
-      href={href}
     >
       {icon}
       {children}
-    </a>
+    </button>
   );
 }
 
-function PaymentCard({
+function ClientsView({
+  students,
+  getBalance,
+  onStudentSubmit,
+  onAction
+}: {
+  students: Student[];
+  getBalance: (studentId: string) => StudentBalance;
+  onStudentSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onAction: (action: () => Promise<string | void>) => void;
+}) {
+  return (
+    <section className="grid grid-cols-[360px_minmax(0,1fr)] gap-6 p-6 px-10 pb-10 max-[1180px]:grid-cols-1">
+      <Card>
+        <CardHeader>
+          <CardTitle>Add client</CardTitle>
+          <CardDescription>Students live here, separate from the weekly schedule.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form className="grid gap-3" onSubmit={onStudentSubmit}>
+            <Input name="fullName" placeholder="Full name" required />
+            <Input name="phone" placeholder="Phone" required />
+            <Input name="telegramUsername" placeholder="Telegram username" />
+            <Input name="telegramChatId" placeholder="Telegram chat id" />
+            <Input name="defaultLessonPrice" type="number" min="0" placeholder="Single lesson price" />
+            <Button type="submit">Add client</Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            Clients <Badge variant="secondary">{students.length}</Badge>
+          </CardTitle>
+          <CardDescription>Balances are counted in whole lessons.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          {students.map((student) => {
+            const balance = getBalance(student.id);
+            const canSendPaymentReminder =
+              Boolean(student.telegramChatId) && (balance.remainingLessons < 1 || balance.debtLessons > 0);
+            return (
+              <div
+                className="grid grid-cols-[minmax(0,1fr)_160px_140px] items-center gap-4 rounded-lg border border-stone-200 p-4"
+                key={student.id}
+              >
+                <div>
+                  <strong className="block text-stone-900">{student.fullName}</strong>
+                  <span className="text-sm text-stone-500">
+                    {student.phone} · {student.telegramUsername || "Telegram not connected"}
+                  </span>
+                </div>
+                <div className="text-sm text-stone-600">
+                  <span className="block font-semibold">{balance.remainingLessons} left</span>
+                  <span>{balance.chargedLessons} used</span>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  type="button"
+                  disabled={!canSendPaymentReminder}
+                  onClick={() =>
+                    onAction(async () => {
+                      const result = await api<{ sent: boolean; reason?: string }>(
+                        `/api/payment-reminders/${student.id}`,
+                        { method: "POST" }
+                      );
+                      return result.sent ? "Payment reminder sent." : result.reason || "Reminder skipped.";
+                    })
+                  }
+                >
+                  Remind pay
+                </Button>
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+function PaymentsView({
   students,
   lessonPackages,
-  paymentsCount,
+  payments,
+  getStudent,
+  onPaymentSubmit,
+  onPackageSubmit
+}: {
+  students: Student[];
+  lessonPackages: LessonPackage[];
+  payments: Snapshot["payments"];
+  getStudent: (studentId: string) => Student | undefined;
+  onPaymentSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onPackageSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <section className="grid grid-cols-[360px_minmax(0,1fr)] gap-6 p-6 px-10 pb-10 max-[1180px]:grid-cols-1">
+      <div className="grid content-start gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Add payment</CardTitle>
+            <CardDescription>Payments can buy one lesson or a package.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PaymentForm students={students} lessonPackages={lessonPackages} onSubmit={onPaymentSubmit} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Add package</CardTitle>
+            <CardDescription>Packages always contain whole lessons.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PackageForm onSubmit={onPackageSubmit} />
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            Payment history <Badge variant="secondary">{payments.length}</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          {payments.map((payment) => (
+            <div className="grid grid-cols-[minmax(0,1fr)_120px_120px] rounded-lg border border-stone-200 p-4" key={payment.id}>
+              <div>
+                <strong className="block">{getStudent(payment.studentId)?.fullName ?? "Deleted client"}</strong>
+                <span className="text-sm text-stone-500">{formatFullDate(payment.paidAt)}</span>
+              </div>
+              <span className="text-sm font-semibold text-stone-700">{payment.lessonCount} lessons</span>
+              <span className="text-sm font-semibold text-stone-900">{payment.amount}</span>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+function SessionsView({
+  lessonPackages,
+  onPackageSubmit
+}: {
+  lessonPackages: LessonPackage[];
+  onPackageSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <section className="grid grid-cols-[360px_minmax(0,1fr)] gap-6 p-6 px-10 pb-10 max-[1180px]:grid-cols-1">
+      <Card>
+        <CardHeader>
+          <CardTitle>Add package</CardTitle>
+          <CardDescription>Useful for 4 and 8 lesson bundles.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <PackageForm onSubmit={onPackageSubmit} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            Lesson packages <Badge variant="secondary">{lessonPackages.length}</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-3 gap-4">
+          {lessonPackages.map((lessonPackage) => (
+            <div className="rounded-lg border border-stone-200 p-4" key={lessonPackage.id}>
+              <strong>{lessonPackage.name}</strong>
+              <p className="mt-2 text-sm text-stone-500">
+                {lessonPackage.lessonCount} lessons · {lessonPackage.price}
+              </p>
+              <Badge className="mt-3" variant="orange">
+                {Math.round(lessonPackage.price / lessonPackage.lessonCount)} per lesson
+              </Badge>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+function PaymentForm({
+  students,
+  lessonPackages,
   onSubmit
 }: {
   students: Student[];
   lessonPackages: LessonPackage[];
-  paymentsCount: number;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
-    <Card id="payments">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center justify-between text-base">
-          Payments <Badge variant="secondary">{paymentsCount}</Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form className="grid gap-3" onSubmit={onSubmit}>
-          <Select name="studentId" required defaultValue="">
-            <option value="">Client</option>
-            {students
-              .filter((student) => student.status === "active")
-              .map((student) => (
-                <option key={student.id} value={student.id}>
-                  {student.fullName}
-                </option>
-              ))}
-          </Select>
-          <Select name="packageId" defaultValue="">
-            <option value="">No package</option>
-            {lessonPackages
-              .filter((item) => item.active)
-              .map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}: {item.lessonCount} / {item.price}
-                </option>
-              ))}
-          </Select>
-          <div className="grid grid-cols-2 gap-3">
-            <Input name="lessonCount" type="number" min="1" placeholder="Lessons" />
-            <Input name="amount" type="number" min="0" placeholder="Amount" />
-          </div>
-          <Select name="method" required defaultValue="transfer">
-            <option value="transfer">Transfer</option>
-            <option value="cash">Cash</option>
-            <option value="other">Other</option>
-          </Select>
-          <Button variant="secondary" type="submit">
-            Add payment
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+    <form className="grid gap-3" onSubmit={onSubmit}>
+      <Select name="studentId" required defaultValue="">
+        <option value="">Client</option>
+        {students
+          .filter((student) => student.status === "active")
+          .map((student) => (
+            <option key={student.id} value={student.id}>
+              {student.fullName}
+            </option>
+          ))}
+      </Select>
+      <Select name="packageId" defaultValue="">
+        <option value="">No package</option>
+        {lessonPackages
+          .filter((item) => item.active)
+          .map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}: {item.lessonCount} / {item.price}
+            </option>
+          ))}
+      </Select>
+      <div className="grid grid-cols-2 gap-3">
+        <Input name="lessonCount" type="number" min="1" placeholder="Lessons" />
+        <Input name="amount" type="number" min="0" placeholder="Amount" />
+      </div>
+      <Select name="method" required defaultValue="transfer">
+        <option value="transfer">Transfer</option>
+        <option value="cash">Cash</option>
+        <option value="other">Other</option>
+      </Select>
+      <Button type="submit">Add payment</Button>
+    </form>
+  );
+}
+
+function PackageForm({ onSubmit }: { onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  return (
+    <form className="grid gap-3" onSubmit={onSubmit}>
+      <Input name="name" placeholder="Package name" required />
+      <div className="grid grid-cols-2 gap-3">
+        <Input name="lessonCount" type="number" min="1" placeholder="Lessons" required />
+        <Input name="price" type="number" min="0" placeholder="Price" required />
+      </div>
+      <Button type="submit">Add package</Button>
+    </form>
   );
 }
 
@@ -639,4 +811,11 @@ function formatTime(value: Date): string {
     hour: "numeric",
     minute: "2-digit"
   }).format(value);
+}
+
+function formatFullDate(value: string): string {
+  return new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(new Date(value));
 }
