@@ -15,12 +15,13 @@ import {
   Users
 } from "lucide-react";
 import { toast } from "sonner";
+import { DateTimePicker } from "@/components/date-time-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Field, FieldContent, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldContent, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
@@ -111,6 +112,7 @@ export default function Home() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [lessonDialogOpen, setLessonDialogOpen] = useState(false);
+  const [lessonFormKey, setLessonFormKey] = useState(0);
 
   const students = snapshot?.students ?? [];
   const lessonPackages = snapshot?.lessonPackages ?? [];
@@ -228,8 +230,11 @@ export default function Home() {
     event.preventDefault();
     const form = event.currentTarget;
     const data = formData(form);
-    const select = form.elements.namedItem("studentIds") as HTMLSelectElement;
-    const studentIds = [...select.selectedOptions].map((option) => option.value);
+    const studentIds = new FormData(form).getAll("studentIds").map(String);
+    if (!studentIds.length) {
+      toast.error("Выберите хотя бы одного ученика.");
+      return;
+    }
     const lessonType = studentIds.length > 1 ? "group" : "individual";
     const repeatWeekly = data.repeatWeekly === "on";
     const lessonCount = repeatWeekly
@@ -253,6 +258,7 @@ export default function Home() {
         });
       }
       form.reset();
+      setLessonFormKey((key) => key + 1);
       setLessonDialogOpen(false);
       return lessonCount === 1 ? "Занятие добавлено." : `Добавлено ${lessonCount} занятий.`;
     });
@@ -482,7 +488,12 @@ export default function Home() {
                     <DialogHeader>
                       <DialogTitle>Создать занятие</DialogTitle>
                     </DialogHeader>
-                    <LessonForm students={students} onSubmit={handleLessonSubmit} />
+                    <LessonForm
+                      key={lessonFormKey}
+                      students={students}
+                      defaultStartsAt={getDefaultLessonStartsAt(selectedDate)}
+                      onSubmit={handleLessonSubmit}
+                    />
                   </DialogContent>
                 </Dialog>
               </div>
@@ -859,36 +870,44 @@ function StudentForm({ onSubmit }: { onSubmit: (event: FormEvent<HTMLFormElement
 
 function LessonForm({
   students,
+  defaultStartsAt,
   onSubmit
 }: {
   students: Student[];
+  defaultStartsAt: string;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const activeStudents = students.filter((student) => student.status === "active");
+
   return (
     <form onSubmit={onSubmit}>
-      <FieldGroup className="gap-3">
+      <FieldGroup className="gap-4">
         <Field>
           <FieldLabel htmlFor="lesson-starts-at">Дата и время</FieldLabel>
-          <Input id="lesson-starts-at" name="startsAt" type="datetime-local" required />
+          <DateTimePicker id="lesson-starts-at" name="startsAt" defaultValue={defaultStartsAt} required />
         </Field>
-        <Field>
-          <FieldLabel htmlFor="lesson-student-ids">Ученики</FieldLabel>
-          <NativeSelect id="lesson-student-ids" name="studentIds" multiple required className="w-full">
-            {students
-              .filter((student) => student.status === "active")
-              .map((student) => (
-                <NativeSelectOption key={student.id} value={student.id}>
+
+        <FieldSet>
+          <FieldLegend variant="label">Ученики</FieldLegend>
+          <FieldGroup data-slot="checkbox-group" className="max-h-48 overflow-y-auto rounded-lg border p-2">
+            {activeStudents.map((student) => (
+              <Field key={student.id} orientation="horizontal" className="rounded-md px-2 py-1.5 hover:bg-muted/60">
+                <Checkbox id={`lesson-student-${student.id}`} name="studentIds" value={student.id} />
+                <FieldLabel htmlFor={`lesson-student-${student.id}`} className="font-normal">
                   {student.fullName}
-                </NativeSelectOption>
-              ))}
-          </NativeSelect>
-        </Field>
+                </FieldLabel>
+              </Field>
+            ))}
+          </FieldGroup>
+        </FieldSet>
+
         <Field orientation="horizontal">
           <Checkbox id="lesson-repeat-weekly" name="repeatWeekly" />
           <FieldContent>
             <FieldLabel htmlFor="lesson-repeat-weekly">Повторять еженедельно</FieldLabel>
           </FieldContent>
         </Field>
+
         <Field>
           <FieldLabel htmlFor="lesson-repeat-count">Количество занятий</FieldLabel>
           <Input
@@ -901,7 +920,10 @@ function LessonForm({
             placeholder="Количество занятий"
           />
         </Field>
-        <Button type="submit">Добавить в календарь</Button>
+
+        <Button type="submit" disabled={!activeStudents.length}>
+          Добавить в календарь
+        </Button>
       </FieldGroup>
     </form>
   );
@@ -1378,6 +1400,10 @@ function sameDate(first: Date, second: Date): boolean {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(Math.trunc(value), min), max);
+}
+
+function getDefaultLessonStartsAt(date: Date): string {
+  return formatDateTimeLocal(new Date(date.getFullYear(), date.getMonth(), date.getDate(), 10, 0));
 }
 
 function addWeeksToDateTimeLocal(value: string, weeks: number): string {
