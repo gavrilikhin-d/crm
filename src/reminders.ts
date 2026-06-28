@@ -5,9 +5,14 @@ import type { Lesson, Student } from "./types";
 const minuteMs = 60_000;
 
 export function startReminderScheduler(): void {
-  void runReminderTick();
+  console.log("Reminder scheduler started");
+  void runReminderTick().catch((error) => {
+    console.error("Reminder scheduler tick failed:", error);
+  });
   setInterval(() => {
-    void runReminderTick();
+    void runReminderTick().catch((error) => {
+      console.error("Reminder scheduler tick failed:", error);
+    });
   }, minuteMs);
 }
 
