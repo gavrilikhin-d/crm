@@ -882,25 +882,39 @@ function SessionsView({
             </Button>
           </CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-3 gap-4">
-          {lessonPackages.map((lessonPackage) => (
-            <Card key={lessonPackage.id}>
-              <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
-                <CardTitle className="text-base">{lessonPackage.name}</CardTitle>
-                <Button variant="ghost" size="icon" type="button" onClick={() => onDeletePackage(lessonPackage)}>
-                  <Trash2 className="size-4" />
-                </Button>
-              </CardHeader>
-              <CardContent>
-              <p className="text-sm text-muted-foreground">
-                {lessonPackage.lessonCount} занятий · {formatMoney(lessonPackage.price, currency)}
-              </p>
-              <Badge variant="secondary" className="mt-3">
-                {formatMoney(Math.round(lessonPackage.price / lessonPackage.lessonCount), currency)} за занятие
-              </Badge>
-              </CardContent>
-            </Card>
-          ))}
+        <CardContent className="flex flex-col gap-3">
+          {lessonPackages.map((lessonPackage) => {
+            const unitPrice = Math.round(lessonPackage.price / lessonPackage.lessonCount);
+
+            return (
+              <div
+                key={lessonPackage.id}
+                className="flex items-center justify-between gap-4 rounded-3xl border-2 border-primary p-4"
+              >
+                <p className="text-lg font-medium">{lessonPackage.name}</p>
+                <div className="flex items-center gap-2">
+                  <div className="flex flex-col items-end">
+                    <span className="text-xl font-bold text-primary">
+                      {formatMoney(lessonPackage.price, currency)}
+                    </span>
+                    <span className="text-sm text-muted-foreground">
+                      {formatMoney(unitPrice, currency)}/занятие
+                    </span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    type="button"
+                    className="text-muted-foreground"
+                    onClick={() => onDeletePackage(lessonPackage)}
+                    aria-label={`Удалить пакет ${lessonPackage.name}`}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
     </section>
