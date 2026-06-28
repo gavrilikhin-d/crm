@@ -422,9 +422,9 @@ export default function Home() {
 
       <SidebarInset className="min-w-0 overflow-x-auto bg-white">
         <header className="flex min-h-22 items-center justify-between border-b border-stone-200 px-10 py-5">
-          <div className="flex items-center gap-3">
+          <div className="flex h-9 items-center gap-3">
             <SidebarTrigger className="-ml-2" />
-            <h1 className="mt-1 text-lg font-bold text-stone-900">{activeTitle[activeSection]}</h1>
+            <h1 className="text-lg leading-none font-bold text-stone-900">{activeTitle[activeSection]}</h1>
           </div>
           <div className="flex items-center gap-3">
             <Button type="button" onClick={openLessonDialog}>
