@@ -265,18 +265,6 @@ export default function Home() {
           </div>
         </header>
 
-        <div className="flex h-13 items-center gap-8 border-b border-stone-200 px-10">
-          <Button variant="ghost" className="h-full rounded-none px-0 text-stone-400">
-            Details
-          </Button>
-          <Button variant="ghost" className="h-full rounded-none border-b-2 border-orange-600 px-0 text-stone-900">
-            {activeTitle[activeSection]}
-          </Button>
-          <Button variant="ghost" className="h-full rounded-none px-0 text-stone-400">
-            Past sessions
-          </Button>
-        </div>
-
         {message ? (
           <div className="border-b border-orange-100 bg-orange-50 px-10 py-3 text-sm text-orange-900">{message}</div>
         ) : null}
