@@ -1,4 +1,4 @@
-import type { Lesson, Student } from "@crm/shared";
+import type { Lesson, Student, TelegramStudentProfile } from "@crm/shared";
 
 const backendUrl = process.env.BACKEND_INTERNAL_URL ?? "http://localhost:4000";
 
@@ -11,6 +11,10 @@ export async function bindTelegramChat(input: {
     method: "POST",
     body: input
   });
+}
+
+export async function getTelegramStudentProfile(chatId: number | string): Promise<TelegramStudentProfile> {
+  return api<TelegramStudentProfile>(`/internal/telegram/profile?chatId=${encodeURIComponent(String(chatId))}`);
 }
 
 export async function setParticipantStatus(input: {

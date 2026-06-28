@@ -38,6 +38,7 @@ const routes: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
   route("POST", /^\/api\/balance-adjustments$/, createAdjustment),
 
   route("POST", /^\/internal\/telegram\/bind$/, bindTelegram),
+  route("GET", /^\/internal\/telegram\/profile$/, getTelegramProfile),
   route("POST", /^\/internal\/reminders$/, upsertReminder),
   route("PATCH", /^\/internal\/reminders\/([^/]+)$/, updateReminder)
 ];
@@ -206,6 +207,17 @@ async function bindTelegram(request: IncomingMessage, response: ServerResponse) 
   const body = await readJson(request);
   requireFields(body, ["token", "chatId"]);
   jsonOk(response, await store.bindTelegramChat(String(body.token), String(body.chatId), stringValue(body.username)));
+}
+
+async function getTelegramProfile(request: IncomingMessage, response: ServerResponse) {
+  const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+  const chatId = url.searchParams.get("chatId");
+  if (!chatId) {
+    jsonError(response, new Error("Missing required field: chatId"));
+    return;
+  }
+
+  jsonOk(response, await store.getTelegramStudentProfile(chatId));
 }
 
 async function upsertReminder(request: IncomingMessage, response: ServerResponse) {

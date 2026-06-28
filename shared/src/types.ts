@@ -151,3 +151,12 @@ export interface StudentBalance {
   remainingLessons: number;
   debtLessons: number;
 }
+
+export interface TelegramStudentProfile {
+  student: {
+    id: string;
+    fullName: string;
+  };
+  balance: StudentBalance;
+  upcomingLessons: Lesson[];
+}

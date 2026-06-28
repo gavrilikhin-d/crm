@@ -1,7 +1,10 @@
 import { Telegraf } from "telegraf";
 import type { InlineKeyboardMarkup } from "@telegraf/types";
+import type { Context } from "telegraf";
 import type { Lesson, Student } from "@crm/shared";
-import { bindTelegramChat, setParticipantStatus } from "./backend-client";
+import { bindTelegramChat, getTelegramStudentProfile, setParticipantStatus } from "./backend-client";
+import { formatHelpMessage, registerBotCommands } from "./commands";
+import { formatBalanceMessage, formatNotLinkedMessage, formatScheduleMessage } from "./messages";
 
 let bot: Telegraf | null = null;
 
@@ -23,7 +26,9 @@ export function getTelegramBot(): Telegraf | null {
       await ctx.reply(
         [
           "Здравствуйте! Это бот CRM преподавателя.",
-          "Чтобы подключить напоминания, откройте персональную ссылку из CRM преподавателя."
+          "Чтобы подключить напоминания, откройте персональную ссылку из CRM преподавателя.",
+          "",
+          formatHelpMessage()
         ].join("\n")
       );
       return;
@@ -31,13 +36,40 @@ export function getTelegramBot(): Telegraf | null {
 
     try {
       const student = await bindTelegramChat({ token: payload, chatId: ctx.chat.id, username: ctx.from?.username });
-      await ctx.reply(`${student.fullName}, Telegram подключен. Теперь сюда будут приходить напоминания о занятиях.`);
+      await ctx.reply(
+        [
+          `${student.fullName}, Telegram подключен. Теперь сюда будут приходить напоминания о занятиях.`,
+          "",
+          "Спросить расписание: /schedule",
+          "Спросить баланс: /balance"
+        ].join("\n")
+      );
       console.log(`Telegram chat linked: student=${student.id} chat=${ctx.chat.id}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown Telegram binding error";
       console.error("Telegram binding failed:", message);
       await ctx.reply("Не удалось подключить Telegram. Попросите преподавателя прислать новую ссылку из CRM.");
     }
+  });
+
+  bot.command(["schedule", "lessons", "расписание"], async (ctx) => {
+    await replyWithProfile(ctx, formatScheduleMessage);
+  });
+
+  bot.command(["balance", "баланс"], async (ctx) => {
+    await replyWithProfile(ctx, formatBalanceMessage);
+  });
+
+  bot.command(["help", "помощь"], async (ctx) => {
+    await ctx.reply(formatHelpMessage());
+  });
+
+  bot.hears(/^(расписание|занятия|когда занятие|следующ(?:ее|ие) занят(?:ие|ия))$/i, async (ctx) => {
+    await replyWithProfile(ctx, formatScheduleMessage);
+  });
+
+  bot.hears(/^(баланс|сколько осталось|остаток)$/i, async (ctx) => {
+    await replyWithProfile(ctx, formatBalanceMessage);
   });
 
   bot.action(/^lesson:(.+):student:(.+):(attend|decline)$/, async (ctx) => {
@@ -73,6 +105,7 @@ export async function startTelegramBot(): Promise<void> {
 
   try {
     const botInfo = await withTimeout(instance.telegram.getMe(), 15_000, "Telegram getMe timeout");
+    await registerBotCommands(instance.telegram);
     void instance.launch({ dropPendingUpdates: true }).catch((error) => {
       const message = error instanceof Error ? error.message : "Unknown Telegram polling error";
       console.error("Telegram polling stopped with error:", message);
@@ -113,6 +146,28 @@ export async function sendPaymentReminder(student: Student, unpaidLessons: numbe
     student.telegramChatId,
     `Напоминание об оплате: ${paymentText}. Пожалуйста, свяжитесь с преподавателем.`
   );
+}
+
+async function replyWithProfile(
+  ctx: Context,
+  format: (profile: Awaited<ReturnType<typeof getTelegramStudentProfile>>) => string
+): Promise<void> {
+  if (!ctx.chat) {
+    return;
+  }
+
+  try {
+    const profile = await getTelegramStudentProfile(ctx.chat.id);
+    await ctx.reply(format(profile));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown profile error";
+    if (message.includes("not found")) {
+      await ctx.reply(formatNotLinkedMessage());
+      return;
+    }
+    console.error("Telegram profile query failed:", message);
+    await ctx.reply("Не удалось получить данные. Попробуйте позже.");
+  }
 }
 
 function lessonKeyboard(lessonId: string, studentId: string): InlineKeyboardMarkup {

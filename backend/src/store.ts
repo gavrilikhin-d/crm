@@ -12,7 +12,8 @@ import type {
   Reminder,
   Student,
   StudentBalance,
-  TelegramInteraction
+  TelegramInteraction,
+  TelegramStudentProfile
 } from "@crm/shared";
 import { isSupportedCurrency } from "@crm/shared/currency";
 import {
@@ -116,6 +117,34 @@ export class Store {
     student.updatedAt = now();
     await updateStudentRecord(student);
     return student;
+  }
+
+  async getTelegramStudentProfile(chatId: string | number): Promise<TelegramStudentProfile> {
+    const db = await this.getSnapshot();
+    const student = db.students.find((item) => item.telegramChatId === String(chatId));
+    if (!student) {
+      throw new Error("Student not found");
+    }
+
+    const balance = getStudentBalance(db, student.id);
+    const upcomingLessons = db.lessons
+      .filter((lesson) => {
+        if (new Date(lesson.startsAt).getTime() < Date.now()) {
+          return false;
+        }
+        if (lesson.status === "cancelled_by_teacher") {
+          return false;
+        }
+        return lesson.participants.some((participant) => participant.studentId === student.id);
+      })
+      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
+      .slice(0, 10);
+
+    return {
+      student: { id: student.id, fullName: student.fullName },
+      balance,
+      upcomingLessons
+    };
   }
 
   async updateStudent(
