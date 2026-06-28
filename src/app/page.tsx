@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { CalendarDays, CreditCard, GraduationCap, HelpCircle, RefreshCw, Settings, Users } from "lucide-react";
+import { CalendarDays, CreditCard, GraduationCap, HelpCircle, RefreshCw, Settings, Trash2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -195,6 +195,39 @@ export default function Home() {
     });
   }
 
+  async function handleDeleteStudent(student: Student) {
+    if (!window.confirm(`Delete ${student.fullName}? This also removes their payments and lesson participation.`)) {
+      return;
+    }
+
+    await withRefresh(async () => {
+      await api(`/api/students/${student.id}`, { method: "DELETE" });
+      return "Client deleted.";
+    });
+  }
+
+  async function handleDeleteLesson(lesson: Lesson) {
+    if (!window.confirm(`Delete lesson on ${formatFullDate(lesson.startsAt)}?`)) {
+      return;
+    }
+
+    await withRefresh(async () => {
+      await api(`/api/lessons/${lesson.id}`, { method: "DELETE" });
+      return "Lesson deleted.";
+    });
+  }
+
+  async function handleDeletePackage(lessonPackage: LessonPackage) {
+    if (!window.confirm(`Delete package "${lessonPackage.name}"? Existing payments keep their lesson count.`)) {
+      return;
+    }
+
+    await withRefresh(async () => {
+      await api(`/api/lesson-packages/${lessonPackage.id}`, { method: "DELETE" });
+      return "Package deleted.";
+    });
+  }
+
   const debtLessons = snapshot?.balances.reduce((sum, balance) => sum + balance.debtLessons, 0) ?? 0;
   const activeTitle: Record<ActiveSection, string> = {
     schedule: "Teacher schedule",
@@ -318,6 +351,7 @@ export default function Home() {
                         dayIndex={dayIndex}
                         getStudent={getStudent}
                         onAction={(action) => withRefresh(action)}
+                        onDelete={() => handleDeleteLesson(lesson)}
                       />
                     ))}
                 </div>
@@ -377,6 +411,7 @@ export default function Home() {
             students={students}
             getBalance={getBalance}
             onStudentSubmit={handleStudentSubmit}
+            onDeleteStudent={handleDeleteStudent}
             onAction={(action) => withRefresh(action)}
           />
         ) : null}
@@ -393,7 +428,11 @@ export default function Home() {
         ) : null}
 
         {activeSection === "sessions" ? (
-          <SessionsView lessonPackages={lessonPackages} onPackageSubmit={handlePackageSubmit} />
+          <SessionsView
+            lessonPackages={lessonPackages}
+            onPackageSubmit={handlePackageSubmit}
+            onDeletePackage={handleDeletePackage}
+          />
         ) : null}
       </main>
     </div>
@@ -430,11 +469,13 @@ function ClientsView({
   students,
   getBalance,
   onStudentSubmit,
+  onDeleteStudent,
   onAction
 }: {
   students: Student[];
   getBalance: (studentId: string) => StudentBalance;
   onStudentSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onDeleteStudent: (student: Student) => void;
   onAction: (action: () => Promise<string | void>) => void;
 }) {
   return (
@@ -470,7 +511,7 @@ function ClientsView({
               Boolean(student.telegramChatId) && (balance.remainingLessons < 1 || balance.debtLessons > 0);
             return (
               <div
-                className="grid grid-cols-[minmax(0,1fr)_160px_140px] items-center gap-4 rounded-lg border border-stone-200 p-4"
+                className="grid grid-cols-[minmax(0,1fr)_160px_220px] items-center gap-4 rounded-lg border border-stone-200 p-4"
                 key={student.id}
               >
                 <div>
@@ -483,23 +524,28 @@ function ClientsView({
                   <span className="block font-semibold">{balance.remainingLessons} left</span>
                   <span>{balance.chargedLessons} used</span>
                 </div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  type="button"
-                  disabled={!canSendPaymentReminder}
-                  onClick={() =>
-                    onAction(async () => {
-                      const result = await api<{ sent: boolean; reason?: string }>(
-                        `/api/payment-reminders/${student.id}`,
-                        { method: "POST" }
-                      );
-                      return result.sent ? "Payment reminder sent." : result.reason || "Reminder skipped.";
-                    })
-                  }
-                >
-                  Remind pay
-                </Button>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    type="button"
+                    disabled={!canSendPaymentReminder}
+                    onClick={() =>
+                      onAction(async () => {
+                        const result = await api<{ sent: boolean; reason?: string }>(
+                          `/api/payment-reminders/${student.id}`,
+                          { method: "POST" }
+                        );
+                        return result.sent ? "Payment reminder sent." : result.reason || "Reminder skipped.";
+                      })
+                    }
+                  >
+                    Remind pay
+                  </Button>
+                  <Button variant="ghost" size="icon" type="button" onClick={() => onDeleteStudent(student)}>
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
               </div>
             );
           })}
@@ -573,10 +619,12 @@ function PaymentsView({
 
 function SessionsView({
   lessonPackages,
-  onPackageSubmit
+  onPackageSubmit,
+  onDeletePackage
 }: {
   lessonPackages: LessonPackage[];
   onPackageSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onDeletePackage: (lessonPackage: LessonPackage) => void;
 }) {
   return (
     <section className="grid grid-cols-[360px_minmax(0,1fr)] gap-6 p-6 px-10 pb-10 max-[900px]:grid-cols-1">
@@ -599,7 +647,12 @@ function SessionsView({
         <CardContent className="grid grid-cols-3 gap-4">
           {lessonPackages.map((lessonPackage) => (
             <div className="rounded-lg border border-stone-200 p-4" key={lessonPackage.id}>
-              <strong>{lessonPackage.name}</strong>
+              <div className="flex items-start justify-between gap-3">
+                <strong>{lessonPackage.name}</strong>
+                <Button variant="ghost" size="icon" type="button" onClick={() => onDeletePackage(lessonPackage)}>
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
               <p className="mt-2 text-sm text-stone-500">
                 {lessonPackage.lessonCount} lessons · {lessonPackage.price}
               </p>
@@ -675,12 +728,14 @@ function PackageForm({ onSubmit }: { onSubmit: (event: FormEvent<HTMLFormElement
 function CalendarLesson({
   lesson,
   getStudent,
-  onAction
+  onAction,
+  onDelete
 }: {
   lesson: Lesson;
   dayIndex: number;
   getStudent: (studentId: string) => Student | undefined;
   onAction: (action: () => Promise<void>) => void;
+  onDelete: () => void;
 }) {
   const date = new Date(lesson.startsAt);
   const startsAtMinutes = date.getHours() * 60 + date.getMinutes();
@@ -733,6 +788,13 @@ function CalendarLesson({
           }
         >
           Done
+        </Button>
+        <Button
+          className="h-6 bg-white/20 px-2 text-[0.62rem] text-white hover:bg-white/30"
+          type="button"
+          onClick={onDelete}
+        >
+          <Trash2 className="size-3" />
         </Button>
       </div>
     </article>

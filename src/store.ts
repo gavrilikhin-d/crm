@@ -159,6 +159,27 @@ export class Store {
     return student;
   }
 
+  async deleteStudent(id: string): Promise<void> {
+    const db = await this.load();
+    mustFind(db.students, id, "Student");
+
+    db.students = db.students.filter((student) => student.id !== id);
+    db.payments = db.payments.filter((payment) => payment.studentId !== id);
+    db.balanceAdjustments = db.balanceAdjustments.filter((adjustment) => adjustment.studentId !== id);
+    db.reminders = db.reminders.filter((reminder) => reminder.studentId !== id);
+    db.telegramInteractions = db.telegramInteractions.filter((interaction) => interaction.studentId !== id);
+
+    db.lessons = db.lessons
+      .map((lesson) => {
+        lesson.participants = lesson.participants.filter((participant) => participant.studentId !== id);
+        lesson.updatedAt = now();
+        return recalculateLesson(lesson, db.settings.individualDurationMinutes);
+      })
+      .filter((lesson) => lesson.participants.length > 0);
+
+    await this.save();
+  }
+
   async createLessonPackage(input: { name: string; lessonCount: number; price: number }): Promise<LessonPackage> {
     const db = await this.load();
     const timestamp = now();
@@ -174,6 +195,13 @@ export class Store {
     db.lessonPackages.push(lessonPackage);
     await this.save();
     return lessonPackage;
+  }
+
+  async deleteLessonPackage(id: string): Promise<void> {
+    const db = await this.load();
+    mustFind(db.lessonPackages, id, "LessonPackage");
+    db.lessonPackages = db.lessonPackages.filter((lessonPackage) => lessonPackage.id !== id);
+    await this.save();
   }
 
   async createLesson(input: {
@@ -290,6 +318,15 @@ export class Store {
     lesson.updatedAt = now();
     await this.save();
     return lesson;
+  }
+
+  async deleteLesson(lessonId: string): Promise<void> {
+    const db = await this.load();
+    mustFind(db.lessons, lessonId, "Lesson");
+    db.lessons = db.lessons.filter((lesson) => lesson.id !== lessonId);
+    db.reminders = db.reminders.filter((reminder) => reminder.lessonId !== lessonId);
+    db.telegramInteractions = db.telegramInteractions.filter((interaction) => interaction.lessonId !== lessonId);
+    await this.save();
   }
 
   async createPayment(input: {
