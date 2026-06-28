@@ -1,8 +1,8 @@
-import { rm } from "node:fs/promises";
-import { join } from "node:path";
+import "dotenv/config";
+import { resetDatabase } from "./db/repository";
 import { store } from "./store";
 
-await rm(process.env.DATA_FILE_PATH ?? join(process.cwd(), "data", "db.json"), { force: true });
+await resetDatabase();
 
 const anna = await store.createStudent({
   fullName: "Анна Смирнова",
@@ -98,12 +98,14 @@ await store.setParticipantStatus(wednesdayGroup.id, anna.id, "confirmed");
 await store.setParticipantStatus(wednesdayGroup.id, ivan.id, "declined");
 await store.setParticipantStatus(wednesdayGroup.id, sophia.id, "declined");
 
-await store.createLesson({
-  startsAt: atWeekTime(weekStart, 3, 16, 0),
-  durationMinutes: 60,
-  lessonType: "individual",
-  studentIds: [maria.id]
-}).then((lesson) => store.completeLesson(lesson.id));
+await store
+  .createLesson({
+    startsAt: atWeekTime(weekStart, 3, 16, 0),
+    durationMinutes: 60,
+    lessonType: "individual",
+    studentIds: [maria.id]
+  })
+  .then((lesson) => store.completeLesson(lesson.id));
 
 const fridayGroup = await store.createLesson({
   startsAt: atWeekTime(weekStart, 4, 12, 0),

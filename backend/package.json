@@ -8,15 +8,22 @@
     "build": "esbuild src/server.ts --bundle --platform=node --format=cjs --target=node22 --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "seed": "tsx src/seed.ts",
+    "db:push": "drizzle-kit push",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "migrate:json": "tsx src/migrate-json.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@crm/shared": "0.1.0",
     "dotenv": "^16.4.7",
-    "nanoid": "^5.0.9"
+    "drizzle-orm": "^0.45.2",
+    "nanoid": "^5.0.9",
+    "postgres": "^3.4.9"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
+    "drizzle-kit": "^0.31.10",
     "esbuild": "^0.27.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"

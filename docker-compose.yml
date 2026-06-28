@@ -1,4 +1,20 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: crm
+      POSTGRES_PASSWORD: crm
+      POSTGRES_DB: crm
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm -d crm"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: .
@@ -7,11 +23,12 @@ services:
       - .env
     environment:
       PORT: 4000
-      DATA_FILE_PATH: /app/backend/data/db.json
+      DATABASE_URL: postgres://crm:crm@postgres:5432/crm
     ports:
       - "4000:4000"
-    volumes:
-      - crm_data:/app/backend/data
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   reminder:
     build:
@@ -58,4 +75,4 @@ services:
       - "3000:3000"
 
 volumes:
-  crm_data:
+  pg_data:

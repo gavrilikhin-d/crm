@@ -6,11 +6,11 @@ MVP для преподавателя/репетитора: ученики, ин
 
 - Next.js + React + TypeScript
 - `frontend` - Next.js web app
-- `backend` - HTTP API и владелец JSON-хранилища
+- `backend` - HTTP API и PostgreSQL через Drizzle ORM
 - `bot` - Telegram polling service
 - `reminder` - scheduler и ручные payment reminders
 - `shared` - общие TypeScript-типы
-- JSON-файл `backend/data/db.json` как локальное хранилище MVP
+- PostgreSQL + Drizzle ORM
 - Telegraf для Telegram-бота
 
 ## Быстрый старт
@@ -18,11 +18,22 @@ MVP для преподавателя/репетитора: ученики, ин
 ```bash
 bun install
 cp .env.example .env
+docker compose up -d postgres
+bun run db:push
 bun run seed
-bun run start:all
+bun run dev:all
 ```
 
 После запуска кабинет будет доступен на `http://localhost:3000`.
+
+PostgreSQL по умолчанию: `postgres://crm:crm@localhost:5432/crm`.
+
+Если у вас есть старый `backend/data/db.json`, импортируйте его:
+
+```bash
+bun run db:push
+bun run migrate:json
+```
 
 Для запуска отдельных процессов:
 

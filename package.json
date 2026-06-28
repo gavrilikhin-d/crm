@@ -27,6 +27,8 @@
     "start:reminders": "bun --filter @crm/reminder start",
     "build": "bun --filter '*' build",
     "typecheck": "bun --filter '*' typecheck",
-    "seed": "bun --filter @crm/backend seed"
+    "seed": "cd backend && bun run seed",
+    "db:push": "cd backend && bun run db:push",
+    "migrate:json": "cd backend && bun run migrate:json"
   }
 }

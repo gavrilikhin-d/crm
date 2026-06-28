@@ -44,7 +44,7 @@ void startServer().catch((error) => {
 });
 
 async function startServer() {
-  await store.load();
+  await store.initialize();
 
   createServer(async (request, response) => {
     try {

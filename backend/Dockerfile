@@ -21,7 +21,7 @@ FROM gcr.io/distroless/nodejs22-debian12 AS runtime
 WORKDIR /app/backend
 
 ENV NODE_ENV=production
-ENV DATA_FILE_PATH=/app/backend/data/db.json
+ENV DATABASE_URL=postgres://crm:crm@postgres:5432/crm
 
 COPY --from=builder /app/backend/dist ./dist
 
