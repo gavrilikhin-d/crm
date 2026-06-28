@@ -16,11 +16,11 @@ MVP для преподавателя/репетитора: ученики, ин
 ## Быстрый старт
 
 ```bash
-npm install
+bun install
 cp .env.example .env
-npm run seed
-npm run dev:backend
-npm run dev:frontend
+bun run seed
+bun run dev:backend
+bun run dev:frontend
 ```
 
 После запуска кабинет будет доступен на `http://localhost:3000`.
@@ -28,18 +28,18 @@ npm run dev:frontend
 Telegram-бот и напоминания запускаются отдельными процессами:
 
 ```bash
-npm run dev:bot
-npm run dev:reminder
+bun run dev:bot
+bun run dev:reminder
 ```
 
 Для production-сборки:
 
 ```bash
-npm run build
-npm run start:backend
-npm start
-npm run start:bot
-npm run start:reminder
+bun run build
+bun run start:backend
+bun start
+bun run start:bot
+bun run start:reminder
 ```
 
 Контейнерный запуск:

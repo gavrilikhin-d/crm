@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "packageManager": "bun@1.2.10",
   "workspaces": [
     "shared",
     "backend",
@@ -11,20 +12,20 @@
     "reminder"
   ],
   "scripts": {
-    "dev": "npm --workspace frontend run dev",
-    "dev:frontend": "npm --workspace frontend run dev",
-    "dev:backend": "npm --workspace backend run dev",
-    "dev:bot": "npm --workspace bot run dev",
-    "dev:reminder": "npm --workspace reminder run dev",
-    "dev:reminders": "npm --workspace reminder run dev",
-    "start": "npm --workspace frontend run start",
-    "start:frontend": "npm --workspace frontend run start",
-    "start:backend": "npm --workspace backend run start",
-    "start:bot": "npm --workspace bot run start",
-    "start:reminder": "npm --workspace reminder run start",
-    "start:reminders": "npm --workspace reminder run start",
-    "build": "npm --workspaces --if-present run build",
-    "typecheck": "npm --workspaces --if-present run typecheck",
-    "seed": "npm --workspace backend run seed"
+    "dev": "bun --filter @crm/frontend dev",
+    "dev:frontend": "bun --filter @crm/frontend dev",
+    "dev:backend": "bun --filter @crm/backend dev",
+    "dev:bot": "bun --filter @crm/bot dev",
+    "dev:reminder": "bun --filter @crm/reminder dev",
+    "dev:reminders": "bun --filter @crm/reminder dev",
+    "start": "bun --filter @crm/frontend start",
+    "start:frontend": "bun --filter @crm/frontend start",
+    "start:backend": "bun --filter @crm/backend start",
+    "start:bot": "bun --filter @crm/bot start",
+    "start:reminder": "bun --filter @crm/reminder start",
+    "start:reminders": "bun --filter @crm/reminder start",
+    "build": "bun --filter '*' build",
+    "typecheck": "bun --filter '*' typecheck",
+    "seed": "bun --filter @crm/backend seed"
   }
 }

@@ -1,17 +1,17 @@
-FROM node:22-alpine AS builder
+FROM oven/bun:1.2.10-alpine AS builder
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
+COPY package.json bun.lock ./
 COPY shared/package.json shared/package.json
 COPY backend/package.json backend/package.json
 
-RUN npm install
+RUN bun install --frozen-lockfile
 
 COPY shared shared
 COPY backend backend
 
-RUN npm --workspace backend run build
+RUN bun --filter @crm/backend build
 
 FROM gcr.io/distroless/nodejs22-debian12 AS runtime
 
