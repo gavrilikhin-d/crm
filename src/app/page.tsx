@@ -75,6 +75,7 @@ export default function Home() {
   const [activeSection, setActiveSection] = useState<ActiveSection>("schedule");
   const [scheduleView, setScheduleView] = useState<ScheduleView>("week");
   const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
 
   const students = snapshot?.students ?? [];
@@ -118,6 +119,12 @@ export default function Home() {
 
   useEffect(() => {
     void loadSnapshot();
+  }, []);
+
+  useEffect(() => {
+    setCurrentTime(new Date());
+    const interval = window.setInterval(() => setCurrentTime(new Date()), 60_000);
+    return () => window.clearInterval(interval);
   }, []);
 
   async function loadSnapshot() {
@@ -387,6 +394,7 @@ export default function Home() {
             {scheduleView === "day" ? (
               <DayCalendar
                 day={selectedDate}
+                currentTime={currentTime}
                 lessons={dayLessons}
                 getStudent={getStudent}
                 onAction={(action) => withRefresh(action)}
@@ -397,6 +405,7 @@ export default function Home() {
             {scheduleView === "week" ? (
               <WeekCalendar
                 weekDays={weekDays}
+                currentTime={currentTime}
                 lessons={weekLessons}
                 getStudent={getStudent}
                 onAction={(action) => withRefresh(action)}
@@ -408,6 +417,7 @@ export default function Home() {
               <MonthCalendar
                 selectedDate={selectedDate}
                 monthDays={monthDays}
+                currentTime={currentTime}
                 lessons={monthLessons}
                 getStudent={getStudent}
                 onDeleteLesson={handleDeleteLesson}
@@ -793,38 +803,56 @@ function PackageForm({ onSubmit }: { onSubmit: (event: FormEvent<HTMLFormElement
 
 function DayCalendar({
   day,
+  currentTime,
   lessons,
   getStudent,
   onAction,
   onDeleteLesson
 }: {
   day: Date;
+  currentTime: Date | null;
   lessons: Lesson[];
   getStudent: (studentId: string) => Student | undefined;
   onAction: (action: () => Promise<void>) => void;
   onDeleteLesson: (lesson: Lesson) => void;
 }) {
+  const isToday = currentTime ? sameDate(day, currentTime) : false;
+
   return (
     <div className="grid min-h-[680px] grid-cols-[62px_minmax(240px,1fr)] grid-rows-[58px_auto]">
       <div className="border-b border-stone-300" />
-      <div className="grid justify-items-center border-b border-stone-300 pt-2">
-        <strong className="text-xs uppercase text-stone-900">{formatWeekday(day)}</strong>
-        <span className="text-[0.68rem] font-bold text-stone-400">{formatDay(day)}</span>
+      <div
+        className={cn(
+          "grid justify-items-center border-b border-stone-300 pt-2",
+          isToday && "bg-teal-50 text-teal-800"
+        )}
+      >
+        <strong className={cn("text-xs uppercase", isToday ? "text-teal-900" : "text-stone-900")}>{formatWeekday(day)}</strong>
+        <span className={cn("text-[0.68rem] font-bold", isToday ? "text-teal-700" : "text-stone-400")}>{formatDay(day)}</span>
       </div>
       <TimeAxis />
-      <DayColumn day={day} lessons={lessons} getStudent={getStudent} onAction={onAction} onDeleteLesson={onDeleteLesson} />
+      <DayColumn
+        day={day}
+        currentTime={currentTime}
+        lessons={lessons}
+        getStudent={getStudent}
+        onAction={onAction}
+        onDeleteLesson={onDeleteLesson}
+      />
     </div>
   );
 }
 
 function WeekCalendar({
   weekDays,
+  currentTime,
   lessons,
   getStudent,
   onAction,
   onDeleteLesson
 }: {
   weekDays: Date[];
+  currentTime: Date | null;
   lessons: Lesson[];
   getStudent: (studentId: string) => Student | undefined;
   onAction: (action: () => Promise<void>) => void;
@@ -833,17 +861,29 @@ function WeekCalendar({
   return (
     <div className="grid min-h-[680px] grid-cols-[62px_repeat(7,minmax(86px,1fr))] grid-rows-[58px_auto]">
       <div className="border-b border-stone-300" />
-      {weekDays.map((day, index) => (
-        <div className="grid justify-items-center border-b border-stone-300 pt-2" key={day.toISOString()}>
-          <strong className="text-xs uppercase text-stone-900">{weekDayLabels[index]}</strong>
-          <span className="text-[0.68rem] font-bold text-stone-400">{formatDay(day)}</span>
-        </div>
-      ))}
+      {weekDays.map((day, index) => {
+        const isToday = currentTime ? sameDate(day, currentTime) : false;
+        return (
+          <div
+            className={cn(
+              "grid justify-items-center border-b border-stone-300 pt-2",
+              isToday && "bg-teal-50 text-teal-800"
+            )}
+            key={day.toISOString()}
+          >
+            <strong className={cn("text-xs uppercase", isToday ? "text-teal-900" : "text-stone-900")}>{weekDayLabels[index]}</strong>
+            <span className={cn("text-[0.68rem] font-bold", isToday ? "text-teal-700" : "text-stone-400")}>
+              {formatDay(day)}
+            </span>
+          </div>
+        );
+      })}
       <TimeAxis />
       {weekDays.map((day) => (
         <DayColumn
           key={day.toISOString()}
           day={day}
+          currentTime={currentTime}
           lessons={lessons.filter((lesson) => sameDate(new Date(lesson.startsAt), day))}
           getStudent={getStudent}
           onAction={onAction}
@@ -868,25 +908,31 @@ function TimeAxis() {
 
 function DayColumn({
   day,
+  currentTime,
   lessons,
   getStudent,
   onAction,
   onDeleteLesson
 }: {
   day: Date;
+  currentTime: Date | null;
   lessons: Lesson[];
   getStudent: (studentId: string) => Student | undefined;
   onAction: (action: () => Promise<void>) => void;
   onDeleteLesson: (lesson: Lesson) => void;
 }) {
+  const isToday = currentTime ? sameDate(day, currentTime) : false;
+  const currentTimeOffset = currentTime && isToday ? getCurrentTimeOffset(currentTime) : null;
+
   return (
     <div
-      className="relative min-h-[988px] border-l border-stone-100"
+      className={cn("relative min-h-[988px] border-l border-stone-100", isToday && "bg-teal-50/40")}
       style={{
-        background: "repeating-linear-gradient(to bottom, transparent 0, transparent 75px, #ebe8e5 75px, #ebe8e5 76px)"
+        backgroundImage: "repeating-linear-gradient(to bottom, transparent 0, transparent 75px, #ebe8e5 75px, #ebe8e5 76px)"
       }}
     >
       <div className="absolute inset-x-2 bottom-[76px] top-[76px] bg-teal-100/70" />
+      {currentTimeOffset !== null ? <CurrentTimeMarker top={currentTimeOffset} /> : null}
       {lessons
         .filter((lesson) => sameDate(new Date(lesson.startsAt), day))
         .map((lesson) => (
@@ -902,15 +948,26 @@ function DayColumn({
   );
 }
 
+function CurrentTimeMarker({ top }: { top: number }) {
+  return (
+    <div className="pointer-events-none absolute inset-x-1 z-20 flex items-center" style={{ top }}>
+      <span className="size-2 rounded-full bg-rose-500 shadow-sm" />
+      <span className="h-0.5 flex-1 rounded-full bg-rose-500 shadow-sm" />
+    </div>
+  );
+}
+
 function MonthCalendar({
   selectedDate,
   monthDays,
+  currentTime,
   lessons,
   getStudent,
   onDeleteLesson
 }: {
   selectedDate: Date;
   monthDays: Date[];
+  currentTime: Date | null;
   lessons: Lesson[];
   getStudent: (studentId: string) => Student | undefined;
   onDeleteLesson: (lesson: Lesson) => void;
@@ -925,9 +982,18 @@ function MonthCalendar({
       {monthDays.map((day) => {
         const dayLessons = lessons.filter((lesson) => sameDate(new Date(lesson.startsAt), day));
         const isOutsideMonth = day.getMonth() !== selectedDate.getMonth();
+        const isToday = currentTime ? sameDate(day, currentTime) : false;
         return (
-          <div className="min-h-32 border-b border-r border-stone-100 p-2" key={day.toISOString()}>
-            <div className={cn("mb-2 text-xs font-bold", isOutsideMonth ? "text-stone-300" : "text-stone-700")}>
+          <div
+            className={cn("min-h-32 border-b border-r border-stone-100 p-2", isToday && "bg-teal-50 ring-1 ring-inset ring-teal-200")}
+            key={day.toISOString()}
+          >
+            <div
+              className={cn(
+                "mb-2 inline-flex size-6 items-center justify-center rounded-full text-xs font-bold",
+                isToday ? "bg-teal-600 text-white" : isOutsideMonth ? "text-stone-300" : "text-stone-700"
+              )}
+            >
               {day.getDate()}
             </div>
             <div className="grid gap-1">
@@ -1102,6 +1168,18 @@ function sameDate(first: Date, second: Date): boolean {
     first.getMonth() === second.getMonth() &&
     first.getDate() === second.getDate()
   );
+}
+
+function getCurrentTimeOffset(value: Date): number | null {
+  const currentMinutes = value.getHours() * 60 + value.getMinutes();
+  const calendarStartMinutes = calendarStartHour * 60;
+  const calendarEndMinutes = calendarStartMinutes + visibleHours.length * 60;
+
+  if (currentMinutes < calendarStartMinutes || currentMinutes >= calendarEndMinutes) {
+    return null;
+  }
+
+  return ((currentMinutes - calendarStartMinutes) / 60) * hourHeight;
 }
 
 function formatDay(value: Date): string {
