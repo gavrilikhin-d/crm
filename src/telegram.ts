@@ -18,13 +18,26 @@ export function getTelegramBot(): Telegraf | null {
   bot = new Telegraf(token);
 
   bot.start(async (ctx) => {
-    await ctx.reply(
-      [
-        "Здравствуйте! Это бот CRM преподавателя.",
-        `Ваш chat id: ${ctx.chat.id}`,
-        "Передайте этот id преподавателю, чтобы получать напоминания о занятиях."
-      ].join("\n")
-    );
+    const payload = getStartPayload(ctx.message);
+    if (!payload || !ctx.chat) {
+      await ctx.reply(
+        [
+          "Здравствуйте! Это бот CRM преподавателя.",
+          "Чтобы подключить напоминания, откройте персональную ссылку из CRM преподавателя."
+        ].join("\n")
+      );
+      return;
+    }
+
+    try {
+      const student = await store.bindTelegramChat(payload, ctx.chat.id, ctx.from?.username);
+      await ctx.reply(`${student.fullName}, Telegram подключен. Теперь сюда будут приходить напоминания о занятиях.`);
+      console.log(`Telegram chat linked: student=${student.id} chat=${ctx.chat.id}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown Telegram binding error";
+      console.error("Telegram binding failed:", message);
+      await ctx.reply("Не удалось подключить Telegram. Попросите преподавателя прислать новую ссылку из CRM.");
+    }
   });
 
   bot.action(/^lesson:(.+):student:(.+):(attend|decline)$/, async (ctx) => {
@@ -111,6 +124,15 @@ function lessonKeyboard(lessonId: string, studentId: string): InlineKeyboardMark
       ]
     ]
   };
+}
+
+function getStartPayload(message: unknown): string | undefined {
+  if (!message || typeof message !== "object" || !("text" in message) || typeof message.text !== "string") {
+    return undefined;
+  }
+
+  const [, payload] = message.text.trim().split(/\s+/, 2);
+  return payload;
 }
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {

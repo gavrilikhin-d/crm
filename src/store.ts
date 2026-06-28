@@ -101,6 +101,10 @@ export class Store {
       await this.save();
     }
 
+    if (ensureStudentTelegramBindTokens(this.db)) {
+      await this.save();
+    }
+
     return this.db;
   }
 
@@ -136,12 +140,28 @@ export class Store {
       phone: input.phone.trim(),
       telegramUsername: optional(input.telegramUsername),
       telegramChatId: optional(input.telegramChatId),
+      telegramBindToken: createTelegramBindToken(db),
       status: "active",
       defaultLessonPrice: input.defaultLessonPrice ?? db.settings.defaultSingleLessonPrice,
       createdAt: timestamp,
       updatedAt: timestamp
     };
     db.students.push(student);
+    await this.save();
+    return student;
+  }
+
+  async bindTelegramChat(token: string, chatId: number | string, username?: string): Promise<Student> {
+    const db = await this.load();
+    const student = db.students.find((item) => item.telegramBindToken === token);
+    if (!student) {
+      throw new Error("Telegram binding token is invalid");
+    }
+
+    student.telegramChatId = String(chatId);
+    student.telegramUsername = optional(username) ?? student.telegramUsername;
+    student.updatedAt = now();
+
     await this.save();
     return student;
   }
@@ -480,6 +500,30 @@ export class Store {
 function optional(value?: string): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function createTelegramBindToken(db: Database): string {
+  const existingTokens = new Set(db.students.map((student) => student.telegramBindToken).filter(Boolean));
+  let token = nanoid();
+
+  while (existingTokens.has(token)) {
+    token = nanoid();
+  }
+
+  return token;
+}
+
+function ensureStudentTelegramBindTokens(db: Database): boolean {
+  let changed = false;
+
+  for (const student of db.students) {
+    if (!student.telegramBindToken) {
+      student.telegramBindToken = createTelegramBindToken(db);
+      changed = true;
+    }
+  }
+
+  return changed;
 }
 
 function mustFind<T extends { id: string }>(items: T[], id: string, entityName: string): T {

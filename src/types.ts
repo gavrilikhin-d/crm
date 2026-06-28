@@ -29,6 +29,7 @@ export interface Student {
   phone: string;
   telegramUsername?: string;
   telegramChatId?: string;
+  telegramBindToken: string;
   status: StudentStatus;
   defaultLessonPrice: number;
   createdAt: string;

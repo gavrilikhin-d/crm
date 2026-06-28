@@ -624,6 +624,15 @@ function Select({ className, ...props }: SelectHTMLAttributes<HTMLSelectElement>
   );
 }
 
+function getTelegramBindUrl(student: Student): string | undefined {
+  const username = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME?.replace(/^@/, "");
+  if (!username) {
+    return undefined;
+  }
+
+  return `https://t.me/${username}?start=${student.telegramBindToken}`;
+}
+
 function ClientsView({
   students,
   getBalance,
@@ -652,6 +661,7 @@ function ClientsView({
         <CardContent className="grid gap-3">
           {students.map((student) => {
             const balance = getBalance(student.id);
+            const telegramBindUrl = getTelegramBindUrl(student);
             const canSendPaymentReminder =
               Boolean(student.telegramChatId) && (balance.remainingLessons < 1 || balance.debtLessons > 0);
             return (
@@ -662,8 +672,28 @@ function ClientsView({
                 <div>
                   <strong className="block text-stone-900">{student.fullName}</strong>
                   <span className="text-sm text-stone-500">
-                    {student.phone} · {student.telegramUsername || "Telegram не подключен"}
+                    {student.phone} ·{" "}
+                    {student.telegramChatId
+                      ? student.telegramUsername
+                        ? `@${student.telegramUsername}`
+                        : "Telegram подключен"
+                      : "Telegram не подключен"}
                   </span>
+                  {!student.telegramChatId ? (
+                    <div className="mt-2">
+                      {telegramBindUrl ? (
+                        <Button asChild variant="outline" size="sm">
+                          <a href={telegramBindUrl} target="_blank" rel="noreferrer">
+                            Подключить Telegram
+                          </a>
+                        </Button>
+                      ) : (
+                        <code className="rounded bg-stone-100 px-2 py-1 text-xs text-stone-600">
+                          /start {student.telegramBindToken}
+                        </code>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
                 <div className="text-sm text-stone-600">
                   <span className="block font-semibold">{balance.remainingLessons} осталось</span>
@@ -820,7 +850,6 @@ function StudentForm({ onSubmit }: { onSubmit: (event: FormEvent<HTMLFormElement
       <Input name="fullName" placeholder="ФИО" required />
       <Input name="phone" placeholder="Телефон" required />
       <Input name="telegramUsername" placeholder="Имя пользователя в Telegram" />
-      <Input name="telegramChatId" placeholder="Telegram chat id" />
       <Input name="defaultLessonPrice" type="number" min="0" placeholder="Цена разового занятия" />
       <Button type="submit">Добавить ученика</Button>
     </form>
