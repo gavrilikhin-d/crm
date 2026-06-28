@@ -206,8 +206,11 @@ export default function Home() {
     const form = event.currentTarget;
     const data = formData(form);
     const select = form.elements.namedItem("studentIds") as HTMLSelectElement;
-    data.studentIds = [...select.selectedOptions].map((option) => option.value);
-    data.durationMinutes = lessonDurationByType[data.lessonType === "group" ? "group" : "individual"];
+    const studentIds = [...select.selectedOptions].map((option) => option.value);
+    const lessonType = studentIds.length > 1 ? "group" : "individual";
+    data.studentIds = studentIds;
+    data.lessonType = lessonType;
+    data.durationMinutes = lessonDurationByType[lessonType];
     await withRefresh(async () => {
       await api("/api/lessons", { method: "POST", body: data });
       form.reset();
@@ -476,10 +479,6 @@ export default function Home() {
               <CardContent>
                 <form className="grid gap-3" onSubmit={handleLessonSubmit}>
                   <Input name="startsAt" type="datetime-local" required />
-                  <Select name="lessonType" required defaultValue="individual">
-                    <option value="individual">Индивидуальное - 60 минут</option>
-                    <option value="group">Групповое - 90 минут</option>
-                  </Select>
                   <Select name="studentIds" multiple required>
                     {students
                       .filter((student) => student.status === "active")
