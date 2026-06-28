@@ -682,7 +682,6 @@ function ClientsView({
           {students.map((student) => {
             const balance = getBalance(student.id);
             const telegramBindUrl = getTelegramBindUrl(student);
-            const telegramBindText = telegramBindUrl ?? `/start ${student.telegramBindToken}`;
             const telegramBindCopied = copiedTelegramStudentId === student.id;
             const canSendPaymentReminder =
               Boolean(student.telegramChatId) && (balance.remainingLessons < 1 || balance.debtLessons > 0);
@@ -703,14 +702,18 @@ function ClientsView({
                   </span>
                   {!student.telegramChatId ? (
                     <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        type="button"
-                        onClick={() => void copyTelegramBindText(student.id, telegramBindText)}
-                      >
-                        {telegramBindUrl ? "Скопировать ссылку Telegram" : "Скопировать команду Telegram"}
-                      </Button>
+                      {telegramBindUrl ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          onClick={() => void copyTelegramBindText(student.id, telegramBindUrl)}
+                        >
+                          Скопировать ссылку Telegram
+                        </Button>
+                      ) : (
+                        <Badge variant="secondary">Укажите Telegram bot username</Badge>
+                      )}
                       {telegramBindCopied ? (
                         <Badge variant="secondary" aria-live="polite">
                           Скопировано
