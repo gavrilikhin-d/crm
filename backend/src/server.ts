@@ -38,34 +38,41 @@ const routes: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
   route("PATCH", /^\/internal\/reminders\/([^/]+)$/, updateReminder)
 ];
 
-await store.load();
-
-createServer(async (request, response) => {
-  try {
-    setCorsHeaders(response);
-
-    if (request.method === "OPTIONS") {
-      response.writeHead(204);
-      response.end();
-      return;
-    }
-
-    const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
-    const route = routes.find((candidate) => candidate.method === request.method && url.pathname.match(candidate.pattern));
-
-    if (!route) {
-      jsonError(response, new Error("Route not found"), 404);
-      return;
-    }
-
-    const match = url.pathname.match(route.pattern);
-    await route.handler(request, response, match as RegExpMatchArray);
-  } catch (error) {
-    jsonError(response, error);
-  }
-}).listen(port, () => {
-  console.log(`Backend API listening on ${port}`);
+void startServer().catch((error) => {
+  console.error("Backend API failed to start:", error);
+  process.exitCode = 1;
 });
+
+async function startServer() {
+  await store.load();
+
+  createServer(async (request, response) => {
+    try {
+      setCorsHeaders(response);
+
+      if (request.method === "OPTIONS") {
+        response.writeHead(204);
+        response.end();
+        return;
+      }
+
+      const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+      const route = routes.find((candidate) => candidate.method === request.method && url.pathname.match(candidate.pattern));
+
+      if (!route) {
+        jsonError(response, new Error("Route not found"), 404);
+        return;
+      }
+
+      const match = url.pathname.match(route.pattern);
+      await route.handler(request, response, match as RegExpMatchArray);
+    } catch (error) {
+      jsonError(response, error);
+    }
+  }).listen(port, () => {
+    console.log(`Backend API listening on ${port}`);
+  });
+}
 
 function route(method: string, pattern: RegExp, handler: Handler) {
   return { method, pattern, handler };

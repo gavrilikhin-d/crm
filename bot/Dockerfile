@@ -1,4 +1,4 @@
-FROM node:22-alpine
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -11,8 +11,14 @@ RUN npm install
 COPY shared shared
 COPY bot bot
 
+RUN npm --workspace bot run build
+
+FROM gcr.io/distroless/nodejs22-debian12 AS runtime
+
 WORKDIR /app/bot
 
 ENV NODE_ENV=production
 
-CMD ["npm", "run", "start"]
+COPY --from=builder /app/bot/dist ./dist
+
+CMD ["dist/main.cjs"]

@@ -1,4 +1,4 @@
-FROM node:22-alpine
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -18,9 +18,18 @@ ENV REMINDER_INTERNAL_URL=$REMINDER_INTERNAL_URL
 
 RUN npm --workspace frontend run build
 
-WORKDIR /app/frontend
+FROM gcr.io/distroless/nodejs22-debian12 AS runtime
 
 ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+
+WORKDIR /app
+
+COPY --from=builder /app/frontend/.next/standalone ./
+COPY --from=builder /app/frontend/.next/static ./frontend/.next/static
+COPY --from=builder /app/frontend/public ./frontend/public
+
 EXPOSE 3000
 
-CMD ["npm", "run", "start"]
+CMD ["frontend/server.js"]
