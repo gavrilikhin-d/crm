@@ -10,7 +10,6 @@ import {
   HelpCircle,
   Plus,
   Pencil,
-  RefreshCw,
   Settings,
   Trash2,
   Users
@@ -19,6 +18,8 @@ import { toast } from "sonner";
 import { DateTimePicker } from "@/components/date-time-picker";
 import { CurrencyInput } from "@/components/examples/input/special/currency-input";
 import { AvatarPicker } from "@/components/avatar-picker";
+import { LessonOverviewSheet } from "@/components/lesson-overview-sheet";
+import { ParticipantCardAvatar, ParticipantCardLabel } from "@/components/participant-card-label";
 import { StudentAvatar } from "@/components/student-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -55,7 +56,16 @@ import { Toaster } from "@/components/ui/sonner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
-import type { AppSettings, Database, Lesson, LessonPackage, RecurringDeleteScope, Student, StudentBalance } from "@crm/shared";
+import type {
+  AppSettings,
+  Database,
+  Lesson,
+  LessonPackage,
+  RecurringDeleteScope,
+  RecurringSchedule,
+  Student,
+  StudentBalance
+} from "@crm/shared";
 import { CURRENCIES, formatMoney, resolveCurrency, type CurrencyCode } from "@crm/shared/currency";
 
 type Snapshot = Database & {
@@ -76,18 +86,6 @@ type ApiOptions = {
 type ActiveSection = "schedule" | "clients" | "payments" | "sessions" | "settings";
 type ScheduleView = "day" | "week" | "month";
 type ActiveModal = "student" | "payment" | "package" | null;
-
-const statusLabels: Record<string, string> = {
-  scheduled: "Запланировано",
-  confirmed: "Подтверждено",
-  cancelled_by_student: "Отменено учеником",
-  cancelled_by_teacher: "Отменено преподавателем",
-  completed: "Проведено",
-  missed: "Пропуск",
-  awaiting: "Ожидает ответа",
-  declined: "Отказался",
-  attended: "Посетил"
-};
 
 const weekDayLabels = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const scheduleViewLabels: Record<ScheduleView, string> = {
@@ -122,7 +120,7 @@ export default function Home() {
   const [studentFormKey, setStudentFormKey] = useState(0);
   const [paymentFormKey, setPaymentFormKey] = useState(0);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
-  const [deleteLessonTarget, setDeleteLessonTarget] = useState<Lesson | null>(null);
+  const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
 
   const students = snapshot?.students ?? [];
   const lessonPackages = snapshot?.lessonPackages ?? [];
@@ -141,6 +139,18 @@ export default function Home() {
     [snapshot?.payments]
   );
   const currency = resolveCurrency(snapshot?.settings.currency);
+  const recurringSchedules = snapshot?.recurringSchedules ?? [];
+  const selectedLesson = useMemo(
+    () => (selectedLessonId ? lessons.find((lesson) => lesson.id === selectedLessonId) ?? null : null),
+    [lessons, selectedLessonId]
+  );
+  const selectedRecurringSchedule = useMemo(
+    () =>
+      selectedLesson?.recurringScheduleId
+        ? recurringSchedules.find((schedule) => schedule.id === selectedLesson.recurringScheduleId)
+        : undefined,
+    [recurringSchedules, selectedLesson]
+  );
   const weekDays = useMemo(() => getWeekDays(selectedDate), [selectedDate]);
   const monthDays = useMemo(() => getMonthGridDays(selectedDate), [selectedDate]);
   const weekLessons = useMemo(
@@ -175,6 +185,12 @@ export default function Home() {
       }),
     [lessons, selectedDate]
   );
+
+  useEffect(() => {
+    if (selectedLessonId && !selectedLesson) {
+      setSelectedLessonId(null);
+    }
+  }, [selectedLessonId, selectedLesson]);
 
   useEffect(() => {
     void loadSnapshot();
@@ -353,17 +369,30 @@ export default function Home() {
     });
   }
 
-  async function handleDeleteLesson(lesson: Lesson) {
-    if (lesson.recurringScheduleId) {
-      setDeleteLessonTarget(lesson);
+  function openLessonOverview(lesson: Lesson) {
+    setSelectedLessonId(lesson.id);
+  }
+
+  async function handleRemoveParticipant(lessonId: string, studentId: string, studentName: string) {
+    if (!window.confirm(`Убрать ${studentName} с этого занятия?`)) {
       return;
     }
 
-    if (!window.confirm(`Удалить занятие ${formatFullDate(lesson.startsAt)}?`)) {
-      return;
+    await withRefresh(async () => {
+      await api(`/api/lessons/${lessonId}/participants/${studentId}`, { method: "DELETE" });
+      return `${studentName} убран(а) с занятия.`;
+    });
+  }
+
+  async function handleDeleteLessonFromSheet(lesson: Lesson, scope: RecurringDeleteScope) {
+    if (!lesson.recurringScheduleId) {
+      if (!window.confirm(`Удалить занятие ${formatFullDate(lesson.startsAt)}?`)) {
+        return;
+      }
     }
 
-    await deleteLessonWithScope(lesson, "single");
+    await deleteLessonWithScope(lesson, scope);
+    setSelectedLessonId(null);
   }
 
   async function deleteLessonWithScope(lesson: Lesson, scope: RecurringDeleteScope) {
@@ -377,7 +406,6 @@ export default function Home() {
       await api(`/api/lessons/${lesson.id}?scope=${scope}`, { method: "DELETE" });
       return messages[scope];
     });
-    setDeleteLessonTarget(null);
   }
 
   async function handleDeletePackage(lessonPackage: LessonPackage) {
@@ -564,6 +592,7 @@ export default function Home() {
                 currentTime={currentTime}
                 lessons={dayLessons}
                 getStudent={getStudent}
+                onSelectLesson={openLessonOverview}
               />
             ) : null}
 
@@ -574,6 +603,7 @@ export default function Home() {
                 currentTime={currentTime}
                 lessons={weekLessons}
                 getStudent={getStudent}
+                onSelectLesson={openLessonOverview}
               />
             ) : null}
 
@@ -584,7 +614,7 @@ export default function Home() {
                 currentTime={currentTime}
                 lessons={monthLessons}
                 getStudent={getStudent}
-                onDeleteLesson={handleDeleteLesson}
+                onSelectLesson={openLessonOverview}
               />
             ) : null}
           </div>
@@ -660,42 +690,15 @@ export default function Home() {
         <PackageForm currency={currency} onSubmit={handlePackageSubmit} />
       </Modal>
 
-      <Dialog open={!!deleteLessonTarget} onOpenChange={(open) => !open && setDeleteLessonTarget(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Удалить повторяющееся занятие</DialogTitle>
-            <DialogDescription>
-              {deleteLessonTarget ? formatFullDate(deleteLessonTarget.startsAt) : null}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => deleteLessonTarget && void deleteLessonWithScope(deleteLessonTarget, "single")}
-            >
-              Только это занятие
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => deleteLessonTarget && void deleteLessonWithScope(deleteLessonTarget, "following")}
-            >
-              Это и все последующие
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => deleteLessonTarget && void deleteLessonWithScope(deleteLessonTarget, "all")}
-            >
-              Все занятия серии
-            </Button>
-            <Button type="button" variant="ghost" onClick={() => setDeleteLessonTarget(null)}>
-              Отмена
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <LessonOverviewSheet
+        lesson={selectedLesson}
+        open={!!selectedLesson}
+        recurringSchedule={selectedRecurringSchedule}
+        getStudent={getStudent}
+        onOpenChange={(open) => !open && setSelectedLessonId(null)}
+        onRemoveParticipant={handleRemoveParticipant}
+        onDeleteLesson={handleDeleteLessonFromSheet}
+      />
 
       <Toaster />
     </SidebarProvider>
@@ -1293,13 +1296,15 @@ function DayCalendar({
   calendarRange,
   currentTime,
   lessons,
-  getStudent
+  getStudent,
+  onSelectLesson
 }: {
   day: Date;
   calendarRange: CalendarRange;
   currentTime: Date | null;
   lessons: Lesson[];
   getStudent: (studentId: string) => Student | undefined;
+  onSelectLesson: (lesson: Lesson) => void;
 }) {
   const isToday = currentTime ? sameDate(day, currentTime) : false;
 
@@ -1317,6 +1322,7 @@ function DayCalendar({
         currentTime={currentTime}
         lessons={lessons}
         getStudent={getStudent}
+        onSelectLesson={onSelectLesson}
       />
     </div>
   );
@@ -1327,13 +1333,15 @@ function WeekCalendar({
   calendarRange,
   currentTime,
   lessons,
-  getStudent
+  getStudent,
+  onSelectLesson
 }: {
   weekDays: Date[];
   calendarRange: CalendarRange;
   currentTime: Date | null;
   lessons: Lesson[];
   getStudent: (studentId: string) => Student | undefined;
+  onSelectLesson: (lesson: Lesson) => void;
 }) {
   return (
     <div className="grid min-h-[680px] grid-cols-[62px_repeat(7,minmax(86px,1fr))] grid-rows-[58px_auto]">
@@ -1358,6 +1366,7 @@ function WeekCalendar({
           currentTime={currentTime}
           lessons={lessons.filter((lesson) => sameDate(new Date(lesson.startsAt), day))}
           getStudent={getStudent}
+          onSelectLesson={onSelectLesson}
         />
       ))}
     </div>
@@ -1381,13 +1390,15 @@ function DayColumn({
   calendarRange,
   currentTime,
   lessons,
-  getStudent
+  getStudent,
+  onSelectLesson
 }: {
   day: Date;
   calendarRange: CalendarRange;
   currentTime: Date | null;
   lessons: Lesson[];
   getStudent: (studentId: string) => Student | undefined;
+  onSelectLesson: (lesson: Lesson) => void;
 }) {
   const isToday = currentTime ? sameDate(day, currentTime) : false;
   const currentTimeOffset = currentTime && isToday ? getCurrentTimeOffset(currentTime, calendarRange) : null;
@@ -1403,7 +1414,13 @@ function DayColumn({
     >
       {currentTimeOffset !== null ? <CurrentTimeMarker top={currentTimeOffset} /> : null}
       {lessons.map((lesson) => (
-        <CalendarLesson key={lesson.id} lesson={lesson} calendarRange={calendarRange} getStudent={getStudent} />
+        <CalendarLesson
+          key={lesson.id}
+          lesson={lesson}
+          calendarRange={calendarRange}
+          getStudent={getStudent}
+          onSelect={() => onSelectLesson(lesson)}
+        />
       ))}
     </div>
   );
@@ -1424,14 +1441,14 @@ function MonthCalendar({
   currentTime,
   lessons,
   getStudent,
-  onDeleteLesson
+  onSelectLesson
 }: {
   selectedDate: Date;
   monthDays: Date[];
   currentTime: Date | null;
   lessons: Lesson[];
   getStudent: (studentId: string) => Student | undefined;
-  onDeleteLesson: (lesson: Lesson) => void;
+  onSelectLesson: (lesson: Lesson) => void;
 }) {
   return (
     <div className="grid grid-cols-7 overflow-hidden rounded-xl border border-stone-200">
@@ -1459,7 +1476,12 @@ function MonthCalendar({
             </div>
             <div className="grid gap-1">
               {dayLessons.slice(0, 4).map((lesson) => (
-                <MonthLessonChip key={lesson.id} lesson={lesson} getStudent={getStudent} onDelete={() => onDeleteLesson(lesson)} />
+                <MonthLessonChip
+                  key={lesson.id}
+                  lesson={lesson}
+                  getStudent={getStudent}
+                  onSelect={() => onSelectLesson(lesson)}
+                />
               ))}
               {dayLessons.length > 4 ? <span className="text-[0.68rem] text-stone-400">+{dayLessons.length - 4} еще</span> : null}
             </div>
@@ -1498,11 +1520,13 @@ function getLessonBadges(lesson: Lesson) {
 function CalendarLesson({
   lesson,
   calendarRange,
-  getStudent
+  getStudent,
+  onSelect
 }: {
   lesson: Lesson;
   calendarRange: CalendarRange;
   getStudent: (studentId: string) => Student | undefined;
+  onSelect: () => void;
 }) {
   const startsAt = new Date(lesson.startsAt);
   const { top, height } = getLessonPosition(lesson, calendarRange);
@@ -1510,9 +1534,11 @@ function CalendarLesson({
   const compact = height < 52;
 
   return (
-    <article
-      className="absolute inset-x-1.5 z-10 flex flex-col gap-1 overflow-hidden rounded-lg border bg-card p-1.5 shadow-sm"
+    <button
+      type="button"
+      className="absolute inset-x-1.5 z-10 flex cursor-pointer flex-col gap-1 overflow-hidden rounded-lg border bg-card p-1.5 text-left shadow-sm transition-shadow hover:shadow-md"
       style={{ top, height }}
+      onClick={onSelect}
     >
       <div className="flex items-start justify-between gap-1">
         <span className="text-[0.68rem] font-semibold tabular-nums leading-tight">
@@ -1536,56 +1562,44 @@ function CalendarLesson({
           }
 
           return (
-            <div key={participant.id} className="flex min-w-0 items-center gap-1.5">
-              <StudentAvatar student={student} size="sm" className={cn(compact ? "size-4" : "size-5")} />
-              {!compact ? (
-                <div className="flex min-w-0 flex-1 items-center gap-1">
-                  <span className="truncate text-[0.68rem] leading-tight">{student.fullName}</span>
-                  {participant.hasDebt ? (
-                    <Badge variant="destructive" className="shrink-0 px-1 py-0 text-[0.55rem]">
-                      Долг
-                    </Badge>
-                  ) : null}
-                </div>
-              ) : participant.hasDebt ? (
-                <span className="truncate text-[0.58rem] font-medium text-destructive">{student.fullName}</span>
-              ) : null}
+            <div key={participant.id} className="flex min-w-0 items-center gap-1.5 pr-1 pb-0.5">
+              <ParticipantCardAvatar student={student} status={participant.status} compact={compact} />
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
+                <ParticipantCardLabel name={student.fullName} compact={compact} />
+                {participant.hasDebt ? (
+                  <Badge
+                    variant="destructive"
+                    className={cn("shrink-0 px-1 py-0", compact ? "text-[0.5rem]" : "text-[0.55rem]")}
+                  >
+                    Долг
+                  </Badge>
+                ) : null}
+              </div>
             </div>
           );
         })}
       </div>
-    </article>
+    </button>
   );
 }
 
 function MonthLessonChip({
   lesson,
   getStudent,
-  onDelete
+  onSelect
 }: {
   lesson: Lesson;
   getStudent: (studentId: string) => Student | undefined;
-  onDelete: () => void;
+  onSelect: () => void;
 }) {
   const startsAt = new Date(lesson.startsAt);
   const badges = getLessonBadges(lesson);
-  const participantNames = lesson.participants
-    .map((participant) => {
-      const name = getStudent(participant.studentId)?.fullName;
-      if (!name) {
-        return null;
-      }
-      return participant.hasDebt ? `${name} · долг` : name;
-    })
-    .filter(Boolean)
-    .join(", ");
 
   return (
     <button
       type="button"
-      className="flex w-full flex-col gap-0.5 rounded-md border bg-card px-2 py-1 text-left"
-      onClick={onDelete}
-      title="Нажмите, чтобы удалить занятие"
+      className="flex w-full flex-col gap-0.5 rounded-md border bg-card px-2 py-1 text-left transition-colors hover:bg-muted/50"
+      onClick={onSelect}
     >
       <div className="flex items-center justify-between gap-1">
         <span className="text-[0.62rem] font-semibold tabular-nums">{formatTimeRange(startsAt, lesson.durationMinutes)}</span>
@@ -1599,7 +1613,26 @@ function MonthLessonChip({
           </div>
         ) : null}
       </div>
-      <span className="truncate text-[0.62rem] text-muted-foreground">{participantNames || "Занятие"}</span>
+      <div className="flex flex-col gap-0.5">
+        {lesson.participants.map((participant) => {
+          const student = getStudent(participant.studentId);
+          if (!student) {
+            return null;
+          }
+
+          return (
+            <div key={participant.id} className="flex min-w-0 items-center gap-1 pr-1 pb-0.5">
+              <ParticipantCardAvatar student={student} status={participant.status} compact />
+              <ParticipantCardLabel name={student.fullName} compact />
+              {participant.hasDebt ? (
+                <Badge variant="destructive" className="shrink-0 px-1 py-0 text-[0.5rem]">
+                  Долг
+                </Badge>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
     </button>
   );
 }

@@ -295,6 +295,30 @@ export class Store {
     return lesson;
   }
 
+  async removeLessonParticipant(lessonId: string, studentId: string): Promise<Lesson | null> {
+    const db = await loadDatabase();
+    const lesson = mustFind(db.lessons, lessonId, "Lesson");
+
+    if (lesson.status === "completed") {
+      throw new Error("Cannot remove participant from completed lesson");
+    }
+
+    if (!lesson.participants.some((participant) => participant.studentId === studentId)) {
+      throw new Error("Student is not a participant of this lesson");
+    }
+
+    if (lesson.participants.length <= 1) {
+      await deleteLessonsByIds([lessonId]);
+      return null;
+    }
+
+    lesson.participants = lesson.participants.filter((participant) => participant.studentId !== studentId);
+    lesson.updatedAt = now();
+    recalculateLesson(lesson, db.settings.individualDurationMinutes, db.settings.groupDurationMinutes);
+    await replaceLesson(lesson);
+    return lesson;
+  }
+
   async completeLesson(lessonId: string): Promise<Lesson> {
     const db = await loadDatabase();
     const lesson = mustFind(db.lessons, lessonId, "Lesson");

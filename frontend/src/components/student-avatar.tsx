@@ -1,10 +1,11 @@
 "use client";
 
 import { useRef, type ChangeEvent } from "react";
+import { Check, X } from "lucide-react";
 import { toast } from "sonner";
 import type { Student } from "@crm/shared";
 import { getStudentInitials } from "@crm/shared/student-initials";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarBadge, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
 type StudentLike = Pick<Student, "id" | "fullName" | "avatarUrl" | "updatedAt">;
@@ -20,16 +21,28 @@ function getAvatarSrc(student: StudentLike): string | undefined {
 function StudentAvatar({
   student,
   size = "default",
-  className
+  className,
+  badge
 }: {
   student: StudentLike;
   size?: "default" | "sm" | "lg";
   className?: string;
+  badge?: "confirmed" | "declined";
 }) {
   return (
     <Avatar size={size} className={className}>
       <AvatarImage src={getAvatarSrc(student)} alt={student.fullName} />
       <AvatarFallback>{getStudentInitials(student.fullName)}</AvatarFallback>
+      {badge === "confirmed" ? (
+        <AvatarBadge className="translate-x-1/4 translate-y-1/4 bg-green-600 text-white ring-card dark:bg-green-500">
+          <Check />
+        </AvatarBadge>
+      ) : null}
+      {badge === "declined" ? (
+        <AvatarBadge className="translate-x-1/4 translate-y-1/4 bg-destructive text-white ring-card">
+          <X />
+        </AvatarBadge>
+      ) : null}
     </Avatar>
   );
 }

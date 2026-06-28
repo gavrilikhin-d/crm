@@ -31,6 +31,7 @@ const routes: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
   route("DELETE", /^\/api\/lessons\/([^/]+)$/, deleteLesson),
   route("POST", /^\/api\/lessons\/([^/]+)\/cancel$/, cancelLesson),
   route("POST", /^\/api\/lessons\/([^/]+)\/complete$/, completeLesson),
+  route("DELETE", /^\/api\/lessons\/([^/]+)\/participants\/([^/]+)$/, removeLessonParticipant),
   route("POST", /^\/api\/lessons\/([^/]+)\/participants\/([^/]+)\/status$/, setParticipantStatus),
 
   route("POST", /^\/api\/payments$/, createPayment),
@@ -169,6 +170,11 @@ async function cancelLesson(_request: IncomingMessage, response: ServerResponse,
 
 async function completeLesson(_request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray) {
   jsonOk(response, await store.completeLesson(match[1]));
+}
+
+async function removeLessonParticipant(_request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray) {
+  const lesson = await store.removeLessonParticipant(match[1], match[2]);
+  jsonOk(response, lesson ?? { ok: true });
 }
 
 async function setParticipantStatus(request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray) {
