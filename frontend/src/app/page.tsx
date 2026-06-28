@@ -1319,14 +1319,9 @@ function DayCalendar({
   return (
     <div className="grid min-h-[680px] grid-cols-[62px_minmax(240px,1fr)] grid-rows-[58px_auto]">
       <div className="border-b border-stone-300" />
-      <div
-        className={cn(
-          "grid justify-items-center border-b border-stone-300 pt-2",
-          isToday && "bg-teal-50 text-teal-800"
-        )}
-      >
-        <strong className={cn("text-xs uppercase", isToday ? "text-teal-900" : "text-stone-900")}>{formatWeekday(day)}</strong>
-        <span className={cn("text-[0.68rem] font-bold", isToday ? "text-teal-700" : "text-stone-400")}>{formatDay(day)}</span>
+      <div className="grid justify-items-center border-b border-stone-300 pt-2">
+        <strong className="text-xs uppercase text-stone-900">{formatWeekday(day)}</strong>
+        <span className={cn("text-[0.68rem] font-bold", isToday ? "text-stone-900" : "text-stone-400")}>{formatDay(day)}</span>
       </div>
       <TimeAxis calendarRange={calendarRange} />
       <DayColumn
@@ -1365,15 +1360,9 @@ function WeekCalendar({
       {weekDays.map((day, index) => {
         const isToday = currentTime ? sameDate(day, currentTime) : false;
         return (
-          <div
-            className={cn(
-              "grid justify-items-center border-b border-stone-300 pt-2",
-              isToday && "bg-teal-50 text-teal-800"
-            )}
-            key={day.toISOString()}
-          >
-            <strong className={cn("text-xs uppercase", isToday ? "text-teal-900" : "text-stone-900")}>{weekDayLabels[index]}</strong>
-            <span className={cn("text-[0.68rem] font-bold", isToday ? "text-teal-700" : "text-stone-400")}>
+          <div className="grid justify-items-center border-b border-stone-300 pt-2" key={day.toISOString()}>
+            <strong className="text-xs uppercase text-stone-900">{weekDayLabels[index]}</strong>
+            <span className={cn("text-[0.68rem] font-bold", isToday ? "text-stone-900" : "text-stone-400")}>
               {formatDay(day)}
             </span>
           </div>
@@ -1431,13 +1420,12 @@ function DayColumn({
 
   return (
     <div
-      className={cn("relative border-l border-stone-100", isToday && "bg-teal-50/40")}
+      className="relative border-l border-stone-100"
       style={{
         minHeight: columnHeight,
         backgroundImage: "repeating-linear-gradient(to bottom, transparent 0, transparent 75px, #ebe8e5 75px, #ebe8e5 76px)"
       }}
     >
-      <div className="absolute inset-x-2 bottom-[76px] top-[76px] bg-teal-100/70" />
       {currentTimeOffset !== null ? <CurrentTimeMarker top={currentTimeOffset} /> : null}
       {lessons
         .filter((lesson) => sameDate(new Date(lesson.startsAt), day))
@@ -1492,13 +1480,13 @@ function MonthCalendar({
         const isToday = currentTime ? sameDate(day, currentTime) : false;
         return (
           <div
-            className={cn("min-h-32 border-b border-r border-stone-100 p-2", isToday && "bg-teal-50 ring-1 ring-inset ring-teal-200")}
+            className={cn("min-h-32 border-b border-r border-stone-100 p-2", isToday && "ring-1 ring-inset ring-stone-200")}
             key={day.toISOString()}
           >
             <div
               className={cn(
                 "mb-2 inline-flex size-6 items-center justify-center rounded-full text-xs font-bold",
-                isToday ? "bg-teal-600 text-white" : isOutsideMonth ? "text-stone-300" : "text-stone-700"
+                isToday ? "bg-stone-900 text-white" : isOutsideMonth ? "text-stone-300" : "text-stone-700"
               )}
             >
               {day.getDate()}
