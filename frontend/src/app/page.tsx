@@ -17,10 +17,10 @@ import {
 import { toast } from "sonner";
 import { DateTimePicker } from "@/components/date-time-picker";
 import { CurrencyInput } from "@/components/examples/input/special/currency-input";
-import { AvatarPicker } from "@/components/avatar-picker";
 import { LessonOverviewSheet } from "@/components/lesson-overview-sheet";
 import { LessonParticipantSummary } from "@/components/lesson-participant-summary";
 import { ParticipantCardAvatar, ParticipantCardLabel } from "@/components/participant-card-label";
+import { StudentForm } from "@/components/student-form";
 import { TelegramIcon } from "@/components/icons/telegram-icon";
 import { StudentLink } from "@/components/student-link";
 import { StudentAvatar } from "@/components/student-avatar";
@@ -58,8 +58,9 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
+import { readFileAsDataUrl } from "@/lib/files";
+import { cn } from "@/lib/utils";
 import type {
   AppSettings,
   Database,
@@ -970,91 +971,6 @@ function Modal({
   );
 }
 
-function StudentForm({
-  student,
-  submitLabel,
-  onSubmit
-}: {
-  student?: Student;
-  submitLabel: string;
-  onSubmit: (payload: { fullName: string; avatarFile: File | null; removeAvatar: boolean }) => void | Promise<void>;
-}) {
-  const [fullName, setFullName] = useState(student?.fullName ?? "");
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [removeAvatar, setRemoveAvatar] = useState(false);
-  const [previewSrc, setPreviewSrc] = useState<string | null>(() => {
-    if (!student?.avatarUrl) {
-      return null;
-    }
-    return `${student.avatarUrl}?v=${encodeURIComponent(student.updatedAt)}`;
-  });
-
-  useEffect(() => {
-    return () => {
-      if (previewSrc?.startsWith("blob:")) {
-        URL.revokeObjectURL(previewSrc);
-      }
-    };
-  }, [previewSrc]);
-
-  function handleFileSelect(file: File) {
-    setAvatarFile(file);
-    setRemoveAvatar(false);
-    setPreviewSrc((current) => {
-      if (current?.startsWith("blob:")) {
-        URL.revokeObjectURL(current);
-      }
-      return URL.createObjectURL(file);
-    });
-  }
-
-  function handleClearAvatar() {
-    setAvatarFile(null);
-    setRemoveAvatar(true);
-    setPreviewSrc((current) => {
-      if (current?.startsWith("blob:")) {
-        URL.revokeObjectURL(current);
-      }
-      return null;
-    });
-  }
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const trimmedName = fullName.trim();
-    if (!trimmedName) {
-      toast.error("Укажите ФИО.");
-      return;
-    }
-    await onSubmit({ fullName: trimmedName, avatarFile, removeAvatar });
-  }
-
-  return (
-    <form onSubmit={(event) => void handleSubmit(event)}>
-      <FieldGroup className="gap-4">
-        <AvatarPicker
-          fullName={fullName}
-          previewSrc={previewSrc}
-          onFileSelect={handleFileSelect}
-          onClear={previewSrc ? handleClearAvatar : undefined}
-        />
-        <Field>
-          <FieldLabel htmlFor="student-full-name">ФИО</FieldLabel>
-          <Input
-            id="student-full-name"
-            name="fullName"
-            placeholder="ФИО"
-            required
-            value={fullName}
-            onChange={(event) => setFullName(event.target.value)}
-          />
-        </Field>
-        <Button type="submit">{submitLabel}</Button>
-      </FieldGroup>
-    </form>
-  );
-}
-
 function LessonForm({
   students,
   defaultStartsAt,
@@ -1606,21 +1522,6 @@ function MonthLessonChip({
 
 function formData(form: HTMLFormElement): Record<string, string | number | string[]> {
   return Object.fromEntries(new FormData(form).entries()) as Record<string, string>;
-}
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        resolve(reader.result);
-        return;
-      }
-      reject(new Error("Не удалось прочитать файл."));
-    };
-    reader.onerror = () => reject(new Error("Не удалось прочитать файл."));
-    reader.readAsDataURL(file);
-  });
 }
 
 function getWeekDays(baseDate: Date): Date[] {

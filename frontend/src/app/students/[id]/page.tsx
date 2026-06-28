@@ -1,27 +1,21 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import type {
-  BalanceAdjustment,
-  Database,
-  Lesson,
-  LessonPackage,
-  Payment,
-  RecurringSchedule,
-  Student,
-  StudentBalance
-} from "@crm/shared";
+import { ArrowLeft, Pencil } from "lucide-react";
+import { toast } from "sonner";
+import type { Database, Lesson, LessonPackage, RecurringSchedule, Student, StudentBalance } from "@crm/shared";
 import { formatMoney, resolveCurrency } from "@crm/shared/currency";
-import { ParticipantStatusBadge } from "@/components/participant-status-badge";
 import { TelegramIcon } from "@/components/icons/telegram-icon";
+import { ParticipantStatusBadge } from "@/components/participant-status-badge";
 import { StudentAvatar } from "@/components/student-avatar";
+import { StudentForm } from "@/components/student-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/api";
+import { readFileAsDataUrl } from "@/lib/files";
 import { cn } from "@/lib/utils";
 
 type Snapshot = Database & {
@@ -84,13 +78,18 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+
+  const loadSnapshot = useCallback(async () => {
+    const data = await api<Snapshot>("/api/snapshot");
+    setSnapshot(data);
+  }, []);
 
   useEffect(() => {
-    void api<Snapshot>("/api/snapshot")
-      .then(setSnapshot)
+    void loadSnapshot()
       .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить данные"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [loadSnapshot]);
 
   const student = snapshot?.students.find((item) => item.id === id);
   const currency = resolveCurrency(snapshot?.settings.currency);
@@ -101,13 +100,6 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
         (a, b) => new Date(b.paidAt).getTime() - new Date(a.paidAt).getTime()
       ),
     [id, snapshot?.payments]
-  );
-  const adjustments = useMemo(
-    () =>
-      [...(snapshot?.balanceAdjustments.filter((item) => item.studentId === id) ?? [])].sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      ),
-    [id, snapshot?.balanceAdjustments]
   );
   const lessons = useMemo(() => {
     const items =
@@ -134,6 +126,32 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
     }
     return map;
   }, [snapshot?.lessonPackages]);
+
+  async function handleStudentUpdate(payload: {
+    fullName: string;
+    avatarFile: File | null;
+    removeAvatar: boolean;
+  }) {
+    try {
+      const body: Record<string, unknown> = { fullName: payload.fullName.trim() };
+      if (payload.removeAvatar) {
+        body.avatarDataUrl = null;
+      } else if (payload.avatarFile) {
+        body.avatarDataUrl = await readFileAsDataUrl(payload.avatarFile);
+      }
+      await api(`/api/students/${id}`, { method: "PATCH", body });
+      await loadSnapshot();
+      setEditing(false);
+      toast.success("Данные ученика обновлены.");
+    } catch (updateError) {
+      toast.error(updateError instanceof Error ? updateError.message : "Не удалось сохранить изменения.");
+    }
+  }
+
+  async function copyTelegramBindText(text: string) {
+    await navigator.clipboard.writeText(text);
+    toast.success("Ссылка скопирована, перешлите её ученику");
+  }
 
   if (loading) {
     return <main className="mx-auto max-w-5xl p-6 text-sm text-muted-foreground">Загрузка...</main>;
@@ -172,111 +190,121 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
         </Link>
       </Button>
 
-      <Card>
-        <CardContent className="flex flex-col gap-6 p-6 sm:flex-row sm:items-start">
-          <StudentAvatar student={student} size="lg" className="size-20" />
-          <div className="flex min-w-0 flex-1 flex-col gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold">{student.fullName}</h1>
-              <Badge variant={student.status === "active" ? "secondary" : "outline"}>
-                {studentStatusLabels[student.status]}
-              </Badge>
-              {balance.debtLessons > 0 ? <Badge variant="destructive">Долг: {balance.debtLessons}</Badge> : null}
-            </div>
-            <div className="grid gap-2 text-sm sm:grid-cols-2">
-              <p className="flex items-center gap-1.5">
-                <span className="text-muted-foreground">Telegram: </span>
-                {student.telegramChatId ? (
-                  <span className="inline-flex items-center gap-1">
-                    <TelegramIcon className="size-3.5 shrink-0" />
-                    {student.telegramUsername ? `@${student.telegramUsername}` : "Подключен"}
-                  </span>
-                ) : (
-                  "Не подключен"
-                )}
-              </p>
-              <p>
-                <span className="text-muted-foreground">Цена занятия: </span>
-                {formatMoney(student.defaultLessonPrice, currency)}
-              </p>
-              <p>
-                <span className="text-muted-foreground">Добавлен: </span>
-                {formatDate(student.createdAt)}
-              </p>
-              {!student.telegramChatId && telegramBindUrl ? (
-                <p className="truncate">
-                  <span className="text-muted-foreground">Ссылка для привязки: </span>
-                  {telegramBindUrl}
-                </p>
-              ) : null}
-            </div>
-          </div>
-          <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-1">
-            <BalanceStat label="Осталось" value={String(balance.remainingLessons)} highlight={balance.remainingLessons < 1} />
-            <BalanceStat label="Использовано" value={String(balance.chargedLessons)} />
-            <BalanceStat label="Оплачено занятий" value={String(balance.paidLessons)} />
-            <BalanceStat label="Долг" value={String(balance.debtLessons)} highlight={balance.debtLessons > 0} />
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-6 lg:grid-cols-2">
+      {editing ? (
         <Card>
           <CardHeader>
-            <CardTitle>Оплаты</CardTitle>
-            <CardDescription>{payments.length} записей</CardDescription>
+            <CardTitle>Редактирование</CardTitle>
+            <CardDescription>Имя и аватар ученика</CardDescription>
           </CardHeader>
           <CardContent>
-            {payments.length ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Дата</TableHead>
-                    <TableHead>Занятий</TableHead>
-                    <TableHead>Способ</TableHead>
-                    <TableHead className="text-right">Сумма</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {payments.map((payment) => (
-                    <TableRow key={payment.id}>
-                      <TableCell>{formatFullDate(payment.paidAt)}</TableCell>
-                      <TableCell>{payment.lessonCount}</TableCell>
-                      <TableCell>{paymentMethodLabels[payment.method]}</TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatMoney(payment.amount, currency)}
-                        {payment.packageId ? (
-                          <p className="text-xs font-normal text-muted-foreground">
-                            {packagesById.get(payment.packageId)?.name ?? "Пакет"}
-                          </p>
-                        ) : null}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <p className="text-sm text-muted-foreground">Оплат пока нет.</p>
-            )}
+            <StudentForm
+              key={student.updatedAt}
+              student={student}
+              submitLabel="Сохранить"
+              onSubmit={handleStudentUpdate}
+              onCancel={() => setEditing(false)}
+            />
           </CardContent>
         </Card>
-
+      ) : (
         <Card>
-          <CardHeader>
-            <CardTitle>Корректировки баланса</CardTitle>
-            <CardDescription>{adjustments.length} записей</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            {adjustments.length ? (
-              adjustments.map((adjustment) => (
-                <AdjustmentRow key={adjustment.id} adjustment={adjustment} />
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground">Корректировок нет.</p>
-            )}
+          <CardContent className="flex flex-col gap-6 p-6 sm:flex-row sm:items-start">
+            <StudentAvatar student={student} size="lg" className="size-20" />
+            <div className="flex min-w-0 flex-1 flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-semibold">{student.fullName}</h1>
+                <Badge variant={student.status === "active" ? "secondary" : "outline"}>
+                  {studentStatusLabels[student.status]}
+                </Badge>
+                {balance.debtLessons > 0 ? <Badge variant="destructive">Долг: {balance.debtLessons}</Badge> : null}
+              </div>
+              <div className="grid gap-2 text-sm sm:grid-cols-2">
+                <p className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">Telegram: </span>
+                  {student.telegramChatId ? (
+                    <span className="inline-flex items-center gap-1">
+                      <TelegramIcon className="size-3.5 shrink-0" />
+                      {student.telegramUsername ? `@${student.telegramUsername}` : "Подключен"}
+                    </span>
+                  ) : telegramBindUrl ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      onClick={() => void copyTelegramBindText(telegramBindUrl)}
+                    >
+                      <TelegramIcon data-icon="inline-start" />
+                      Подключить Telegram
+                    </Button>
+                  ) : (
+                    "Не подключен"
+                  )}
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Цена занятия: </span>
+                  {formatMoney(student.defaultLessonPrice, currency)}
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Добавлен: </span>
+                  {formatDate(student.createdAt)}
+                </p>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-col gap-3">
+              <Button variant="outline" size="sm" type="button" onClick={() => setEditing(true)}>
+                <Pencil data-icon="inline-start" />
+                Редактировать
+              </Button>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-1">
+                <BalanceStat label="Осталось" value={String(balance.remainingLessons)} highlight={balance.remainingLessons < 1} />
+                <BalanceStat label="Использовано" value={String(balance.chargedLessons)} />
+                <BalanceStat label="Оплачено занятий" value={String(balance.paidLessons)} />
+                <BalanceStat label="Долг" value={String(balance.debtLessons)} highlight={balance.debtLessons > 0} />
+              </div>
+            </div>
           </CardContent>
         </Card>
-      </div>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Оплаты</CardTitle>
+          <CardDescription>{payments.length} записей</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {payments.length ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Дата</TableHead>
+                  <TableHead>Занятий</TableHead>
+                  <TableHead>Способ</TableHead>
+                  <TableHead className="text-right">Сумма</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {payments.map((payment) => (
+                  <TableRow key={payment.id}>
+                    <TableCell>{formatFullDate(payment.paidAt)}</TableCell>
+                    <TableCell>{payment.lessonCount}</TableCell>
+                    <TableCell>{paymentMethodLabels[payment.method]}</TableCell>
+                    <TableCell className="text-right font-medium">
+                      {formatMoney(payment.amount, currency)}
+                      {payment.packageId ? (
+                        <p className="text-xs font-normal text-muted-foreground">
+                          {packagesById.get(payment.packageId)?.name ?? "Пакет"}
+                        </p>
+                      ) : null}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="text-sm text-muted-foreground">Оплат пока нет.</p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -319,21 +347,6 @@ function BalanceStat({
     <div className={cn("rounded-lg border px-3 py-2", highlight && "border-destructive/30 bg-destructive/5")}>
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className={cn("text-lg font-semibold tabular-nums", highlight && "text-destructive")}>{value}</p>
-    </div>
-  );
-}
-
-function AdjustmentRow({ adjustment }: { adjustment: BalanceAdjustment }) {
-  return (
-    <div className="rounded-lg border p-3 text-sm">
-      <div className="flex items-center justify-between gap-2">
-        <p className="font-medium">
-          {adjustment.lessonDelta > 0 ? "+" : ""}
-          {adjustment.lessonDelta} занятий
-        </p>
-        <p className="text-muted-foreground">{formatFullDate(adjustment.createdAt)}</p>
-      </div>
-      <p className="mt-1 text-muted-foreground">{adjustment.reason}</p>
     </div>
   );
 }
