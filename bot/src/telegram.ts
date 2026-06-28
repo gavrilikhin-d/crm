@@ -273,7 +273,7 @@ function formatLessonReminder(student: Student, lesson: Lesson): string {
   return [
     `${student.fullName}, напоминаем о занятии.`,
     `Когда: ${date}`,
-    `Формат: ${kind}, офлайн`,
+    `Формат: ${kind}`,
     paymentLine,
     "Пожалуйста, подтвердите участие."
   ]
