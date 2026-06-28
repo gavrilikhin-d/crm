@@ -6,28 +6,24 @@ await resetDatabase();
 
 const anna = await store.createStudent({
   fullName: "Анна Смирнова",
-  phone: "+7 900 111-22-33",
   telegramUsername: "@anna_voice",
   defaultLessonPrice: 3000
 });
 
 const ivan = await store.createStudent({
   fullName: "Иван Петров",
-  phone: "+7 900 444-55-66",
   telegramUsername: "@ivan_music",
   defaultLessonPrice: 3000
 });
 
 const maria = await store.createStudent({
   fullName: "Мария Орлова",
-  phone: "+7 900 777-88-99",
   telegramUsername: "@maria_sings",
   defaultLessonPrice: 3000
 });
 
 const sophia = await store.createStudent({
   fullName: "София Лебедева",
-  phone: "+7 900 222-33-44",
   telegramUsername: "@sophia_voice",
   telegramChatId: "1000000001",
   defaultLessonPrice: 3000

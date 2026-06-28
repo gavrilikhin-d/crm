@@ -89,10 +89,9 @@ async function getSnapshot(_request: IncomingMessage, response: ServerResponse) 
 
 async function createStudent(request: IncomingMessage, response: ServerResponse) {
   const body = await readJson(request);
-  requireFields(body, ["fullName", "phone"]);
+  requireFields(body, ["fullName"]);
   jsonOk(response, await store.createStudent(body as {
     fullName: string;
-    phone: string;
     telegramUsername?: string;
     telegramChatId?: string;
     defaultLessonPrice?: number;

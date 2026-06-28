@@ -66,7 +66,6 @@ export class Store {
 
   async createStudent(input: {
     fullName: string;
-    phone: string;
     telegramUsername?: string;
     telegramChatId?: string;
     defaultLessonPrice?: number;
@@ -76,7 +75,6 @@ export class Store {
     const student: Student = {
       id: nanoid(),
       fullName: input.fullName.trim(),
-      phone: input.phone.trim(),
       telegramUsername: optional(input.telegramUsername),
       telegramChatId: optional(input.telegramChatId),
       telegramBindToken: createTelegramBindToken(db),

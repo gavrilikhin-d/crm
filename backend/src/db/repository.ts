@@ -162,7 +162,6 @@ export async function insertStudent(student: Student): Promise<void> {
   await db.insert(students).values({
     id: student.id,
     fullName: student.fullName,
-    phone: student.phone,
     telegramUsername: student.telegramUsername ?? null,
     telegramChatId: student.telegramChatId ?? null,
     telegramBindToken: student.telegramBindToken,
@@ -178,7 +177,6 @@ export async function updateStudentRecord(student: Student): Promise<void> {
     .update(students)
     .set({
       fullName: student.fullName,
-      phone: student.phone,
       telegramUsername: student.telegramUsername ?? null,
       telegramChatId: student.telegramChatId ?? null,
       telegramBindToken: student.telegramBindToken,
@@ -421,7 +419,6 @@ export async function importDatabase(snapshot: Database): Promise<void> {
       await tx.insert(students).values(snapshot.students.map((student) => ({
         id: student.id,
         fullName: student.fullName,
-        phone: student.phone,
         telegramUsername: student.telegramUsername ?? null,
         telegramChatId: student.telegramChatId ?? null,
         telegramBindToken: student.telegramBindToken,
@@ -552,7 +549,6 @@ function mapStudent(row: typeof students.$inferSelect): Student {
   return {
     id: row.id,
     fullName: row.fullName,
-    phone: row.phone,
     telegramUsername: row.telegramUsername ?? undefined,
     telegramChatId: row.telegramChatId ?? undefined,
     telegramBindToken: row.telegramBindToken,

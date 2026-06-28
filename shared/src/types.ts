@@ -28,7 +28,6 @@ export type RecurringDeleteScope = "single" | "following" | "all";
 export interface Student {
   id: string;
   fullName: string;
-  phone: string;
   telegramUsername?: string;
   telegramChatId?: string;
   telegramBindToken: string;

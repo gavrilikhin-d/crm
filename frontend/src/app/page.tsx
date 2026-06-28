@@ -714,7 +714,6 @@ function ClientsView({
                 <div>
                   <h3 className="font-semibold text-stone-900">{student.fullName}</h3>
                   <p className="text-sm text-muted-foreground">
-                    {student.phone} ·{" "}
                     {student.telegramChatId
                       ? student.telegramUsername
                         ? `@${student.telegramUsername}`
@@ -903,10 +902,6 @@ function StudentForm({ onSubmit }: { onSubmit: (event: FormEvent<HTMLFormElement
         <Field>
           <FieldLabel htmlFor="student-full-name">ФИО</FieldLabel>
           <Input id="student-full-name" name="fullName" placeholder="ФИО" required />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="student-phone">Телефон</FieldLabel>
-          <Input id="student-phone" name="phone" placeholder="Телефон" required />
         </Field>
         <Button type="submit">Добавить ученика</Button>
       </FieldGroup>

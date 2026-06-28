@@ -1,9 +1,8 @@
-import { boolean, integer, jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, foreignKey, integer, jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 
 export const students = pgTable("students", {
   id: text("id").primaryKey(),
   fullName: text("full_name").notNull(),
-  phone: text("phone").notNull(),
   telegramUsername: text("telegram_username"),
   telegramChatId: text("telegram_chat_id"),
   telegramBindToken: text("telegram_bind_token").notNull(),
@@ -38,25 +37,38 @@ export const recurringSchedules = pgTable("recurring_schedules", {
 export const recurringScheduleStudents = pgTable(
   "recurring_schedule_students",
   {
-    scheduleId: text("schedule_id")
-      .notNull()
-      .references(() => recurringSchedules.id, { onDelete: "cascade" }),
-    studentId: text("student_id")
-      .notNull()
-      .references(() => students.id, { onDelete: "cascade" })
+    scheduleId: text("schedule_id").notNull(),
+    studentId: text("student_id").notNull()
   },
-  (table) => [primaryKey({ columns: [table.scheduleId, table.studentId] })]
+  (table) => [
+    primaryKey({ columns: [table.scheduleId, table.studentId] }),
+    foreignKey({
+      name: "rec_sched_students_schedule_fk",
+      columns: [table.scheduleId],
+      foreignColumns: [recurringSchedules.id]
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "rec_sched_students_student_fk",
+      columns: [table.studentId],
+      foreignColumns: [students.id]
+    }).onDelete("cascade")
+  ]
 );
 
 export const recurringSkippedOccurrences = pgTable(
   "recurring_skipped_occurrences",
   {
-    scheduleId: text("schedule_id")
-      .notNull()
-      .references(() => recurringSchedules.id, { onDelete: "cascade" }),
+    scheduleId: text("schedule_id").notNull(),
     startsAt: timestamp("starts_at", { withTimezone: true, mode: "string" }).notNull()
   },
-  (table) => [primaryKey({ columns: [table.scheduleId, table.startsAt] })]
+  (table) => [
+    primaryKey({ columns: [table.scheduleId, table.startsAt] }),
+    foreignKey({
+      name: "rec_skipped_schedule_fk",
+      columns: [table.scheduleId],
+      foreignColumns: [recurringSchedules.id]
+    }).onDelete("cascade")
+  ]
 );
 
 export const lessons = pgTable("lessons", {
