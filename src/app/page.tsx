@@ -85,6 +85,8 @@ const lessonDurationByType = {
   group: 90,
   individual: 60
 } as const;
+const defaultRecurringLessonCount = 4;
+const maxRecurringLessonCount = 24;
 
 export default function Home() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
@@ -208,13 +210,29 @@ export default function Home() {
     const select = form.elements.namedItem("studentIds") as HTMLSelectElement;
     const studentIds = [...select.selectedOptions].map((option) => option.value);
     const lessonType = studentIds.length > 1 ? "group" : "individual";
-    data.studentIds = studentIds;
-    data.lessonType = lessonType;
-    data.durationMinutes = lessonDurationByType[lessonType];
+    const repeatWeekly = data.repeatWeekly === "on";
+    const lessonCount = repeatWeekly
+      ? clamp(Number(data.repeatCount) || defaultRecurringLessonCount, 1, maxRecurringLessonCount)
+      : 1;
+    const payload = {
+      startsAt: String(data.startsAt),
+      studentIds,
+      lessonType,
+      durationMinutes: lessonDurationByType[lessonType]
+    };
+
     await withRefresh(async () => {
-      await api("/api/lessons", { method: "POST", body: data });
+      for (let index = 0; index < lessonCount; index += 1) {
+        await api("/api/lessons", {
+          method: "POST",
+          body: {
+            ...payload,
+            startsAt: addWeeksToDateTimeLocal(payload.startsAt, index)
+          }
+        });
+      }
       form.reset();
-      return "Занятие добавлено.";
+      return lessonCount === 1 ? "Занятие добавлено." : `Добавлено ${lessonCount} занятий.`;
     });
   }
 
@@ -482,6 +500,22 @@ export default function Home() {
                         </option>
                       ))}
                   </Select>
+                  <label className="flex items-center gap-2 text-sm font-medium text-stone-700">
+                    <input
+                      className="size-4 rounded border-stone-300 text-orange-600 focus:ring-orange-500"
+                      name="repeatWeekly"
+                      type="checkbox"
+                    />
+                    Повторять еженедельно
+                  </label>
+                  <Input
+                    name="repeatCount"
+                    type="number"
+                    min="1"
+                    max={maxRecurringLessonCount}
+                    defaultValue={defaultRecurringLessonCount}
+                    placeholder="Количество занятий"
+                  />
                   <Button type="submit">Добавить в календарь</Button>
                 </form>
               </CardContent>
@@ -1218,6 +1252,21 @@ function sameDate(first: Date, second: Date): boolean {
     first.getMonth() === second.getMonth() &&
     first.getDate() === second.getDate()
   );
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(Math.trunc(value), min), max);
+}
+
+function addWeeksToDateTimeLocal(value: string, weeks: number): string {
+  const date = new Date(value);
+  date.setDate(date.getDate() + weeks * 7);
+  return formatDateTimeLocal(date);
+}
+
+function formatDateTimeLocal(value: Date): string {
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`;
 }
 
 function getCurrentTimeOffset(value: Date): number | null {
