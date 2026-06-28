@@ -15,6 +15,7 @@ import type {
 } from "@crm/shared";
 import { formatMoney, resolveCurrency } from "@crm/shared/currency";
 import { ParticipantStatusBadge } from "@/components/participant-status-badge";
+import { TelegramIcon } from "@/components/icons/telegram-icon";
 import { StudentAvatar } from "@/components/student-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -183,13 +184,16 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
               {balance.debtLessons > 0 ? <Badge variant="destructive">Долг: {balance.debtLessons}</Badge> : null}
             </div>
             <div className="grid gap-2 text-sm sm:grid-cols-2">
-              <p>
+              <p className="flex items-center gap-1.5">
                 <span className="text-muted-foreground">Telegram: </span>
-                {student.telegramChatId
-                  ? student.telegramUsername
-                    ? `@${student.telegramUsername}`
-                    : "Подключен"
-                  : "Не подключен"}
+                {student.telegramChatId ? (
+                  <span className="inline-flex items-center gap-1">
+                    <TelegramIcon className="size-3.5 shrink-0" />
+                    {student.telegramUsername ? `@${student.telegramUsername}` : "Подключен"}
+                  </span>
+                ) : (
+                  "Не подключен"
+                )}
               </p>
               <p>
                 <span className="text-muted-foreground">Цена занятия: </span>

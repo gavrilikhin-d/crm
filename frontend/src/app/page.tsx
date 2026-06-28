@@ -21,6 +21,7 @@ import { AvatarPicker } from "@/components/avatar-picker";
 import { LessonOverviewSheet } from "@/components/lesson-overview-sheet";
 import { LessonParticipantSummary } from "@/components/lesson-participant-summary";
 import { ParticipantCardAvatar, ParticipantCardLabel } from "@/components/participant-card-label";
+import { TelegramIcon } from "@/components/icons/telegram-icon";
 import { StudentLink } from "@/components/student-link";
 import { StudentAvatar } from "@/components/student-avatar";
 import { Badge } from "@/components/ui/badge";
@@ -622,14 +623,12 @@ export default function Home() {
         {activeSection === "clients" ? (
           <ClientsView
             students={students}
-            getBalance={getBalance}
             onAddStudent={() => {
               setStudentFormKey((key) => key + 1);
               setActiveModal("student");
             }}
             onEditStudent={setEditingStudent}
             onDeleteStudent={handleDeleteStudent}
-            onAction={(action) => withRefresh(action)}
           />
         ) : null}
 
@@ -745,27 +744,18 @@ function getTelegramBindUrl(student: Student): string | undefined {
 
 function ClientsView({
   students,
-  getBalance,
   onAddStudent,
   onEditStudent,
-  onDeleteStudent,
-  onAction
+  onDeleteStudent
 }: {
   students: Student[];
-  getBalance: (studentId: string) => StudentBalance;
   onAddStudent: () => void;
   onEditStudent: (student: Student) => void;
   onDeleteStudent: (student: Student) => void;
-  onAction: (action: () => Promise<string | void>) => void;
 }) {
-  const [copiedTelegramStudentId, setCopiedTelegramStudentId] = useState<string | null>(null);
-
-  async function copyTelegramBindText(studentId: string, text: string) {
+  async function copyTelegramBindText(text: string) {
     await navigator.clipboard.writeText(text);
-    setCopiedTelegramStudentId(studentId);
-    window.setTimeout(() => {
-      setCopiedTelegramStudentId((current) => (current === studentId ? null : current));
-    }, 2_000);
+    toast.success("Ссылка скопирована, перешлите её ученику");
   }
 
   return (
@@ -781,14 +771,10 @@ function ClientsView({
         </CardHeader>
         <CardContent className="grid gap-3">
           {students.map((student) => {
-            const balance = getBalance(student.id);
             const telegramBindUrl = getTelegramBindUrl(student);
-            const telegramBindCopied = copiedTelegramStudentId === student.id;
-            const canSendPaymentReminder =
-              Boolean(student.telegramChatId) && (balance.remainingLessons < 1 || balance.debtLessons > 0);
             return (
               <Card key={student.id}>
-                <CardContent className="grid grid-cols-[auto_minmax(0,1fr)_160px_220px] items-center gap-4 p-4">
+                <CardContent className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 p-4">
                 <StudentLink studentId={student.id}>
                   <StudentAvatar student={student} size="lg" />
                 </StudentLink>
@@ -796,57 +782,29 @@ function ClientsView({
                   <h3 className="font-semibold text-stone-900">
                     <StudentLink studentId={student.id}>{student.fullName}</StudentLink>
                   </h3>
-                  <p className="text-sm text-muted-foreground">
-                    {student.telegramChatId
-                      ? student.telegramUsername
-                        ? `@${student.telegramUsername}`
-                        : "Telegram подключен"
-                      : "Telegram не подключен"}
-                  </p>
-                  {!student.telegramChatId ? (
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      {telegramBindUrl ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          type="button"
-                          onClick={() => void copyTelegramBindText(student.id, telegramBindUrl)}
-                        >
-                          Скопировать ссылку Telegram
-                        </Button>
-                      ) : (
-                        <Badge variant="secondary">Укажите Telegram bot username</Badge>
-                      )}
-                      {telegramBindCopied ? (
-                        <Badge variant="secondary" aria-live="polite">
-                          Скопировано
-                        </Badge>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  <p className="font-semibold text-foreground">{balance.remainingLessons} осталось</p>
-                  <p>{balance.chargedLessons} использовано</p>
+                  {student.telegramChatId ? (
+                    <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                      <TelegramIcon className="size-3.5 shrink-0" />
+                      {student.telegramUsername ? `@${student.telegramUsername}` : "Telegram подключен"}
+                    </p>
+                  ) : telegramBindUrl ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      className="mt-1"
+                      onClick={() => void copyTelegramBindText(telegramBindUrl)}
+                    >
+                      <TelegramIcon data-icon="inline-start" />
+                      Подключить Telegram
+                    </Button>
+                  ) : (
+                    <Badge variant="secondary" className="mt-1">
+                      Укажите Telegram bot username
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex justify-end gap-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    type="button"
-                    disabled={!canSendPaymentReminder}
-                    onClick={() =>
-                      onAction(async () => {
-                        const result = await api<{ sent: boolean; reason?: string }>(
-                          `/api/payment-reminders/${student.id}`,
-                          { method: "POST" }
-                        );
-                        return result.sent ? "Напоминание об оплате отправлено." : result.reason || "Напоминание не отправлено.";
-                      })
-                    }
-                  >
-                    Напомнить
-                  </Button>
                   <Button variant="ghost" size="icon" type="button" onClick={() => onEditStudent(student)} aria-label={`Редактировать ${student.fullName}`}>
                     <Pencil className="size-4" />
                   </Button>
