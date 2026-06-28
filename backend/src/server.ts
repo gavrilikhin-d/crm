@@ -127,6 +127,7 @@ async function createLesson(request: IncomingMessage, response: ServerResponse) 
     durationMinutes?: number;
     lessonType: LessonType;
     studentIds: string[];
+    repeatWeekly?: boolean;
   }), 201);
 }
 

@@ -11,6 +11,7 @@ import type {
   ParticipantStatus,
   Payment,
   PaymentMethod,
+  RecurringSchedule,
   Reminder,
   Student,
   StudentBalance,
@@ -18,6 +19,7 @@ import type {
 } from "@crm/shared";
 
 const dbPath = process.env.DATA_FILE_PATH ?? join(process.cwd(), "data", "db.json");
+const RECURRING_HORIZON_WEEKS = 52;
 
 const now = () => new Date().toISOString();
 
@@ -84,6 +86,7 @@ export function parseReminderMinutes(value?: string): number[] {
 export class Store {
   private db: Database | null = null;
   private loadedMtimeMs = 0;
+  private saveLock: Promise<void> = Promise.resolve();
 
   async load(): Promise<Database> {
     if (this.db && !(await this.hasExternalUpdate())) {
@@ -93,6 +96,9 @@ export class Store {
     try {
       const raw = await readFile(dbPath, "utf8");
       this.db = JSON.parse(raw) as Database;
+      if (!this.db.recurringSchedules) {
+        this.db.recurringSchedules = [];
+      }
       this.loadedMtimeMs = await this.getDbMtimeMs();
     } catch {
       this.db = defaultDatabase();
@@ -111,8 +117,18 @@ export class Store {
       return;
     }
 
+    const run = this.saveLock.then(() => this.writeDbToDisk());
+    this.saveLock = run.catch(() => undefined);
+    await run;
+  }
+
+  private async writeDbToDisk(): Promise<void> {
+    if (!this.db) {
+      return;
+    }
+
     await mkdir(dirname(dbPath), { recursive: true });
-    const tmpPath = `${dbPath}.${process.pid}.tmp`;
+    const tmpPath = `${dbPath}.${process.pid}.${nanoid()}.tmp`;
     await writeFile(tmpPath, JSON.stringify(this.db, null, 2));
     await rename(tmpPath, dbPath);
     this.loadedMtimeMs = await this.getDbMtimeMs();
@@ -120,6 +136,7 @@ export class Store {
 
   async getSnapshot(): Promise<Database> {
     const db = await this.load();
+    await this.persistMaterializedLessons(db);
     return structuredClone(db);
   }
 
@@ -227,6 +244,7 @@ export class Store {
     durationMinutes?: number;
     lessonType: "individual" | "group";
     studentIds: string[];
+    repeatWeekly?: boolean;
   }): Promise<Lesson> {
     const db = await this.load();
     const uniqueStudentIds = [...new Set(input.studentIds)].filter(Boolean);
@@ -236,30 +254,40 @@ export class Store {
 
     uniqueStudentIds.forEach((studentId) => mustFind(db.students, studentId, "Student"));
 
-    const timestamp = now();
-    const participants: LessonParticipant[] = uniqueStudentIds.map((studentId) => ({
-      id: nanoid(),
-      studentId,
-      status: "awaiting",
-      balanceCharged: false,
-      hasDebt: this.calculateBalanceFor(db, studentId).remainingLessons < 1
-    }));
+    const startsAt = new Date(input.startsAt).toISOString();
+    let recurringScheduleId: string | undefined;
 
-    const lesson: Lesson = {
-      id: nanoid(),
-      startsAt: new Date(input.startsAt).toISOString(),
-      durationMinutes:
-        input.durationMinutes ??
-        (input.lessonType === "group" ? db.settings.groupDurationMinutes : db.settings.individualDurationMinutes),
-      originalType: input.lessonType,
-      effectiveType: input.lessonType,
-      status: "scheduled",
-      participants,
-      createdAt: timestamp,
-      updatedAt: timestamp
-    };
+    if (input.repeatWeekly) {
+      const timestamp = now();
+      const startDate = new Date(startsAt);
+      const schedule: RecurringSchedule = {
+        id: nanoid(),
+        weekday: startDate.getDay(),
+        time: formatScheduleTime(startDate),
+        durationMinutes:
+          input.durationMinutes ??
+          (input.lessonType === "group" ? db.settings.groupDurationMinutes : db.settings.individualDurationMinutes),
+        lessonType: input.lessonType,
+        studentIds: uniqueStudentIds,
+        activeFrom: startsAt,
+        skippedOccurrences: [],
+        createdAt: timestamp,
+        updatedAt: timestamp
+      };
+      db.recurringSchedules.push(schedule);
+      recurringScheduleId = schedule.id;
+    }
 
-    db.lessons.push(recalculateLesson(lesson, db.settings.individualDurationMinutes));
+    const lesson = buildLesson(db, {
+      startsAt,
+      durationMinutes: input.durationMinutes,
+      lessonType: input.lessonType,
+      studentIds: uniqueStudentIds,
+      recurringScheduleId
+    });
+
+    db.lessons.push(lesson);
+    this.materializeRecurringLessons(db);
     await this.save();
     return lesson;
   }
@@ -340,8 +368,17 @@ export class Store {
 
   async deleteLesson(lessonId: string): Promise<void> {
     const db = await this.load();
-    mustFind(db.lessons, lessonId, "Lesson");
-    db.lessons = db.lessons.filter((lesson) => lesson.id !== lessonId);
+    const lesson = mustFind(db.lessons, lessonId, "Lesson");
+
+    if (lesson.recurringScheduleId) {
+      const schedule = db.recurringSchedules.find((item) => item.id === lesson.recurringScheduleId);
+      if (schedule) {
+        schedule.skippedOccurrences = [...(schedule.skippedOccurrences ?? []), lesson.startsAt];
+        schedule.updatedAt = now();
+      }
+    }
+
+    db.lessons = db.lessons.filter((item) => item.id !== lessonId);
     db.reminders = db.reminders.filter((reminder) => reminder.lessonId !== lessonId);
     db.telegramInteractions = db.telegramInteractions.filter((interaction) => interaction.lessonId !== lessonId);
     await this.save();
@@ -433,6 +470,7 @@ export class Store {
 
   async getDashboard() {
     const db = await this.load();
+    await this.persistMaterializedLessons(db);
     const balances = db.students.map((student) => ({
       student,
       balance: this.calculateBalanceFor(db, student.id)
@@ -452,32 +490,52 @@ export class Store {
   }
 
   calculateBalanceFor(db: Database, studentId: string): StudentBalance {
-    const paidLessons = db.payments
-      .filter((payment) => payment.studentId === studentId)
-      .reduce((sum, payment) => sum + payment.lessonCount, 0);
+    return getStudentBalance(db, studentId);
+  }
 
-    const adjustedLessons = db.balanceAdjustments
-      .filter((adjustment) => adjustment.studentId === studentId)
-      .reduce((sum, adjustment) => sum + adjustment.lessonDelta, 0);
+  private async persistMaterializedLessons(db: Database): Promise<void> {
+    if (this.materializeRecurringLessons(db)) {
+      await this.save();
+    }
+  }
 
-    const chargedLessons = db.lessons.reduce((sum, lesson) => {
-      return (
-        sum +
-        lesson.participants.filter(
-          (participant) => participant.studentId === studentId && participant.balanceCharged
-        ).length
-      );
-    }, 0);
+  private materializeRecurringLessons(db: Database): boolean {
+    let changed = false;
+    const horizonEnd = new Date();
+    horizonEnd.setDate(horizonEnd.getDate() + RECURRING_HORIZON_WEEKS * 7);
 
-    const available = paidLessons + adjustedLessons - chargedLessons;
+    for (const schedule of db.recurringSchedules) {
+      if (schedule.activeTo && new Date(schedule.activeTo).getTime() < Date.now()) {
+        continue;
+      }
 
-    return {
-      studentId,
-      paidLessons: paidLessons + adjustedLessons,
-      chargedLessons,
-      remainingLessons: Math.max(0, available),
-      debtLessons: Math.max(0, -available)
-    };
+      const skipped = new Set(schedule.skippedOccurrences ?? []);
+      let occurrence = new Date(schedule.activeFrom);
+
+      while (occurrence.getTime() <= horizonEnd.getTime()) {
+        const startsAt = occurrence.toISOString();
+
+        if (
+          !skipped.has(startsAt) &&
+          !hasRecurringLesson(db, schedule.id, startsAt)
+        ) {
+          db.lessons.push(
+            buildLesson(db, {
+              startsAt,
+              durationMinutes: schedule.durationMinutes,
+              lessonType: schedule.lessonType,
+              studentIds: schedule.studentIds,
+              recurringScheduleId: schedule.id
+            })
+          );
+          changed = true;
+        }
+
+        occurrence = addWeeks(occurrence, 1);
+      }
+    }
+
+    return changed;
   }
 
   private async hasExternalUpdate(): Promise<boolean> {
@@ -568,6 +626,90 @@ function refreshParticipantDebtFlags(db: Database, studentId: string, balance: S
       }
     }
   }
+}
+
+function buildLesson(
+  db: Database,
+  input: {
+    startsAt: string;
+    durationMinutes?: number;
+    lessonType: "individual" | "group";
+    studentIds: string[];
+    recurringScheduleId?: string;
+  }
+): Lesson {
+  const timestamp = now();
+  const participants: LessonParticipant[] = input.studentIds.map((studentId) => ({
+    id: nanoid(),
+    studentId,
+    status: "awaiting",
+    balanceCharged: false,
+    hasDebt: getStudentBalance(db, studentId).remainingLessons < 1
+  }));
+
+  const lesson: Lesson = {
+    id: nanoid(),
+    startsAt: new Date(input.startsAt).toISOString(),
+    durationMinutes:
+      input.durationMinutes ??
+      (input.lessonType === "group" ? db.settings.groupDurationMinutes : db.settings.individualDurationMinutes),
+    originalType: input.lessonType,
+    effectiveType: input.lessonType,
+    status: "scheduled",
+    participants,
+    recurringScheduleId: input.recurringScheduleId,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
+
+  return recalculateLesson(lesson, db.settings.individualDurationMinutes);
+}
+
+function hasRecurringLesson(db: Database, scheduleId: string, startsAt: string): boolean {
+  const target = new Date(startsAt).getTime();
+  return db.lessons.some(
+    (lesson) => lesson.recurringScheduleId === scheduleId && new Date(lesson.startsAt).getTime() === target
+  );
+}
+
+function addWeeks(value: Date, weeks: number): Date {
+  const next = new Date(value);
+  next.setDate(next.getDate() + weeks * 7);
+  return next;
+}
+
+function formatScheduleTime(value: Date): string {
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${pad(value.getHours())}:${pad(value.getMinutes())}`;
+}
+
+function getStudentBalance(db: Database, studentId: string): StudentBalance {
+  const paidLessons = db.payments
+    .filter((payment) => payment.studentId === studentId)
+    .reduce((sum, payment) => sum + payment.lessonCount, 0);
+
+  const adjustedLessons = db.balanceAdjustments
+    .filter((adjustment) => adjustment.studentId === studentId)
+    .reduce((sum, adjustment) => sum + adjustment.lessonDelta, 0);
+
+  const chargedLessons = db.lessons.reduce((sum, lesson) => {
+    return (
+      sum +
+      lesson.participants.filter(
+        (participant) => participant.studentId === studentId && participant.balanceCharged
+      ).length
+    );
+  }, 0);
+
+  const available = paidLessons + adjustedLessons - chargedLessons;
+
+  return {
+    studentId,
+    paidLessons: paidLessons + adjustedLessons,
+    chargedLessons,
+    remainingLessons: Math.max(0, available),
+    debtLessons: Math.max(0, -available)
+  };
 }
 
 export const store = new Store();

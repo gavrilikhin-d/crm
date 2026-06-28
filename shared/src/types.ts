@@ -62,6 +62,7 @@ export interface Lesson {
   effectiveType: LessonType;
   status: LessonStatus;
   participants: LessonParticipant[];
+  recurringScheduleId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -75,6 +76,7 @@ export interface RecurringSchedule {
   studentIds: string[];
   activeFrom: string;
   activeTo?: string;
+  skippedOccurrences?: string[];
   createdAt: string;
   updatedAt: string;
 }

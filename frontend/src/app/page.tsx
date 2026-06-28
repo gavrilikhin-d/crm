@@ -94,8 +94,6 @@ const lessonDurationByType = {
   group: 90,
   individual: 60
 } as const;
-const defaultRecurringLessonCount = 4;
-const maxRecurringLessonCount = 24;
 
 type CalendarRange = {
   startHour: number;
@@ -237,30 +235,23 @@ export default function Home() {
     }
     const lessonType = studentIds.length > 1 ? "group" : "individual";
     const repeatWeekly = data.repeatWeekly === "on";
-    const lessonCount = repeatWeekly
-      ? clamp(Number(data.repeatCount) || defaultRecurringLessonCount, 1, maxRecurringLessonCount)
-      : 1;
     const payload = {
       startsAt: String(data.startsAt),
       studentIds,
       lessonType,
-      durationMinutes: lessonDurationByType[lessonType]
+      durationMinutes: lessonDurationByType[lessonType],
+      repeatWeekly
     };
 
     await withRefresh(async () => {
-      for (let index = 0; index < lessonCount; index += 1) {
-        await api("/api/lessons", {
-          method: "POST",
-          body: {
-            ...payload,
-            startsAt: addWeeksToDateTimeLocal(payload.startsAt, index)
-          }
-        });
-      }
+      await api("/api/lessons", {
+        method: "POST",
+        body: payload
+      });
       form.reset();
       setLessonFormKey((key) => key + 1);
       setLessonDialogOpen(false);
-      return lessonCount === 1 ? "Занятие добавлено." : `Добавлено ${lessonCount} занятий.`;
+      return repeatWeekly ? "Создано повторяющееся занятие." : "Занятие добавлено.";
     });
   }
 
@@ -908,19 +899,6 @@ function LessonForm({
           </FieldContent>
         </Field>
 
-        <Field>
-          <FieldLabel htmlFor="lesson-repeat-count">Количество занятий</FieldLabel>
-          <Input
-            id="lesson-repeat-count"
-            name="repeatCount"
-            type="number"
-            min="1"
-            max={maxRecurringLessonCount}
-            defaultValue={defaultRecurringLessonCount}
-            placeholder="Количество занятий"
-          />
-        </Field>
-
         <Button type="submit" disabled={!activeStudents.length}>
           Добавить в календарь
         </Button>
@@ -1404,12 +1382,6 @@ function clamp(value: number, min: number, max: number): number {
 
 function getDefaultLessonStartsAt(date: Date): string {
   return formatDateTimeLocal(new Date(date.getFullYear(), date.getMonth(), date.getDate(), 10, 0));
-}
-
-function addWeeksToDateTimeLocal(value: string, weeks: number): string {
-  const date = new Date(value);
-  date.setDate(date.getDate() + weeks * 7);
-  return formatDateTimeLocal(date);
 }
 
 function formatDateTimeLocal(value: Date): string {
