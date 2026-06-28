@@ -364,6 +364,13 @@ export default function Home() {
                   </Button>
                 ))}
               </div>
+
+              <div className="min-w-52 text-center text-xs font-extrabold uppercase tracking-wide text-stone-400">
+                {scheduleView === "day" ? formatFullDate(selectedDate.toISOString()) : null}
+                {scheduleView === "week" ? formatWeekRange(weekDays) : null}
+                {scheduleView === "month" ? formatMonth(selectedDate) : null}
+              </div>
+              
               <div className="flex items-center gap-2">
                 <Button variant="secondary" size="icon" type="button" onClick={() => shiftCalendar(-1)} aria-label="Предыдущий период">
                   <ChevronLeft className="size-4" />
@@ -375,14 +382,6 @@ export default function Home() {
                   <ChevronRight className="size-4" />
                 </Button>
               </div>
-              <div className="min-w-52 text-center text-xs font-extrabold uppercase tracking-wide text-stone-400">
-                {scheduleView === "day" ? formatFullDate(selectedDate.toISOString()) : null}
-                {scheduleView === "week" ? formatWeekRange(weekDays) : null}
-                {scheduleView === "month" ? formatMonth(selectedDate) : null}
-              </div>
-              <Button variant="secondary" size="sm" onClick={loadSnapshot} disabled={loading}>
-                {loading ? "Загрузка..." : "Синхронизировать"}
-              </Button>
             </div>
 
             {scheduleView === "day" ? (
