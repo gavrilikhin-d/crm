@@ -860,7 +860,6 @@ function PaymentsView({
               <Plus className="size-4" />
             </Button>
           </CardTitle>
-          <CardDescription>{t("payments.description")}</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>

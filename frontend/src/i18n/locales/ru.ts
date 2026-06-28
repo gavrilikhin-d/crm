@@ -128,7 +128,6 @@ const ru = {
   },
   payments: {
     title: "История оплат",
-    description: "Оплаты за разовые занятия и пакеты.",
     addPaymentAria: "Добавить оплату",
     studentDeleted: "Ученик удален",
     packageFallback: "Пакет"
