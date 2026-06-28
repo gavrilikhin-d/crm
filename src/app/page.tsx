@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, type SelectHTMLAttributes, useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   ChevronLeft,
@@ -18,7 +18,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import {
   Sidebar,
   SidebarContent,
@@ -82,6 +81,10 @@ const scheduleViewLabels: Record<ScheduleView, string> = {
 const visibleHours = Array.from({ length: 13 }, (_, index) => index + 9);
 const calendarStartHour = 9;
 const hourHeight = 76;
+const lessonDurationByType = {
+  group: 90,
+  individual: 60
+} as const;
 
 export default function Home() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
@@ -204,11 +207,7 @@ export default function Home() {
     const data = formData(form);
     const select = form.elements.namedItem("studentIds") as HTMLSelectElement;
     data.studentIds = [...select.selectedOptions].map((option) => option.value);
-    if (data.durationMinutes) {
-      data.durationMinutes = Number(data.durationMinutes);
-    } else {
-      delete data.durationMinutes;
-    }
+    data.durationMinutes = lessonDurationByType[data.lessonType === "group" ? "group" : "individual"];
     await withRefresh(async () => {
       await api("/api/lessons", { method: "POST", body: data });
       form.reset();
@@ -471,19 +470,16 @@ export default function Home() {
             <Card id="new-session">
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center justify-between text-base">
-                  Создать занятие <Badge variant="teal">Можно группу</Badge>
+                  Создать занятие <Badge className="bg-teal-100 text-teal-800">Можно группу</Badge>
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <form className="grid gap-3" onSubmit={handleLessonSubmit}>
                   <Input name="startsAt" type="datetime-local" required />
-                  <div className="grid grid-cols-2 gap-3">
-                    <Select name="lessonType" required defaultValue="individual">
-                      <option value="individual">Индивидуальное</option>
-                      <option value="group">Групповое</option>
-                    </Select>
-                    <Input name="durationMinutes" type="number" min="1" placeholder="Минут" />
-                  </div>
+                  <Select name="lessonType" required defaultValue="individual">
+                    <option value="individual">Индивидуальное - 60 минут</option>
+                    <option value="group">Групповое - 90 минут</option>
+                  </Select>
                   <Select name="studentIds" multiple required>
                     {students
                       .filter((student) => student.status === "active")
@@ -504,7 +500,9 @@ export default function Home() {
                 <CardDescription>{weekLessons.length} занятий запланировано на этой неделе.</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-2">
-                <Badge variant="teal">{weekLessons.filter((lesson) => lesson.effectiveType === "group").length} групповых</Badge>
+                <Badge className="bg-teal-100 text-teal-800">
+                  {weekLessons.filter((lesson) => lesson.effectiveType === "group").length} групповых
+                </Badge>
                 <Badge variant="secondary">
                   {weekLessons.filter((lesson) => lesson.effectiveType === "individual").length} индивидуальных
                 </Badge>
@@ -584,6 +582,18 @@ function SidebarLink({
         <span>{children}</span>
       </SidebarMenuButton>
     </SidebarMenuItem>
+  );
+}
+
+function Select({ className, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select
+      className={cn(
+        "w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-orange-400 focus:ring-2 focus:ring-orange-100 disabled:cursor-not-allowed disabled:opacity-50",
+        className
+      )}
+      {...props}
+    />
   );
 }
 
@@ -734,7 +744,7 @@ function SessionsView({
               <p className="mt-2 text-sm text-stone-500">
                 {lessonPackage.lessonCount} занятий · {lessonPackage.price}
               </p>
-              <Badge className="mt-3" variant="orange">
+              <Badge className="mt-3 bg-orange-100 text-orange-700">
                 {Math.round(lessonPackage.price / lessonPackage.lessonCount)} за занятие
               </Badge>
             </div>
