@@ -222,10 +222,6 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
                   )}
                 </p>
                 <p>
-                  <span className="text-muted-foreground">{t("student.lessonPrice")}</span>
-                  {formatMoney(student.defaultLessonPrice, currency)}
-                </p>
-                <p>
                   <span className="text-muted-foreground">{t("student.addedAt")}</span>
                   {formatLongDate(student.createdAt)}
                 </p>

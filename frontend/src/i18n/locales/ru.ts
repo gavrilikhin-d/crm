@@ -197,7 +197,6 @@ const ru = {
     telegramConnected: "Подключен",
     telegramNotConnected: "Не подключен",
     connectTelegram: "Подключить Telegram",
-    lessonPrice: "Цена занятия: ",
     addedAt: "Добавлен: "
   },
   balance: {
