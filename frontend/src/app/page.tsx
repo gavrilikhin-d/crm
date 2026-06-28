@@ -14,12 +14,12 @@ import {
   Trash2,
   Users
 } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Field, FieldContent, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -38,6 +38,7 @@ import {
   SidebarRail,
   SidebarTrigger
 } from "@/components/ui/sidebar";
+import { Toaster } from "@/components/ui/sonner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
@@ -97,7 +98,6 @@ const maxRecurringLessonCount = 24;
 
 export default function Home() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
-  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<ActiveSection>("schedule");
   const [scheduleView, setScheduleView] = useState<ScheduleView>("week");
@@ -159,7 +159,7 @@ export default function Home() {
     try {
       setSnapshot(await api<Snapshot>("/api/snapshot"));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Не удалось загрузить данные.");
+      toast.error(error instanceof Error ? error.message : "Не удалось загрузить данные.");
     } finally {
       setLoading(false);
     }
@@ -169,11 +169,11 @@ export default function Home() {
     try {
       const result = await action();
       if (result) {
-        setMessage(result);
+        toast.success(result);
       }
       await loadSnapshot();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Действие не выполнено.");
+      toast.error(error instanceof Error ? error.message : "Действие не выполнено.");
     }
   }
 
@@ -411,16 +411,8 @@ export default function Home() {
           </div>
         </header>
 
-        {message ? (
-          <div className="border-b px-10 py-3">
-            <Alert>
-              <AlertDescription>{message}</AlertDescription>
-            </Alert>
-          </div>
-        ) : null}
-
         {activeSection === "schedule" ? (
-        <section className="grid grid-cols-[minmax(720px,1fr)_330px] gap-6 p-6 px-10 pb-10 max-[900px]:grid-cols-1" id="schedule">
+        <section className="p-6 px-10 pb-10" id="schedule">
           <div className="min-w-0">
             <div className="mb-3 flex h-12 items-center justify-between gap-3">
               <ToggleGroup
@@ -458,6 +450,19 @@ export default function Home() {
                 <Button variant="secondary" size="icon" type="button" onClick={() => shiftCalendar(1)} aria-label="Следующий период">
                   <ChevronRight className="size-4" />
                 </Button>
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button size="icon" type="button" aria-label="Создать занятие">
+                      <Plus className="size-4" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Создать занятие</DialogTitle>
+                    </DialogHeader>
+                    <LessonForm students={students} onSubmit={handleLessonSubmit} />
+                  </DialogContent>
+                </Dialog>
               </div>
             </div>
 
@@ -494,72 +499,6 @@ export default function Home() {
               />
             ) : null}
           </div>
-
-          <aside className="grid content-start gap-4">
-            <Card id="new-session">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center justify-between text-base">
-                  Создать занятие <Badge className="bg-teal-100 text-teal-800">Можно группу</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleLessonSubmit}>
-                  <FieldGroup className="gap-3">
-                    <Field>
-                      <FieldLabel htmlFor="lesson-starts-at">Дата и время</FieldLabel>
-                      <Input id="lesson-starts-at" name="startsAt" type="datetime-local" required />
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="lesson-student-ids">Ученики</FieldLabel>
-                      <NativeSelect id="lesson-student-ids" name="studentIds" multiple required className="w-full">
-                        {students
-                          .filter((student) => student.status === "active")
-                          .map((student) => (
-                            <NativeSelectOption key={student.id} value={student.id}>
-                              {student.fullName}
-                            </NativeSelectOption>
-                          ))}
-                      </NativeSelect>
-                    </Field>
-                    <Field orientation="horizontal">
-                      <Checkbox id="lesson-repeat-weekly" name="repeatWeekly" />
-                      <FieldContent>
-                        <FieldLabel htmlFor="lesson-repeat-weekly">Повторять еженедельно</FieldLabel>
-                      </FieldContent>
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="lesson-repeat-count">Количество занятий</FieldLabel>
-                      <Input
-                        id="lesson-repeat-count"
-                        name="repeatCount"
-                        type="number"
-                        min="1"
-                        max={maxRecurringLessonCount}
-                        defaultValue={defaultRecurringLessonCount}
-                        placeholder="Количество занятий"
-                      />
-                    </Field>
-                    <Button type="submit">Добавить в календарь</Button>
-                  </FieldGroup>
-                </form>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Обзор недели</CardTitle>
-                <CardDescription>{weekLessons.length} занятий запланировано на этой неделе.</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-2">
-                <Badge className="bg-teal-100 text-teal-800">
-                  {weekLessons.filter((lesson) => lesson.effectiveType === "group").length} групповых
-                </Badge>
-                <Badge variant="secondary">
-                  {weekLessons.filter((lesson) => lesson.effectiveType === "individual").length} индивидуальных
-                </Badge>
-              </CardContent>
-            </Card>
-          </aside>
         </section>
         ) : null}
 
@@ -601,6 +540,7 @@ export default function Home() {
       <Modal open={activeModal === "package"} title="Добавить пакет" onClose={() => setActiveModal(null)}>
         <PackageForm onSubmit={handlePackageSubmit} />
       </Modal>
+      <Toaster />
     </SidebarProvider>
   );
 }
@@ -888,6 +828,56 @@ function StudentForm({ onSubmit }: { onSubmit: (event: FormEvent<HTMLFormElement
           <Input id="student-phone" name="phone" placeholder="Телефон" required />
         </Field>
         <Button type="submit">Добавить ученика</Button>
+      </FieldGroup>
+    </form>
+  );
+}
+
+function LessonForm({
+  students,
+  onSubmit
+}: {
+  students: Student[];
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form onSubmit={onSubmit}>
+      <FieldGroup className="gap-3">
+        <Field>
+          <FieldLabel htmlFor="lesson-starts-at">Дата и время</FieldLabel>
+          <Input id="lesson-starts-at" name="startsAt" type="datetime-local" required />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="lesson-student-ids">Ученики</FieldLabel>
+          <NativeSelect id="lesson-student-ids" name="studentIds" multiple required className="w-full">
+            {students
+              .filter((student) => student.status === "active")
+              .map((student) => (
+                <NativeSelectOption key={student.id} value={student.id}>
+                  {student.fullName}
+                </NativeSelectOption>
+              ))}
+          </NativeSelect>
+        </Field>
+        <Field orientation="horizontal">
+          <Checkbox id="lesson-repeat-weekly" name="repeatWeekly" />
+          <FieldContent>
+            <FieldLabel htmlFor="lesson-repeat-weekly">Повторять еженедельно</FieldLabel>
+          </FieldContent>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="lesson-repeat-count">Количество занятий</FieldLabel>
+          <Input
+            id="lesson-repeat-count"
+            name="repeatCount"
+            type="number"
+            min="1"
+            max={maxRecurringLessonCount}
+            defaultValue={defaultRecurringLessonCount}
+            placeholder="Количество занятий"
+          />
+        </Field>
+        <Button type="submit">Добавить в календарь</Button>
       </FieldGroup>
     </form>
   );
