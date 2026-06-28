@@ -19,6 +19,7 @@ import { DateTimePicker } from "@/components/date-time-picker";
 import { CurrencyInput } from "@/components/examples/input/special/currency-input";
 import { AvatarPicker } from "@/components/avatar-picker";
 import { LessonOverviewSheet } from "@/components/lesson-overview-sheet";
+import { LessonParticipantSummary } from "@/components/lesson-participant-summary";
 import { ParticipantCardAvatar, ParticipantCardLabel } from "@/components/participant-card-label";
 import { StudentAvatar } from "@/components/student-avatar";
 import { Badge } from "@/components/ui/badge";
@@ -1506,17 +1507,6 @@ function formatTimeRange(start: Date, durationMinutes: number): string {
   return `${formatTime(start)} – ${formatTime(end)}`;
 }
 
-function getLessonBadges(lesson: Lesson) {
-  const converted = lesson.originalType === "group" && lesson.effectiveType === "individual";
-  const badges: Array<{ key: string; label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = [];
-
-  if (converted) {
-    badges.push({ key: "converted", label: "→ индивидуальное", variant: "outline" });
-  }
-
-  return badges;
-}
-
 function CalendarLesson({
   lesson,
   calendarRange,
@@ -1530,7 +1520,6 @@ function CalendarLesson({
 }) {
   const startsAt = new Date(lesson.startsAt);
   const { top, height } = getLessonPosition(lesson, calendarRange);
-  const badges = getLessonBadges(lesson);
   const compact = height < 52;
 
   return (
@@ -1541,20 +1530,12 @@ function CalendarLesson({
       onClick={onSelect}
     >
       <div className="flex items-start justify-between gap-1">
-        <span className="text-[0.68rem] font-semibold tabular-nums leading-tight">
+        <span className="shrink-0 text-[0.68rem] font-semibold tabular-nums leading-tight">
           {formatTimeRange(startsAt, lesson.durationMinutes)}
         </span>
-        {badges.length ? (
-          <div className="flex shrink-0 flex-wrap justify-end gap-0.5">
-            {badges.map((badge) => (
-              <Badge key={badge.key} variant={badge.variant} className="px-1 py-0 text-[0.58rem]">
-                {badge.label}
-              </Badge>
-            ))}
-          </div>
-        ) : null}
+        <LessonParticipantSummary participants={lesson.participants} compact={compact} />
       </div>
-      <div className={cn("flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto", compact && "gap-0")}>
+      <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-1 pr-0.5">
         {lesson.participants.map((participant) => {
           const student = getStudent(participant.studentId);
           if (!student) {
@@ -1562,10 +1543,15 @@ function CalendarLesson({
           }
 
           return (
-            <div key={participant.id} className="flex min-w-0 items-center gap-1.5 pr-1 pb-0.5">
+            <div
+              key={participant.id}
+              className={cn("flex shrink-0 min-w-0 items-center gap-1.5", compact ? "min-h-6" : "min-h-7")}
+            >
               <ParticipantCardAvatar student={student} status={participant.status} compact={compact} />
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
-                <ParticipantCardLabel name={student.fullName} compact={compact} />
+              <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden">
+                <div className="min-w-0 flex-1">
+                  <ParticipantCardLabel name={student.fullName} compact={compact} />
+                </div>
                 {participant.hasDebt ? (
                   <Badge
                     variant="destructive"
@@ -1593,7 +1579,6 @@ function MonthLessonChip({
   onSelect: () => void;
 }) {
   const startsAt = new Date(lesson.startsAt);
-  const badges = getLessonBadges(lesson);
 
   return (
     <button
@@ -1601,19 +1586,13 @@ function MonthLessonChip({
       className="flex w-full flex-col gap-0.5 rounded-md border bg-card px-2 py-1 text-left transition-colors hover:bg-muted/50"
       onClick={onSelect}
     >
-      <div className="flex items-center justify-between gap-1">
-        <span className="text-[0.62rem] font-semibold tabular-nums">{formatTimeRange(startsAt, lesson.durationMinutes)}</span>
-        {badges.length ? (
-          <div className="flex shrink-0 flex-wrap justify-end gap-0.5">
-            {badges.map((badge) => (
-              <Badge key={badge.key} variant={badge.variant} className="px-1 py-0 text-[0.55rem]">
-                {badge.label}
-              </Badge>
-            ))}
-          </div>
-        ) : null}
+      <div className="flex items-start justify-between gap-1">
+        <span className="shrink-0 text-[0.62rem] font-semibold tabular-nums leading-tight">
+          {formatTimeRange(startsAt, lesson.durationMinutes)}
+        </span>
+        <LessonParticipantSummary participants={lesson.participants} compact />
       </div>
-      <div className="flex flex-col gap-0.5">
+      <div className="flex flex-col gap-0.5 pb-1 pr-0.5">
         {lesson.participants.map((participant) => {
           const student = getStudent(participant.studentId);
           if (!student) {
@@ -1621,9 +1600,11 @@ function MonthLessonChip({
           }
 
           return (
-            <div key={participant.id} className="flex min-w-0 items-center gap-1 pr-1 pb-0.5">
+            <div key={participant.id} className="flex min-h-6 shrink-0 min-w-0 items-center gap-1">
               <ParticipantCardAvatar student={student} status={participant.status} compact />
-              <ParticipantCardLabel name={student.fullName} compact />
+              <div className="min-w-0 flex-1">
+                <ParticipantCardLabel name={student.fullName} compact />
+              </div>
               {participant.hasDebt ? (
                 <Badge variant="destructive" className="shrink-0 px-1 py-0 text-[0.5rem]">
                   Долг

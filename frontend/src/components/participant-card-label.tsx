@@ -24,12 +24,14 @@ function ParticipantCardAvatar({
   compact?: boolean;
 }) {
   return (
-    <StudentAvatar
-      student={student}
-      size={compact ? "sm" : "default"}
-      badge={getParticipantBadge(status)}
-      className={cn("shrink-0", compact ? "size-5" : "size-6")}
-    />
+    <div className="mb-0.5 mr-0.5 shrink-0 overflow-visible">
+      <StudentAvatar
+        student={student}
+        size={compact ? "sm" : "default"}
+        badge={getParticipantBadge(status)}
+        className={cn(compact ? "size-5" : "size-6")}
+      />
+    </div>
   );
 }
 
@@ -41,7 +43,9 @@ function ParticipantCardLabel({
   compact?: boolean;
 }) {
   return (
-    <span className={cn("truncate leading-tight", compact ? "text-[0.58rem]" : "text-[0.68rem]")}>{name}</span>
+    <span className={cn("block min-w-0 truncate leading-none", compact ? "text-[0.58rem]" : "text-[0.68rem]")}>
+      {name}
+    </span>
   );
 }
 
