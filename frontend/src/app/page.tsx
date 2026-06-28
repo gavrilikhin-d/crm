@@ -121,6 +121,7 @@ export default function Home() {
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [lessonDialogOpen, setLessonDialogOpen] = useState(false);
   const [lessonFormKey, setLessonFormKey] = useState(0);
+  const [paymentFormKey, setPaymentFormKey] = useState(0);
   const [deleteLessonTarget, setDeleteLessonTarget] = useState<Lesson | null>(null);
 
   const students = snapshot?.students ?? [];
@@ -271,19 +272,24 @@ export default function Home() {
     event.preventDefault();
     const form = event.currentTarget;
     const data = formData(form);
-    if (!data.packageId) {
+    const hasPackage = Boolean(data.packageId);
+
+    if (!hasPackage) {
+      if (!data.lessonCount || !data.amount) {
+        toast.error("Укажите количество занятий и сумму.");
+        return;
+      }
+    }
+
+    if (!hasPackage) {
       delete data.packageId;
-    }
-    if (data.lessonCount) {
       data.lessonCount = Number(data.lessonCount);
-    } else {
-      delete data.lessonCount;
-    }
-    if (data.amount) {
       data.amount = Number(data.amount);
     } else {
+      delete data.lessonCount;
       delete data.amount;
     }
+
     await withRefresh(async () => {
       await api("/api/payments", { method: "POST", body: data });
       form.reset();
@@ -587,7 +593,10 @@ export default function Home() {
             payments={payments}
             currency={currency}
             getStudent={getStudent}
-            onAddPayment={() => setActiveModal("payment")}
+            onAddPayment={() => {
+              setPaymentFormKey((key) => key + 1);
+              setActiveModal("payment");
+            }}
           />
         ) : null}
 
@@ -610,7 +619,13 @@ export default function Home() {
       </Modal>
 
       <Modal open={activeModal === "payment"} title="Добавить оплату" onClose={() => setActiveModal(null)}>
-        <PaymentForm students={students} lessonPackages={lessonPackages} currency={currency} onSubmit={handlePaymentSubmit} />
+        <PaymentForm
+          key={paymentFormKey}
+          students={students}
+          lessonPackages={lessonPackages}
+          currency={currency}
+          onSubmit={handlePaymentSubmit}
+        />
       </Modal>
 
       <Modal open={activeModal === "package"} title="Добавить пакет" onClose={() => setActiveModal(null)}>
@@ -1060,6 +1075,9 @@ function PaymentForm({
   currency: CurrencyCode;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const [selectedPackageId, setSelectedPackageId] = useState("");
+  const selectedPackage = lessonPackages.find((item) => item.id === selectedPackageId);
+
   return (
     <form onSubmit={onSubmit}>
       <FieldGroup className="gap-3">
@@ -1078,7 +1096,13 @@ function PaymentForm({
         </Field>
         <Field>
           <FieldLabel htmlFor="payment-package-id">Пакет</FieldLabel>
-          <NativeSelect id="payment-package-id" name="packageId" defaultValue="" className="w-full">
+          <NativeSelect
+            id="payment-package-id"
+            name="packageId"
+            value={selectedPackageId}
+            onChange={(event) => setSelectedPackageId(event.target.value)}
+            className="w-full"
+          >
             <NativeSelectOption value="">Без пакета</NativeSelectOption>
             {lessonPackages
               .filter((item) => item.active)
@@ -1088,17 +1112,24 @@ function PaymentForm({
                 </NativeSelectOption>
               ))}
           </NativeSelect>
+          {selectedPackage ? (
+            <FieldDescription>
+              {selectedPackage.lessonCount} занятий · {formatMoney(selectedPackage.price, currency)}
+            </FieldDescription>
+          ) : null}
         </Field>
-        <FieldGroup className="grid grid-cols-2 gap-3">
-          <Field>
-            <FieldLabel htmlFor="payment-lesson-count">Занятий</FieldLabel>
-            <Input id="payment-lesson-count" name="lessonCount" type="number" min="1" placeholder="Занятий" />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="payment-amount">Сумма</FieldLabel>
-            <CurrencyInput id="payment-amount" name="amount" currency={currency} placeholder="0" />
-          </Field>
-        </FieldGroup>
+        {!selectedPackageId ? (
+          <FieldGroup className="grid grid-cols-2 gap-3">
+            <Field>
+              <FieldLabel htmlFor="payment-lesson-count">Занятий</FieldLabel>
+              <Input id="payment-lesson-count" name="lessonCount" type="number" min="1" placeholder="Занятий" required />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="payment-amount">Сумма</FieldLabel>
+              <CurrencyInput id="payment-amount" name="amount" currency={currency} placeholder="0" required />
+            </Field>
+          </FieldGroup>
+        ) : null}
         <Field>
           <FieldLabel htmlFor="payment-method">Способ оплаты</FieldLabel>
           <NativeSelect id="payment-method" name="method" required defaultValue="transfer" className="w-full">

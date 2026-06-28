@@ -355,10 +355,16 @@ export class Store {
       ? mustFind(db.lessonPackages, input.packageId, "LessonPackage")
       : undefined;
 
+    if (!lessonPackage) {
+      if (input.lessonCount === undefined || input.lessonCount === null || input.amount === undefined || input.amount === null) {
+        throw new Error("Lesson count and amount are required when no package is selected");
+      }
+    }
+
     const lessonCount = lessonPackage?.lessonCount ?? Math.max(1, Math.trunc(input.lessonCount ?? 1));
     const amount =
-      input.amount ??
       lessonPackage?.price ??
+      input.amount ??
       db.students.find((student) => student.id === input.studentId)!.defaultLessonPrice * lessonCount;
 
     const payment: Payment = {
