@@ -368,12 +368,6 @@ export default function Home() {
                 </a>
               </SidebarMenuButton>
             </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton type="button" tooltip="Обновить" onClick={loadSnapshot}>
-                <RefreshCw className="size-4" />
-                <span>Обновить</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
           </SidebarMenu>
         </SidebarFooter>
         <SidebarRail />
