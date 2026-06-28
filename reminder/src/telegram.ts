@@ -20,7 +20,7 @@ export async function sendLessonReminder(student: Student, lesson: Lesson): Prom
   }
 
   await instance.telegram.sendMessage(student.telegramChatId, formatLessonReminder(student, lesson), {
-    reply_markup: lessonKeyboard(lesson.id, student.id)
+    reply_markup: lessonReminderKeyboard(lesson.id, student.id)
   });
 }
 
@@ -41,16 +41,7 @@ export async function sendPaymentReminder(student: Student, unpaidLessons: numbe
   );
 }
 
-function lessonKeyboard(lessonId: string, studentId: string) {
-  return {
-    inline_keyboard: [
-      [
-        { text: "Буду", callback_data: `lesson:${lessonId}:student:${studentId}:attend` },
-        { text: "Не буду", callback_data: `lesson:${lessonId}:student:${studentId}:decline` }
-      ]
-    ]
-  };
-}
+import { lessonReminderKeyboard } from "@crm/shared/lesson-callback";
 
 function formatLessonReminder(student: Student, lesson: Lesson): string {
   const date = new Intl.DateTimeFormat("ru-RU", {

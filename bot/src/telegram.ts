@@ -2,6 +2,7 @@ import { Telegraf } from "telegraf";
 import type { InlineKeyboardMarkup } from "@telegraf/types";
 import type { Context } from "telegraf";
 import type { Lesson, Student } from "@crm/shared";
+import { lessonReminderKeyboard, parseLessonCallback } from "@crm/shared/lesson-callback";
 import { bindTelegramChat, getTelegramStudentProfile, setParticipantStatus } from "./backend-client";
 import { formatHelpMessage, registerBotCommands } from "./commands";
 import { formatBalanceMessage, formatNotLinkedMessage, formatScheduleMessage, type BotReply } from "./messages";
@@ -94,10 +95,18 @@ export function getTelegramBot(): Telegraf | null {
     await replyWithProfile(ctx, formatBalanceMessage);
   });
 
-  bot.action(/^lesson:(.+):student:(.+):(attend|decline)$/, async (ctx) => {
+  bot.action(/^(?:la|ld):[^:]+:[^:]+$|^lesson:.+:student:.+:(?:attend|decline)$/, async (ctx) => {
     try {
-      const [, lessonId, studentId, rawAction] = ctx.match;
-      const action = rawAction as "attend" | "decline";
+      const callbackData =
+        "data" in ctx.callbackQuery && typeof ctx.callbackQuery.data === "string"
+          ? ctx.callbackQuery.data
+          : "";
+      const parsed = parseLessonCallback(callbackData);
+      if (!parsed) {
+        await ctx.answerCbQuery("Не удалось распознать кнопку.", { show_alert: true });
+        return;
+      }
+      const { lessonId, studentId, action } = parsed;
       const status = action === "attend" ? "confirmed" : "declined";
       const lesson = await setParticipantStatus({ lessonId, studentId, status, action });
       await ctx.answerCbQuery(action === "attend" ? "Отмечено: будете" : "Отмечено: не будете");
@@ -222,14 +231,7 @@ async function replyWithProfile(
 }
 
 function lessonKeyboard(lessonId: string, studentId: string): InlineKeyboardMarkup {
-  return {
-    inline_keyboard: [
-      [
-        { text: "Буду", callback_data: `lesson:${lessonId}:student:${studentId}:attend` },
-        { text: "Не буду", callback_data: `lesson:${lessonId}:student:${studentId}:decline` }
-      ]
-    ]
-  };
+  return lessonReminderKeyboard(lessonId, studentId);
 }
 
 function getStartPayload(message: unknown): string | undefined {
