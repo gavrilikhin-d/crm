@@ -1312,9 +1312,16 @@ function DayCalendar({
   return (
     <div className="grid min-h-[680px] grid-cols-[62px_minmax(240px,1fr)] grid-rows-[58px_auto]">
       <div className="border-b border-stone-300" />
-      <div className="grid justify-items-center border-b border-stone-300 pt-2">
+      <div className={cn("grid justify-items-center border-b border-stone-300 pt-2", isToday && "bg-primary/5 dark:bg-primary/10")}>
         <strong className="text-xs uppercase text-stone-900">{formatWeekday(day)}</strong>
-        <span className={cn("text-[0.68rem] font-bold", isToday ? "text-stone-900" : "text-stone-400")}>{formatDay(day)}</span>
+        <span
+          className={cn(
+            "flex items-center justify-center text-[0.68rem] font-bold",
+            isToday ? "size-6 rounded-full bg-primary text-primary-foreground" : "text-stone-400"
+          )}
+        >
+          {day.getDate()}
+        </span>
       </div>
       <TimeAxis calendarRange={calendarRange} />
       <DayColumn
@@ -1350,10 +1357,21 @@ function WeekCalendar({
       {weekDays.map((day, index) => {
         const isToday = currentTime ? sameDate(day, currentTime) : false;
         return (
-          <div className="grid justify-items-center border-b border-stone-300 pt-2" key={day.toISOString()}>
+          <div
+            className={cn(
+              "grid justify-items-center border-b border-stone-300 pt-2",
+              isToday && "bg-primary/5 dark:bg-primary/10"
+            )}
+            key={day.toISOString()}
+          >
             <strong className="text-xs uppercase text-stone-900">{weekDayLabels[index]}</strong>
-            <span className={cn("text-[0.68rem] font-bold", isToday ? "text-stone-900" : "text-stone-400")}>
-              {formatDay(day)}
+            <span
+              className={cn(
+                "flex items-center justify-center text-[0.68rem] font-bold",
+                isToday ? "size-6 rounded-full bg-primary text-primary-foreground" : "text-stone-400"
+              )}
+            >
+              {day.getDate()}
             </span>
           </div>
         );
@@ -1407,7 +1425,10 @@ function DayColumn({
 
   return (
     <div
-      className="relative border-l border-stone-100"
+      className={cn(
+        "relative border-l border-stone-100",
+        isToday && "bg-primary/5 dark:bg-primary/10"
+      )}
       style={{
         minHeight: columnHeight,
         backgroundImage: "repeating-linear-gradient(to bottom, transparent 0, transparent 75px, #ebe8e5 75px, #ebe8e5 76px)"
