@@ -21,6 +21,7 @@ import { AvatarPicker } from "@/components/avatar-picker";
 import { LessonOverviewSheet } from "@/components/lesson-overview-sheet";
 import { LessonParticipantSummary } from "@/components/lesson-participant-summary";
 import { ParticipantCardAvatar, ParticipantCardLabel } from "@/components/participant-card-label";
+import { StudentLink } from "@/components/student-link";
 import { StudentAvatar } from "@/components/student-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
 import type {
   AppSettings,
   Database,
@@ -77,11 +79,6 @@ type Snapshot = Database & {
     studentsCount: number;
     lessonsCount: number;
   };
-};
-
-type ApiOptions = {
-  method?: string;
-  body?: Record<string, unknown>;
 };
 
 type ActiveSection = "schedule" | "clients" | "payments" | "sessions" | "settings";
@@ -792,9 +789,13 @@ function ClientsView({
             return (
               <Card key={student.id}>
                 <CardContent className="grid grid-cols-[auto_minmax(0,1fr)_160px_220px] items-center gap-4 p-4">
-                <StudentAvatar student={student} size="lg" />
+                <StudentLink studentId={student.id}>
+                  <StudentAvatar student={student} size="lg" />
+                </StudentLink>
                 <div>
-                  <h3 className="font-semibold text-stone-900">{student.fullName}</h3>
+                  <h3 className="font-semibold text-stone-900">
+                    <StudentLink studentId={student.id}>{student.fullName}</StudentLink>
+                  </h3>
                   <p className="text-sm text-muted-foreground">
                     {student.telegramChatId
                       ? student.telegramUsername
@@ -903,8 +904,14 @@ function PaymentsView({
                 <TableRow key={payment.id}>
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-3">
-                      {student ? <StudentAvatar student={student} size="sm" /> : null}
-                      <span>{student?.fullName ?? "Ученик удален"}</span>
+                      {student ? (
+                        <StudentLink studentId={student.id} className="flex items-center gap-3">
+                          <StudentAvatar student={student} size="sm" />
+                          <span>{student.fullName}</span>
+                        </StudentLink>
+                      ) : (
+                        <span>Ученик удален</span>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{formatFullDate(payment.paidAt)}</TableCell>
@@ -1571,7 +1578,7 @@ function CalendarLesson({
               <ParticipantCardAvatar student={student} status={participant.status} compact={compact} />
               <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden">
                 <div className="min-w-0 flex-1">
-                  <ParticipantCardLabel name={student.fullName} compact={compact} />
+                  <ParticipantCardLabel name={student.fullName} studentId={student.id} compact={compact} />
                 </div>
                 {participant.hasDebt ? (
                   <Badge
@@ -1624,7 +1631,7 @@ function MonthLessonChip({
             <div key={participant.id} className="flex min-h-6 shrink-0 min-w-0 items-center gap-1">
               <ParticipantCardAvatar student={student} status={participant.status} compact />
               <div className="min-w-0 flex-1">
-                <ParticipantCardLabel name={student.fullName} compact />
+                <ParticipantCardLabel name={student.fullName} studentId={student.id} compact />
               </div>
               {participant.hasDebt ? (
                 <Badge variant="destructive" className="shrink-0 px-1 py-0 text-[0.5rem]">
@@ -1637,21 +1644,6 @@ function MonthLessonChip({
       </div>
     </button>
   );
-}
-
-async function api<T = unknown>(path: string, options: ApiOptions = {}): Promise<T> {
-  const response = await fetch(path, {
-    method: options.method ?? "GET",
-    headers: options.body ? { "Content-Type": "application/json" } : undefined,
-    body: options.body ? JSON.stringify(options.body) : undefined
-  });
-
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => ({}))) as { error?: string };
-    throw new Error(payload.error ?? `Request failed: ${response.status}`);
-  }
-
-  return response.json() as Promise<T>;
 }
 
 function formData(form: HTMLFormElement): Record<string, string | number | string[]> {

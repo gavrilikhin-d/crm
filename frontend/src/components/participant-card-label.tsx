@@ -1,4 +1,5 @@
 import type { ParticipantStatus, Student } from "@crm/shared";
+import { StudentLink } from "@/components/student-link";
 import { StudentAvatar } from "@/components/student-avatar";
 import { cn } from "@/lib/utils";
 
@@ -37,16 +38,24 @@ function ParticipantCardAvatar({
 
 function ParticipantCardLabel({
   name,
+  studentId,
   compact
 }: {
   name: string;
+  studentId?: string;
   compact?: boolean;
 }) {
-  return (
-    <span className={cn("block min-w-0 truncate leading-none", compact ? "text-[0.58rem]" : "text-[0.68rem]")}>
-      {name}
-    </span>
-  );
+  const className = cn("block min-w-0 truncate leading-none", compact ? "text-[0.58rem]" : "text-[0.68rem]");
+
+  if (studentId) {
+    return (
+      <StudentLink studentId={studentId} stopPropagation className={className}>
+        {name}
+      </StudentLink>
+    );
+  }
+
+  return <span className={className}>{name}</span>;
 }
 
 export { ParticipantCardAvatar, ParticipantCardLabel };

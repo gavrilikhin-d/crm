@@ -2,6 +2,7 @@
 
 import type { Lesson, LessonType, RecurringDeleteScope, RecurringSchedule, Student } from "@crm/shared";
 import { RefreshCw, Trash2 } from "lucide-react";
+import { StudentLink } from "@/components/student-link";
 import { StudentAvatar } from "@/components/student-avatar";
 import { ParticipantStatusBadge } from "@/components/participant-status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -125,9 +126,13 @@ function LessonOverviewSheet({
 
               return (
                 <div key={participant.id} className="flex items-center gap-3 rounded-lg border p-3">
-                  <StudentAvatar student={student} size="default" />
+                  <StudentLink studentId={student.id}>
+                    <StudentAvatar student={student} size="default" />
+                  </StudentLink>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{student.fullName}</p>
+                    <p className="truncate font-medium">
+                      <StudentLink studentId={student.id}>{student.fullName}</StudentLink>
+                    </p>
                     <div className="mt-1 flex flex-wrap gap-1">
                       <ParticipantStatusBadge status={participant.status} className="text-[0.65rem]" />
                       {participant.hasDebt ? (
