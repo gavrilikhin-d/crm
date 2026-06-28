@@ -21,6 +21,7 @@ import { LessonOverviewSheet } from "@/components/lesson-overview-sheet";
 import { LessonParticipantSummary } from "@/components/lesson-participant-summary";
 import { ParticipantCardAvatar, ParticipantCardLabel } from "@/components/participant-card-label";
 import { StudentCombobox } from "@/components/student-combobox";
+import { StudentMultiCombobox } from "@/components/student-multi-combobox";
 import { StudentForm } from "@/components/student-form";
 import { TelegramIcon } from "@/components/icons/telegram-icon";
 import { StudentLink } from "@/components/student-link";
@@ -30,7 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
@@ -981,30 +982,38 @@ function LessonForm({
   defaultStartsAt: string;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const activeStudents = students.filter((student) => student.status === "active");
 
+  function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
+    if (!selectedStudentIds.length) {
+      event.preventDefault();
+      toast.error("Выберите хотя бы одного ученика.");
+      return;
+    }
+    onSubmit(event);
+  }
+
   return (
-    <form onSubmit={onSubmit}>
+    <form onSubmit={handleFormSubmit}>
       <FieldGroup className="gap-4">
         <Field>
           <FieldLabel htmlFor="lesson-starts-at">Дата и время</FieldLabel>
           <DateTimePicker id="lesson-starts-at" name="startsAt" defaultValue={defaultStartsAt} required />
         </Field>
 
-        <FieldSet>
-          <FieldLegend variant="label">Ученики</FieldLegend>
-          <FieldGroup data-slot="checkbox-group" className="max-h-48 overflow-y-auto rounded-lg border p-2">
-            {activeStudents.map((student) => (
-              <Field key={student.id} orientation="horizontal" className="rounded-md px-2 py-1.5 hover:bg-muted/60">
-                <Checkbox id={`lesson-student-${student.id}`} name="studentIds" value={student.id} />
-                <FieldLabel htmlFor={`lesson-student-${student.id}`} className="flex items-center gap-2 font-normal">
-                  <StudentAvatar student={student} size="sm" />
-                  {student.fullName}
-                </FieldLabel>
-              </Field>
-            ))}
-          </FieldGroup>
-        </FieldSet>
+        <Field>
+          <FieldLabel htmlFor="lesson-students">Ученики</FieldLabel>
+          <StudentMultiCombobox
+            id="lesson-students"
+            name="studentIds"
+            students={activeStudents}
+            value={selectedStudentIds}
+            onValueChange={setSelectedStudentIds}
+            placeholder="Добавить ученика"
+            disabled={!activeStudents.length}
+          />
+        </Field>
 
         <Field orientation="horizontal">
           <Checkbox id="lesson-repeat-weekly" name="repeatWeekly" />
@@ -1013,7 +1022,7 @@ function LessonForm({
           </FieldContent>
         </Field>
 
-        <Button type="submit" disabled={!activeStudents.length}>
+        <Button type="submit" disabled={!activeStudents.length || !selectedStudentIds.length}>
           Добавить в календарь
         </Button>
       </FieldGroup>
