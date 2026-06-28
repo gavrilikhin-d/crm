@@ -17,6 +17,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldContent, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   Sidebar,
@@ -487,34 +489,44 @@ export default function Home() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <form className="grid gap-3" onSubmit={handleLessonSubmit}>
-                  <Input name="startsAt" type="datetime-local" required />
-                  <Select name="studentIds" multiple required>
-                    {students
-                      .filter((student) => student.status === "active")
-                      .map((student) => (
-                        <option key={student.id} value={student.id}>
-                          {student.fullName}
-                        </option>
-                      ))}
-                  </Select>
-                  <label className="flex items-center gap-2 text-sm font-medium text-stone-700">
-                    <input
-                      className="size-4 rounded border-stone-300 text-orange-600 focus:ring-orange-500"
-                      name="repeatWeekly"
-                      type="checkbox"
-                    />
-                    Повторять еженедельно
-                  </label>
-                  <Input
-                    name="repeatCount"
-                    type="number"
-                    min="1"
-                    max={maxRecurringLessonCount}
-                    defaultValue={defaultRecurringLessonCount}
-                    placeholder="Количество занятий"
-                  />
-                  <Button type="submit">Добавить в календарь</Button>
+                <form onSubmit={handleLessonSubmit}>
+                  <FieldGroup className="gap-3">
+                    <Field>
+                      <FieldLabel htmlFor="lesson-starts-at">Дата и время</FieldLabel>
+                      <Input id="lesson-starts-at" name="startsAt" type="datetime-local" required />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="lesson-student-ids">Ученики</FieldLabel>
+                      <Select id="lesson-student-ids" name="studentIds" multiple required>
+                        {students
+                          .filter((student) => student.status === "active")
+                          .map((student) => (
+                            <option key={student.id} value={student.id}>
+                              {student.fullName}
+                            </option>
+                          ))}
+                      </Select>
+                    </Field>
+                    <Field orientation="horizontal">
+                      <Checkbox id="lesson-repeat-weekly" name="repeatWeekly" />
+                      <FieldContent>
+                        <FieldLabel htmlFor="lesson-repeat-weekly">Повторять еженедельно</FieldLabel>
+                      </FieldContent>
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="lesson-repeat-count">Количество занятий</FieldLabel>
+                      <Input
+                        id="lesson-repeat-count"
+                        name="repeatCount"
+                        type="number"
+                        min="1"
+                        max={maxRecurringLessonCount}
+                        defaultValue={defaultRecurringLessonCount}
+                        placeholder="Количество занятий"
+                      />
+                    </Field>
+                    <Button type="submit">Добавить в календарь</Button>
+                  </FieldGroup>
                 </form>
               </CardContent>
             </Card>
@@ -858,10 +870,18 @@ function Modal({
 
 function StudentForm({ onSubmit }: { onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
   return (
-    <form className="grid gap-3" onSubmit={onSubmit}>
-      <Input name="fullName" placeholder="ФИО" required />
-      <Input name="phone" placeholder="Телефон" required />
-      <Button type="submit">Добавить ученика</Button>
+    <form onSubmit={onSubmit}>
+      <FieldGroup className="gap-3">
+        <Field>
+          <FieldLabel htmlFor="student-full-name">ФИО</FieldLabel>
+          <Input id="student-full-name" name="fullName" placeholder="ФИО" required />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="student-phone">Телефон</FieldLabel>
+          <Input id="student-phone" name="phone" placeholder="Телефон" required />
+        </Field>
+        <Button type="submit">Добавить ученика</Button>
+      </FieldGroup>
     </form>
   );
 }
@@ -876,50 +896,78 @@ function PaymentForm({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
-    <form className="grid gap-3" onSubmit={onSubmit}>
-      <Select name="studentId" required defaultValue="">
-        <option value="">Ученик</option>
-        {students
-          .filter((student) => student.status === "active")
-          .map((student) => (
-            <option key={student.id} value={student.id}>
-              {student.fullName}
-            </option>
-          ))}
-      </Select>
-      <Select name="packageId" defaultValue="">
-        <option value="">Без пакета</option>
-        {lessonPackages
-          .filter((item) => item.active)
-          .map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.name}: {item.lessonCount} / {item.price}
-            </option>
-          ))}
-      </Select>
-      <div className="grid grid-cols-2 gap-3">
-        <Input name="lessonCount" type="number" min="1" placeholder="Занятий" />
-        <Input name="amount" type="number" min="0" placeholder="Сумма" />
-      </div>
-      <Select name="method" required defaultValue="transfer">
-        <option value="transfer">Перевод</option>
-        <option value="cash">Наличные</option>
-        <option value="other">Другое</option>
-      </Select>
-      <Button type="submit">Добавить оплату</Button>
+    <form onSubmit={onSubmit}>
+      <FieldGroup className="gap-3">
+        <Field>
+          <FieldLabel htmlFor="payment-student-id">Ученик</FieldLabel>
+          <Select id="payment-student-id" name="studentId" required defaultValue="">
+            <option value="">Ученик</option>
+            {students
+              .filter((student) => student.status === "active")
+              .map((student) => (
+                <option key={student.id} value={student.id}>
+                  {student.fullName}
+                </option>
+              ))}
+          </Select>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="payment-package-id">Пакет</FieldLabel>
+          <Select id="payment-package-id" name="packageId" defaultValue="">
+            <option value="">Без пакета</option>
+            {lessonPackages
+              .filter((item) => item.active)
+              .map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}: {item.lessonCount} / {item.price}
+                </option>
+              ))}
+          </Select>
+        </Field>
+        <FieldGroup className="grid grid-cols-2 gap-3">
+          <Field>
+            <FieldLabel htmlFor="payment-lesson-count">Занятий</FieldLabel>
+            <Input id="payment-lesson-count" name="lessonCount" type="number" min="1" placeholder="Занятий" />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="payment-amount">Сумма</FieldLabel>
+            <Input id="payment-amount" name="amount" type="number" min="0" placeholder="Сумма" />
+          </Field>
+        </FieldGroup>
+        <Field>
+          <FieldLabel htmlFor="payment-method">Способ оплаты</FieldLabel>
+          <Select id="payment-method" name="method" required defaultValue="transfer">
+            <option value="transfer">Перевод</option>
+            <option value="cash">Наличные</option>
+            <option value="other">Другое</option>
+          </Select>
+        </Field>
+        <Button type="submit">Добавить оплату</Button>
+      </FieldGroup>
     </form>
   );
 }
 
 function PackageForm({ onSubmit }: { onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
   return (
-    <form className="grid gap-3" onSubmit={onSubmit}>
-      <Input name="name" placeholder="Название пакета" required />
-      <div className="grid grid-cols-2 gap-3">
-        <Input name="lessonCount" type="number" min="1" placeholder="Занятий" required />
-        <Input name="price" type="number" min="0" placeholder="Цена" required />
-      </div>
-      <Button type="submit">Добавить пакет</Button>
+    <form onSubmit={onSubmit}>
+      <FieldGroup className="gap-3">
+        <Field>
+          <FieldLabel htmlFor="package-name">Название пакета</FieldLabel>
+          <Input id="package-name" name="name" placeholder="Название пакета" required />
+        </Field>
+        <FieldGroup className="grid grid-cols-2 gap-3">
+          <Field>
+            <FieldLabel htmlFor="package-lesson-count">Занятий</FieldLabel>
+            <Input id="package-lesson-count" name="lessonCount" type="number" min="1" placeholder="Занятий" required />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="package-price">Цена</FieldLabel>
+            <Input id="package-price" name="price" type="number" min="0" placeholder="Цена" required />
+          </Field>
+        </FieldGroup>
+        <Button type="submit">Добавить пакет</Button>
+      </FieldGroup>
     </form>
   );
 }
