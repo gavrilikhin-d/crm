@@ -16,6 +16,13 @@ import type {
 } from "@crm/shared";
 import { isSupportedCurrency } from "@crm/shared/currency";
 import {
+  deleteStudentAvatar,
+  ensureAvatarsDir,
+  readStudentAvatar,
+  saveStudentAvatar,
+  studentAvatarPath
+} from "./avatars";
+import {
   deleteLessonsByIds,
   deleteLessonPackageRecord,
   deleteRecurringScheduleRecord,
@@ -55,7 +62,7 @@ export { parseReminderMinutes };
 
 export class Store {
   async initialize(): Promise<void> {
-    await ensureDefaults();
+    await Promise.all([ensureDefaults(), ensureAvatarsDir()]);
   }
 
   async getSnapshot(): Promise<Database> {
@@ -69,6 +76,7 @@ export class Store {
 
   async createStudent(input: {
     fullName: string;
+    avatarDataUrl?: string;
     telegramUsername?: string;
     telegramChatId?: string;
     defaultLessonPrice?: number;
@@ -86,6 +94,12 @@ export class Store {
       createdAt: timestamp,
       updatedAt: timestamp
     };
+
+    if (input.avatarDataUrl) {
+      await saveStudentAvatar(student.id, input.avatarDataUrl);
+      student.avatarUrl = studentAvatarPath(student.id);
+    }
+
     await insertStudent(student);
     return student;
   }
@@ -104,17 +118,43 @@ export class Store {
     return student;
   }
 
-  async updateStudent(id: string, input: Partial<Omit<Student, "id" | "createdAt">>): Promise<Student> {
+  async updateStudent(
+    id: string,
+    input: Partial<Omit<Student, "id" | "createdAt">> & { avatarDataUrl?: string | null }
+  ): Promise<Student> {
     const db = await loadDatabase();
     const student = mustFind(db.students, id, "Student");
+
+    if (input.avatarDataUrl !== undefined) {
+      if (input.avatarDataUrl) {
+        await saveStudentAvatar(student.id, input.avatarDataUrl);
+        student.avatarUrl = studentAvatarPath(student.id);
+      } else {
+        await deleteStudentAvatar(student.id);
+        student.avatarUrl = undefined;
+      }
+    }
+
+    const { avatarDataUrl: _avatarDataUrl, ...rest } = input;
     Object.assign(student, {
-      ...input,
+      ...rest,
+      fullName: input.fullName !== undefined ? input.fullName.trim() : student.fullName,
       telegramUsername: input.telegramUsername === "" ? undefined : input.telegramUsername,
       telegramChatId: input.telegramChatId === "" ? undefined : input.telegramChatId,
       updatedAt: now()
     });
+
+    if (!student.fullName) {
+      throw new Error("Full name is required");
+    }
     await updateStudentRecord(student);
     return student;
+  }
+
+  async getStudentAvatar(id: string): Promise<{ buffer: Buffer; mime: string } | null> {
+    const db = await loadDatabase();
+    mustFind(db.students, id, "Student");
+    return readStudentAvatar(id);
   }
 
   async deleteStudent(id: string): Promise<void> {
@@ -131,6 +171,7 @@ export class Store {
     const updatedLessons = db.lessons.filter((lesson) => lesson.participants.length > 0);
 
     await Promise.all([
+      deleteStudentAvatar(id),
       deleteStudentRecords(id),
       deleteLessonsByIds(emptyLessons),
       ...updatedLessons.map((lesson) => replaceLesson(lesson))

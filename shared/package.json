@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/types.ts",
-    "./currency": "./src/currency.ts"
+    "./currency": "./src/currency.ts",
+    "./student-initials": "./src/student-initials.ts"
   },
   "types": "./src/types.ts",
   "scripts": {

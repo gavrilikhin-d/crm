@@ -9,6 +9,7 @@ import {
   GraduationCap,
   HelpCircle,
   Plus,
+  Pencil,
   RefreshCw,
   Settings,
   Trash2,
@@ -17,6 +18,8 @@ import {
 import { toast } from "sonner";
 import { DateTimePicker } from "@/components/date-time-picker";
 import { CurrencyInput } from "@/components/examples/input/special/currency-input";
+import { AvatarPicker } from "@/components/avatar-picker";
+import { StudentAvatar } from "@/components/student-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -121,7 +124,9 @@ export default function Home() {
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [lessonDialogOpen, setLessonDialogOpen] = useState(false);
   const [lessonFormKey, setLessonFormKey] = useState(0);
+  const [studentFormKey, setStudentFormKey] = useState(0);
   const [paymentFormKey, setPaymentFormKey] = useState(0);
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [deleteLessonTarget, setDeleteLessonTarget] = useState<Lesson | null>(null);
 
   const students = snapshot?.students ?? [];
@@ -225,15 +230,32 @@ export default function Home() {
     );
   }
 
-  async function handleStudentSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const data = formData(form);
+  async function handleStudentCreate(payload: { fullName: string; avatarFile: File | null }) {
     await withRefresh(async () => {
-      await api("/api/students", { method: "POST", body: data });
-      form.reset();
+      const body: Record<string, unknown> = { fullName: payload.fullName.trim() };
+      if (payload.avatarFile) {
+        body.avatarDataUrl = await readFileAsDataUrl(payload.avatarFile);
+      }
+      await api("/api/students", { method: "POST", body });
       setActiveModal(null);
       return "Ученик добавлен.";
+    });
+  }
+
+  async function handleStudentUpdate(
+    studentId: string,
+    payload: { fullName: string; avatarFile: File | null; removeAvatar: boolean }
+  ) {
+    await withRefresh(async () => {
+      const body: Record<string, unknown> = { fullName: payload.fullName.trim() };
+      if (payload.removeAvatar) {
+        body.avatarDataUrl = null;
+      } else if (payload.avatarFile) {
+        body.avatarDataUrl = await readFileAsDataUrl(payload.avatarFile);
+      }
+      await api(`/api/students/${studentId}`, { method: "PATCH", body });
+      setEditingStudent(null);
+      return "Данные ученика обновлены.";
     });
   }
 
@@ -582,7 +604,11 @@ export default function Home() {
           <ClientsView
             students={students}
             getBalance={getBalance}
-            onAddStudent={() => setActiveModal("student")}
+            onAddStudent={() => {
+              setStudentFormKey((key) => key + 1);
+              setActiveModal("student");
+            }}
+            onEditStudent={setEditingStudent}
             onDeleteStudent={handleDeleteStudent}
             onAction={(action) => withRefresh(action)}
           />
@@ -615,7 +641,18 @@ export default function Home() {
       </SidebarInset>
 
       <Modal open={activeModal === "student"} title="Добавить ученика" onClose={() => setActiveModal(null)}>
-        <StudentForm onSubmit={handleStudentSubmit} />
+        <StudentForm key={studentFormKey} submitLabel="Добавить ученика" onSubmit={handleStudentCreate} />
+      </Modal>
+
+      <Modal open={!!editingStudent} title="Редактировать ученика" onClose={() => setEditingStudent(null)}>
+        {editingStudent ? (
+          <StudentForm
+            key={editingStudent.id}
+            student={editingStudent}
+            submitLabel="Сохранить"
+            onSubmit={(payload) => handleStudentUpdate(editingStudent.id, payload)}
+          />
+        ) : null}
       </Modal>
 
       <Modal open={activeModal === "payment"} title="Добавить оплату" onClose={() => setActiveModal(null)}>
@@ -718,12 +755,14 @@ function ClientsView({
   students,
   getBalance,
   onAddStudent,
+  onEditStudent,
   onDeleteStudent,
   onAction
 }: {
   students: Student[];
   getBalance: (studentId: string) => StudentBalance;
   onAddStudent: () => void;
+  onEditStudent: (student: Student) => void;
   onDeleteStudent: (student: Student) => void;
   onAction: (action: () => Promise<string | void>) => void;
 }) {
@@ -757,7 +796,8 @@ function ClientsView({
               Boolean(student.telegramChatId) && (balance.remainingLessons < 1 || balance.debtLessons > 0);
             return (
               <Card key={student.id}>
-                <CardContent className="grid grid-cols-[minmax(0,1fr)_160px_220px] items-center gap-4 p-4">
+                <CardContent className="grid grid-cols-[auto_minmax(0,1fr)_160px_220px] items-center gap-4 p-4">
+                <StudentAvatar student={student} size="lg" />
                 <div>
                   <h3 className="font-semibold text-stone-900">{student.fullName}</h3>
                   <p className="text-sm text-muted-foreground">
@@ -811,6 +851,9 @@ function ClientsView({
                   >
                     Напомнить
                   </Button>
+                  <Button variant="ghost" size="icon" type="button" onClick={() => onEditStudent(student)} aria-label={`Редактировать ${student.fullName}`}>
+                    <Pencil className="size-4" />
+                  </Button>
                   <Button variant="ghost" size="icon" type="button" onClick={() => onDeleteStudent(student)}>
                     <Trash2 className="size-4" />
                   </Button>
@@ -859,14 +902,22 @@ function PaymentsView({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {payments.map((payment) => (
+              {payments.map((payment) => {
+                const student = getStudent(payment.studentId);
+                return (
                 <TableRow key={payment.id}>
-                  <TableCell className="font-medium">{getStudent(payment.studentId)?.fullName ?? "Ученик удален"}</TableCell>
+                  <TableCell className="font-medium">
+                    <div className="flex items-center gap-3">
+                      {student ? <StudentAvatar student={student} size="sm" /> : null}
+                      <span>{student?.fullName ?? "Ученик удален"}</span>
+                    </div>
+                  </TableCell>
                   <TableCell className="text-muted-foreground">{formatFullDate(payment.paidAt)}</TableCell>
                   <TableCell>{payment.lessonCount}</TableCell>
                   <TableCell className="text-right font-semibold">{formatMoney(payment.amount, currency)}</TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>
@@ -959,15 +1010,86 @@ function Modal({
   );
 }
 
-function StudentForm({ onSubmit }: { onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+function StudentForm({
+  student,
+  submitLabel,
+  onSubmit
+}: {
+  student?: Student;
+  submitLabel: string;
+  onSubmit: (payload: { fullName: string; avatarFile: File | null; removeAvatar: boolean }) => void | Promise<void>;
+}) {
+  const [fullName, setFullName] = useState(student?.fullName ?? "");
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [removeAvatar, setRemoveAvatar] = useState(false);
+  const [previewSrc, setPreviewSrc] = useState<string | null>(() => {
+    if (!student?.avatarUrl) {
+      return null;
+    }
+    return `${student.avatarUrl}?v=${encodeURIComponent(student.updatedAt)}`;
+  });
+
+  useEffect(() => {
+    return () => {
+      if (previewSrc?.startsWith("blob:")) {
+        URL.revokeObjectURL(previewSrc);
+      }
+    };
+  }, [previewSrc]);
+
+  function handleFileSelect(file: File) {
+    setAvatarFile(file);
+    setRemoveAvatar(false);
+    setPreviewSrc((current) => {
+      if (current?.startsWith("blob:")) {
+        URL.revokeObjectURL(current);
+      }
+      return URL.createObjectURL(file);
+    });
+  }
+
+  function handleClearAvatar() {
+    setAvatarFile(null);
+    setRemoveAvatar(true);
+    setPreviewSrc((current) => {
+      if (current?.startsWith("blob:")) {
+        URL.revokeObjectURL(current);
+      }
+      return null;
+    });
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmedName = fullName.trim();
+    if (!trimmedName) {
+      toast.error("Укажите ФИО.");
+      return;
+    }
+    await onSubmit({ fullName: trimmedName, avatarFile, removeAvatar });
+  }
+
   return (
-    <form onSubmit={onSubmit}>
-      <FieldGroup className="gap-3">
+    <form onSubmit={(event) => void handleSubmit(event)}>
+      <FieldGroup className="gap-4">
+        <AvatarPicker
+          fullName={fullName}
+          previewSrc={previewSrc}
+          onFileSelect={handleFileSelect}
+          onClear={previewSrc ? handleClearAvatar : undefined}
+        />
         <Field>
           <FieldLabel htmlFor="student-full-name">ФИО</FieldLabel>
-          <Input id="student-full-name" name="fullName" placeholder="ФИО" required />
+          <Input
+            id="student-full-name"
+            name="fullName"
+            placeholder="ФИО"
+            required
+            value={fullName}
+            onChange={(event) => setFullName(event.target.value)}
+          />
         </Field>
-        <Button type="submit">Добавить ученика</Button>
+        <Button type="submit">{submitLabel}</Button>
       </FieldGroup>
     </form>
   );
@@ -998,7 +1120,8 @@ function LessonForm({
             {activeStudents.map((student) => (
               <Field key={student.id} orientation="horizontal" className="rounded-md px-2 py-1.5 hover:bg-muted/60">
                 <Checkbox id={`lesson-student-${student.id}`} name="studentIds" value={student.id} />
-                <FieldLabel htmlFor={`lesson-student-${student.id}`} className="font-normal">
+                <FieldLabel htmlFor={`lesson-student-${student.id}`} className="flex items-center gap-2 font-normal">
+                  <StudentAvatar student={student} size="sm" />
                   {student.fullName}
                 </FieldLabel>
               </Field>
@@ -1389,13 +1512,16 @@ function MonthCalendar({
                     type="button"
                     size="sm"
                     className={cn(
-                      "h-auto justify-start rounded-md px-2 py-1 text-left text-[0.68rem] font-semibold text-white",
+                      "h-auto justify-start gap-2 rounded-md px-2 py-1 text-left text-[0.68rem] font-semibold text-white",
                       lesson.effectiveType === "group" ? "bg-teal-700" : "bg-teal-600"
                     )}
                     onClick={() => onDeleteLesson(lesson)}
                     title="Нажмите, чтобы удалить занятие"
                   >
-                    {formatTime(new Date(lesson.startsAt))} {student?.fullName ?? "Занятие"}
+                    {student ? <StudentAvatar student={student} size="sm" className="size-5 ring-1 ring-white/30" /> : null}
+                    <span className="truncate">
+                      {formatTime(new Date(lesson.startsAt))} {student?.fullName ?? "Занятие"}
+                    </span>
                   </Button>
                 );
               })}
@@ -1438,7 +1564,10 @@ function CalendarLesson({
       )}
       style={{ top, minHeight: height }}
     >
-      <strong className="text-xs leading-tight">{primaryStudent?.fullName ?? "Занятие"}</strong>
+      <div className="flex items-center gap-2">
+        {primaryStudent ? <StudentAvatar student={primaryStudent} size="sm" className="ring-2 ring-white/30" /> : null}
+        <strong className="text-xs leading-tight">{primaryStudent?.fullName ?? "Занятие"}</strong>
+      </div>
       <span className="text-[0.66rem] leading-tight">
         {formatTime(date)} · {typeLabels[lesson.effectiveType]}
       </span>
@@ -1502,6 +1631,21 @@ async function api<T = unknown>(path: string, options: ApiOptions = {}): Promise
 
 function formData(form: HTMLFormElement): Record<string, string | number | string[]> {
   return Object.fromEntries(new FormData(form).entries()) as Record<string, string>;
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error("Не удалось прочитать файл."));
+    };
+    reader.onerror = () => reject(new Error("Не удалось прочитать файл."));
+    reader.readAsDataURL(file);
+  });
 }
 
 function getWeekDays(baseDate: Date): Date[] {

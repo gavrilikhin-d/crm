@@ -19,6 +19,7 @@ const routes: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
 
   route("PATCH", /^\/api\/settings$/, updateSettings),
 
+  route("GET", /^\/api\/students\/([^/]+)\/avatar$/, getStudentAvatar),
   route("POST", /^\/api\/students$/, createStudent),
   route("PATCH", /^\/api\/students\/([^/]+)$/, updateStudent),
   route("DELETE", /^\/api\/students\/([^/]+)$/, deleteStudent),
@@ -89,6 +90,17 @@ async function getSnapshot(_request: IncomingMessage, response: ServerResponse) 
   jsonOk(response, { ...snapshot, balances, dashboard });
 }
 
+async function getStudentAvatar(_request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray) {
+  const avatar = await store.getStudentAvatar(match[1]);
+  if (!avatar) {
+    jsonError(response, new Error("Avatar not found"), 404);
+    return;
+  }
+
+  response.writeHead(200, { "content-type": avatar.mime, "cache-control": "no-cache" });
+  response.end(avatar.buffer);
+}
+
 async function updateSettings(request: IncomingMessage, response: ServerResponse) {
   jsonOk(response, await store.updateSettings(await readJson(request)));
 }
@@ -98,6 +110,7 @@ async function createStudent(request: IncomingMessage, response: ServerResponse)
   requireFields(body, ["fullName"]);
   jsonOk(response, await store.createStudent(body as {
     fullName: string;
+    avatarDataUrl?: string;
     telegramUsername?: string;
     telegramChatId?: string;
     defaultLessonPrice?: number;

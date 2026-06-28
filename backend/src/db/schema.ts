@@ -3,6 +3,7 @@ import { boolean, foreignKey, integer, jsonb, pgTable, primaryKey, text, timesta
 export const students = pgTable("students", {
   id: text("id").primaryKey(),
   fullName: text("full_name").notNull(),
+  avatarUrl: text("avatar_url"),
   telegramUsername: text("telegram_username"),
   telegramChatId: text("telegram_chat_id"),
   telegramBindToken: text("telegram_bind_token").notNull(),
