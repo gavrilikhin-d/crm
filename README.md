@@ -5,7 +5,7 @@ MVP для преподавателя/репетитора: ученики, ин
 ## Стек
 
 - Next.js + React + TypeScript
-- Custom Node server `src/server.ts` для Next.js web app
+- Frontend dev/build/serve через Next CLI: `next dev`, `next build`, `next start`
 - Отдельный Telegram bot service `src/services/telegram-bot.ts`
 - Отдельный reminder worker service `src/services/reminder-worker.ts`
 - JSON-файл `data/db.json` как локальное хранилище MVP

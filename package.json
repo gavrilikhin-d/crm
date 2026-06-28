@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "next dev",
     "dev:bot": "tsx watch src/services/telegram-bot.ts",
     "dev:reminders": "tsx watch src/services/reminder-worker.ts",
-    "start": "NODE_ENV=production tsx src/server.ts",
+    "start": "next start",
     "start:bot": "NODE_ENV=production tsx src/services/telegram-bot.ts",
     "start:reminders": "NODE_ENV=production tsx src/services/reminder-worker.ts",
     "build": "next build",
