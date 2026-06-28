@@ -428,8 +428,6 @@ export default function Home() {
             <h1 className="mt-1 text-lg font-bold text-stone-900">{activeTitle[activeSection]}</h1>
           </div>
           <div className="flex items-center gap-3">
-            <Badge variant="secondary">{snapshot?.dashboard.studentsCount ?? 0} учеников</Badge>
-            <Badge variant={debtLessons > 0 ? "destructive" : "secondary"}>{debtLessons} неоплаченных занятий</Badge>
             <Button type="button" onClick={openLessonDialog}>
               Запланировать занятие
             </Button>
