@@ -190,11 +190,6 @@ export default function Home() {
     event.preventDefault();
     const form = event.currentTarget;
     const data = formData(form);
-    if (data.defaultLessonPrice) {
-      data.defaultLessonPrice = Number(data.defaultLessonPrice);
-    } else {
-      delete data.defaultLessonPrice;
-    }
     await withRefresh(async () => {
       await api("/api/students", { method: "POST", body: data });
       form.reset();
@@ -866,8 +861,6 @@ function StudentForm({ onSubmit }: { onSubmit: (event: FormEvent<HTMLFormElement
     <form className="grid gap-3" onSubmit={onSubmit}>
       <Input name="fullName" placeholder="ФИО" required />
       <Input name="phone" placeholder="Телефон" required />
-      <Input name="telegramUsername" placeholder="Имя пользователя в Telegram" />
-      <Input name="defaultLessonPrice" type="number" min="0" placeholder="Цена разового занятия" />
       <Button type="submit">Добавить ученика</Button>
     </form>
   );
