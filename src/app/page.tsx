@@ -1,7 +1,18 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { CalendarDays, CreditCard, GraduationCap, HelpCircle, RefreshCw, Settings, Trash2, Users } from "lucide-react";
+import {
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  CreditCard,
+  GraduationCap,
+  HelpCircle,
+  RefreshCw,
+  Settings,
+  Trash2,
+  Users
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -61,6 +72,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<ActiveSection>("schedule");
   const [scheduleView, setScheduleView] = useState<ScheduleView>("week");
+  const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
 
   const students = snapshot?.students ?? [];
   const lessonPackages = snapshot?.lessonPackages ?? [];
@@ -78,7 +90,6 @@ export default function Home() {
       ),
     [snapshot?.payments]
   );
-  const selectedDate = useMemo(() => new Date(), []);
   const weekDays = useMemo(() => getWeekDays(selectedDate), [selectedDate]);
   const monthDays = useMemo(() => getMonthGridDays(selectedDate), [selectedDate]);
   const weekLessons = useMemo(
@@ -249,6 +260,14 @@ export default function Home() {
     });
   }
 
+  function shiftCalendar(direction: -1 | 1) {
+    setSelectedDate((current) => addToDate(current, scheduleView, direction));
+  }
+
+  function goToToday() {
+    setSelectedDate(startOfDay(new Date()));
+  }
+
   const debtLessons = snapshot?.balances.reduce((sum, balance) => sum + balance.debtLessons, 0) ?? 0;
   const activeTitle: Record<ActiveSection, string> = {
     schedule: "Расписание",
@@ -307,7 +326,6 @@ export default function Home() {
       <main className="min-w-0 overflow-x-auto">
         <header className="flex min-h-22 items-center justify-between border-b border-stone-200 px-10 py-5">
           <div>
-            <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-stone-400">CRM расписания занятий</p>
             <h1 className="mt-1 text-lg font-bold text-stone-900">{activeTitle[activeSection]}</h1>
           </div>
           <div className="flex items-center gap-3">
@@ -326,7 +344,7 @@ export default function Home() {
         {activeSection === "schedule" ? (
         <section className="grid grid-cols-[minmax(720px,1fr)_330px] gap-6 p-6 px-10 pb-10 max-[900px]:grid-cols-1" id="schedule">
           <div className="min-w-0">
-            <div className="mb-3 flex h-12 items-center justify-between">
+            <div className="mb-3 flex h-12 items-center justify-between gap-3">
               <div className="flex rounded-lg border border-stone-200 bg-stone-50 p-1">
                 {(["day", "week", "month"] as const).map((view) => (
                   <Button
@@ -340,7 +358,18 @@ export default function Home() {
                   </Button>
                 ))}
               </div>
-              <div className="text-xs font-extrabold uppercase tracking-wide text-stone-400">
+              <div className="flex items-center gap-2">
+                <Button variant="secondary" size="icon" type="button" onClick={() => shiftCalendar(-1)} aria-label="Предыдущий период">
+                  <ChevronLeft className="size-4" />
+                </Button>
+                <Button variant="secondary" size="sm" type="button" onClick={goToToday}>
+                  Сегодня
+                </Button>
+                <Button variant="secondary" size="icon" type="button" onClick={() => shiftCalendar(1)} aria-label="Следующий период">
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
+              <div className="min-w-52 text-center text-xs font-extrabold uppercase tracking-wide text-stone-400">
                 {scheduleView === "day" ? formatFullDate(selectedDate.toISOString()) : null}
                 {scheduleView === "week" ? formatWeekRange(weekDays) : null}
                 {scheduleView === "month" ? formatMonth(selectedDate) : null}
@@ -1008,10 +1037,9 @@ function formData(form: HTMLFormElement): Record<string, string | number | strin
 }
 
 function getWeekDays(baseDate: Date): Date[] {
-  const monday = new Date(baseDate);
+  const monday = startOfDay(baseDate);
   const day = baseDate.getDay() || 7;
   monday.setDate(baseDate.getDate() - day + 1);
-  monday.setHours(0, 0, 0, 0);
 
   return Array.from({ length: 7 }, (_, index) => {
     const date = new Date(monday);
@@ -1022,16 +1050,35 @@ function getWeekDays(baseDate: Date): Date[] {
 
 function getMonthGridDays(baseDate: Date): Date[] {
   const firstOfMonth = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1);
-  const gridStart = new Date(firstOfMonth);
+  const gridStart = startOfDay(firstOfMonth);
   const day = firstOfMonth.getDay() || 7;
   gridStart.setDate(firstOfMonth.getDate() - day + 1);
-  gridStart.setHours(0, 0, 0, 0);
 
   return Array.from({ length: 42 }, (_, index) => {
     const date = new Date(gridStart);
     date.setDate(gridStart.getDate() + index);
     return date;
   });
+}
+
+function startOfDay(value: Date): Date {
+  const date = new Date(value);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function addToDate(value: Date, view: ScheduleView, direction: -1 | 1): Date {
+  const date = startOfDay(value);
+  if (view === "day") {
+    date.setDate(date.getDate() + direction);
+  }
+  if (view === "week") {
+    date.setDate(date.getDate() + direction * 7);
+  }
+  if (view === "month") {
+    date.setMonth(date.getMonth() + direction);
+  }
+  return date;
 }
 
 function sameDate(first: Date, second: Date): boolean {
