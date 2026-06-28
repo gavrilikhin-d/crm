@@ -9,8 +9,7 @@ const ru = {
     students: "Ученики",
     schedule: "Расписание",
     packages: "Пакеты",
-    settings: "Настройки",
-    help: "Помощь"
+    settings: "Настройки"
   },
   section: {
     schedule: "Расписание",

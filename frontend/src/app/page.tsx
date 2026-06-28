@@ -7,7 +7,6 @@ import {
   ChevronRight,
   CreditCard,
   GraduationCap,
-  HelpCircle,
   Plus,
   Pencil,
   Settings,
@@ -509,14 +508,6 @@ export default function Home() {
               >
                 <Settings className="size-4" />
                 <span>{t("nav.settings")}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip={t("nav.help")}>
-                <a href="#help">
-                  <HelpCircle className="size-4" />
-                  <span>{t("nav.help")}</span>
-                </a>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
