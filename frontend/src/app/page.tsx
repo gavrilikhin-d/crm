@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, type ReactNode, type SelectHTMLAttributes, useEffect, useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   ChevronLeft,
@@ -14,12 +14,15 @@ import {
   Trash2,
   Users
 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldContent, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
   Sidebar,
   SidebarContent,
@@ -35,6 +38,8 @@ import {
   SidebarRail,
   SidebarTrigger
 } from "@/components/ui/sidebar";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import type { Database, Lesson, LessonPackage, Student, StudentBalance } from "@crm/shared";
 
@@ -407,26 +412,35 @@ export default function Home() {
         </header>
 
         {message ? (
-          <div className="border-b border-orange-100 bg-orange-50 px-10 py-3 text-sm text-orange-900">{message}</div>
+          <div className="border-b px-10 py-3">
+            <Alert>
+              <AlertDescription>{message}</AlertDescription>
+            </Alert>
+          </div>
         ) : null}
 
         {activeSection === "schedule" ? (
         <section className="grid grid-cols-[minmax(720px,1fr)_330px] gap-6 p-6 px-10 pb-10 max-[900px]:grid-cols-1" id="schedule">
           <div className="min-w-0">
             <div className="mb-3 flex h-12 items-center justify-between gap-3">
-              <div className="flex rounded-lg border border-stone-200 bg-stone-50 p-1">
+              <ToggleGroup
+                type="single"
+                value={scheduleView}
+                onValueChange={(value) => {
+                  if (value) {
+                    setScheduleView(value as ScheduleView);
+                  }
+                }}
+                variant="outline"
+                size="sm"
+                spacing={0}
+              >
                 {(["day", "week", "month"] as const).map((view) => (
-                  <Button
-                    key={view}
-                    variant={scheduleView === view ? "default" : "ghost"}
-                    size="sm"
-                    type="button"
-                    onClick={() => setScheduleView(view)}
-                  >
+                  <ToggleGroupItem key={view} value={view} aria-label={scheduleViewLabels[view]}>
                     {scheduleViewLabels[view]}
-                  </Button>
+                  </ToggleGroupItem>
                 ))}
-              </div>
+              </ToggleGroup>
 
               <div className="min-w-52 text-center text-xs font-extrabold uppercase tracking-wide text-stone-400">
                 {scheduleView === "day" ? formatFullDate(selectedDate.toISOString()) : null}
@@ -497,15 +511,15 @@ export default function Home() {
                     </Field>
                     <Field>
                       <FieldLabel htmlFor="lesson-student-ids">Ученики</FieldLabel>
-                      <Select id="lesson-student-ids" name="studentIds" multiple required>
+                      <NativeSelect id="lesson-student-ids" name="studentIds" multiple required className="w-full">
                         {students
                           .filter((student) => student.status === "active")
                           .map((student) => (
-                            <option key={student.id} value={student.id}>
+                            <NativeSelectOption key={student.id} value={student.id}>
                               {student.fullName}
-                            </option>
+                            </NativeSelectOption>
                           ))}
-                      </Select>
+                      </NativeSelect>
                     </Field>
                     <Field orientation="horizontal">
                       <Checkbox id="lesson-repeat-weekly" name="repeatWeekly" />
@@ -622,18 +636,6 @@ function SidebarLink({
   );
 }
 
-function Select({ className, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <select
-      className={cn(
-        "w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-orange-400 focus:ring-2 focus:ring-orange-100 disabled:cursor-not-allowed disabled:opacity-50",
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
 function getTelegramBindUrl(student: Student): string | undefined {
   const username = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME?.replace(/^@/, "");
   if (!username) {
@@ -686,20 +688,18 @@ function ClientsView({
             const canSendPaymentReminder =
               Boolean(student.telegramChatId) && (balance.remainingLessons < 1 || balance.debtLessons > 0);
             return (
-              <div
-                className="grid grid-cols-[minmax(0,1fr)_160px_220px] items-center gap-4 rounded-lg border border-stone-200 p-4"
-                key={student.id}
-              >
+              <Card key={student.id}>
+                <CardContent className="grid grid-cols-[minmax(0,1fr)_160px_220px] items-center gap-4 p-4">
                 <div>
-                  <strong className="block text-stone-900">{student.fullName}</strong>
-                  <span className="text-sm text-stone-500">
+                  <h3 className="font-semibold text-stone-900">{student.fullName}</h3>
+                  <p className="text-sm text-muted-foreground">
                     {student.phone} ·{" "}
                     {student.telegramChatId
                       ? student.telegramUsername
                         ? `@${student.telegramUsername}`
                         : "Telegram подключен"
                       : "Telegram не подключен"}
-                  </span>
+                  </p>
                   {!student.telegramChatId ? (
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       {telegramBindUrl ? (
@@ -722,9 +722,9 @@ function ClientsView({
                     </div>
                   ) : null}
                 </div>
-                <div className="text-sm text-stone-600">
-                  <span className="block font-semibold">{balance.remainingLessons} осталось</span>
-                  <span>{balance.chargedLessons} использовано</span>
+                <div className="text-sm text-muted-foreground">
+                  <p className="font-semibold text-foreground">{balance.remainingLessons} осталось</p>
+                  <p>{balance.chargedLessons} использовано</p>
                 </div>
                 <div className="flex justify-end gap-2">
                   <Button
@@ -748,7 +748,8 @@ function ClientsView({
                     <Trash2 className="size-4" />
                   </Button>
                 </div>
-              </div>
+                </CardContent>
+              </Card>
             );
           })}
         </CardContent>
@@ -778,17 +779,27 @@ function PaymentsView({
           </CardTitle>
           <CardDescription>Оплаты за разовые занятия и пакеты.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3">
-          {payments.map((payment) => (
-            <div className="grid grid-cols-[minmax(0,1fr)_120px_120px] rounded-lg border border-stone-200 p-4" key={payment.id}>
-              <div>
-                <strong className="block">{getStudent(payment.studentId)?.fullName ?? "Ученик удален"}</strong>
-                <span className="text-sm text-stone-500">{formatFullDate(payment.paidAt)}</span>
-              </div>
-              <span className="text-sm font-semibold text-stone-700">{payment.lessonCount} занятий</span>
-              <span className="text-sm font-semibold text-stone-900">{payment.amount}</span>
-            </div>
-          ))}
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Ученик</TableHead>
+                <TableHead>Дата</TableHead>
+                <TableHead>Занятий</TableHead>
+                <TableHead className="text-right">Сумма</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {payments.map((payment) => (
+                <TableRow key={payment.id}>
+                  <TableCell className="font-medium">{getStudent(payment.studentId)?.fullName ?? "Ученик удален"}</TableCell>
+                  <TableCell className="text-muted-foreground">{formatFullDate(payment.paidAt)}</TableCell>
+                  <TableCell>{payment.lessonCount}</TableCell>
+                  <TableCell className="text-right font-semibold">{payment.amount}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
     </section>
@@ -818,20 +829,22 @@ function SessionsView({
         </CardHeader>
         <CardContent className="grid grid-cols-3 gap-4">
           {lessonPackages.map((lessonPackage) => (
-            <div className="rounded-lg border border-stone-200 p-4" key={lessonPackage.id}>
-              <div className="flex items-start justify-between gap-3">
-                <strong>{lessonPackage.name}</strong>
+            <Card key={lessonPackage.id}>
+              <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
+                <CardTitle className="text-base">{lessonPackage.name}</CardTitle>
                 <Button variant="ghost" size="icon" type="button" onClick={() => onDeletePackage(lessonPackage)}>
                   <Trash2 className="size-4" />
                 </Button>
-              </div>
-              <p className="mt-2 text-sm text-stone-500">
+              </CardHeader>
+              <CardContent>
+              <p className="text-sm text-muted-foreground">
                 {lessonPackage.lessonCount} занятий · {lessonPackage.price}
               </p>
-              <Badge className="mt-3 bg-orange-100 text-orange-700">
+              <Badge variant="secondary" className="mt-3">
                 {Math.round(lessonPackage.price / lessonPackage.lessonCount)} за занятие
               </Badge>
-            </div>
+              </CardContent>
+            </Card>
           ))}
         </CardContent>
       </Card>
@@ -850,24 +863,15 @@ function Modal({
   onClose: () => void;
   children: React.ReactNode;
 }) {
-  if (!open) {
-    return null;
-  }
-
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true">
-      <Card className="w-full max-w-md shadow-2xl">
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            {title}
-            <Button variant="ghost" size="sm" type="button" onClick={onClose}>
-              Закрыть
-            </Button>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>{children}</CardContent>
-      </Card>
-    </div>
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        {children}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -903,29 +907,29 @@ function PaymentForm({
       <FieldGroup className="gap-3">
         <Field>
           <FieldLabel htmlFor="payment-student-id">Ученик</FieldLabel>
-          <Select id="payment-student-id" name="studentId" required defaultValue="">
-            <option value="">Ученик</option>
+          <NativeSelect id="payment-student-id" name="studentId" required defaultValue="" className="w-full">
+            <NativeSelectOption value="">Ученик</NativeSelectOption>
             {students
               .filter((student) => student.status === "active")
               .map((student) => (
-                <option key={student.id} value={student.id}>
+                <NativeSelectOption key={student.id} value={student.id}>
                   {student.fullName}
-                </option>
+                </NativeSelectOption>
               ))}
-          </Select>
+          </NativeSelect>
         </Field>
         <Field>
           <FieldLabel htmlFor="payment-package-id">Пакет</FieldLabel>
-          <Select id="payment-package-id" name="packageId" defaultValue="">
-            <option value="">Без пакета</option>
+          <NativeSelect id="payment-package-id" name="packageId" defaultValue="" className="w-full">
+            <NativeSelectOption value="">Без пакета</NativeSelectOption>
             {lessonPackages
               .filter((item) => item.active)
               .map((item) => (
-                <option key={item.id} value={item.id}>
+                <NativeSelectOption key={item.id} value={item.id}>
                   {item.name}: {item.lessonCount} / {item.price}
-                </option>
+                </NativeSelectOption>
               ))}
-          </Select>
+          </NativeSelect>
         </Field>
         <FieldGroup className="grid grid-cols-2 gap-3">
           <Field>
@@ -939,11 +943,11 @@ function PaymentForm({
         </FieldGroup>
         <Field>
           <FieldLabel htmlFor="payment-method">Способ оплаты</FieldLabel>
-          <Select id="payment-method" name="method" required defaultValue="transfer">
-            <option value="transfer">Перевод</option>
-            <option value="cash">Наличные</option>
-            <option value="other">Другое</option>
-          </Select>
+          <NativeSelect id="payment-method" name="method" required defaultValue="transfer" className="w-full">
+            <NativeSelectOption value="transfer">Перевод</NativeSelectOption>
+            <NativeSelectOption value="cash">Наличные</NativeSelectOption>
+            <NativeSelectOption value="other">Другое</NativeSelectOption>
+          </NativeSelect>
         </Field>
         <Button type="submit">Добавить оплату</Button>
       </FieldGroup>
@@ -1174,18 +1178,19 @@ function MonthCalendar({
               {dayLessons.slice(0, 4).map((lesson) => {
                 const student = getStudent(lesson.participants[0]?.studentId);
                 return (
-                  <button
+                  <Button
                     key={lesson.id}
                     type="button"
+                    size="sm"
                     className={cn(
-                      "rounded-md px-2 py-1 text-left text-[0.68rem] font-semibold text-white",
+                      "h-auto justify-start rounded-md px-2 py-1 text-left text-[0.68rem] font-semibold text-white",
                       lesson.effectiveType === "group" ? "bg-teal-700" : "bg-teal-600"
                     )}
                     onClick={() => onDeleteLesson(lesson)}
                     title="Нажмите, чтобы удалить занятие"
                   >
                     {formatTime(new Date(lesson.startsAt))} {student?.fullName ?? "Занятие"}
-                  </button>
+                  </Button>
                 );
               })}
               {dayLessons.length > 4 ? <span className="text-[0.68rem] text-stone-400">+{dayLessons.length - 4} еще</span> : null}
