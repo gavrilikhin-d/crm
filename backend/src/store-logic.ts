@@ -34,7 +34,7 @@ export function createDefaultSettings(): AppSettings {
     individualDurationMinutes: 60,
     groupDurationMinutes: 90,
     defaultSingleLessonPrice: 3000,
-    currency: "RUB",
+    currency: "BYN",
     cancellationPolicy: "free"
   };
 }

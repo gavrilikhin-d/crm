@@ -16,14 +16,23 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { DateTimePicker } from "@/components/date-time-picker";
+import { CurrencyInput } from "@/components/examples/input/special/currency-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Field, FieldContent, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
 import {
   Sidebar,
   SidebarContent,
@@ -43,7 +52,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
-import type { Database, Lesson, LessonPackage, RecurringDeleteScope, Student, StudentBalance } from "@crm/shared";
+import type { AppSettings, Database, Lesson, LessonPackage, RecurringDeleteScope, Student, StudentBalance } from "@crm/shared";
+import { CURRENCIES, formatMoney, resolveCurrency, type CurrencyCode } from "@crm/shared/currency";
 
 type Snapshot = Database & {
   balances: StudentBalance[];
@@ -60,7 +70,7 @@ type ApiOptions = {
   body?: Record<string, unknown>;
 };
 
-type ActiveSection = "schedule" | "clients" | "payments" | "sessions";
+type ActiveSection = "schedule" | "clients" | "payments" | "sessions" | "settings";
 type ScheduleView = "day" | "week" | "month";
 type ActiveModal = "student" | "payment" | "package" | null;
 
@@ -129,6 +139,7 @@ export default function Home() {
       ),
     [snapshot?.payments]
   );
+  const currency = resolveCurrency(snapshot?.settings.currency);
   const weekDays = useMemo(() => getWeekDays(selectedDate), [selectedDate]);
   const monthDays = useMemo(() => getMonthGridDays(selectedDate), [selectedDate]);
   const weekLessons = useMemo(
@@ -295,6 +306,19 @@ export default function Home() {
     });
   }
 
+  async function handleCurrencyChange(nextCurrency: CurrencyCode) {
+    if (nextCurrency === currency) {
+      return;
+    }
+    await withRefresh(async () => {
+      await api<AppSettings>("/api/settings", {
+        method: "PATCH",
+        body: { currency: nextCurrency }
+      });
+      return "Валюта обновлена.";
+    });
+  }
+
   async function handleDeleteStudent(student: Student) {
     if (!window.confirm(`Удалить ученика ${student.fullName}? Его оплаты и участия в занятиях тоже будут удалены.`)) {
       return;
@@ -361,7 +385,8 @@ export default function Home() {
     schedule: "Расписание",
     clients: "Ученики",
     payments: "Оплаты",
-    sessions: "Пакеты занятий"
+    sessions: "Пакеты занятий",
+    settings: "Настройки"
   };
 
   return (
@@ -414,11 +439,13 @@ export default function Home() {
         <SidebarFooter>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="Настройки">
-                <a href="#settings">
-                  <Settings className="size-4" />
-                  <span>Настройки</span>
-                </a>
+              <SidebarMenuButton
+                tooltip="Настройки"
+                isActive={activeSection === "settings"}
+                onClick={() => setActiveSection("settings")}
+              >
+                <Settings className="size-4" />
+                <span>Настройки</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
@@ -558,6 +585,7 @@ export default function Home() {
         {activeSection === "payments" ? (
           <PaymentsView
             payments={payments}
+            currency={currency}
             getStudent={getStudent}
             onAddPayment={() => setActiveModal("payment")}
           />
@@ -566,9 +594,14 @@ export default function Home() {
         {activeSection === "sessions" ? (
           <SessionsView
             lessonPackages={lessonPackages}
+            currency={currency}
             onAddPackage={() => setActiveModal("package")}
             onDeletePackage={handleDeletePackage}
           />
+        ) : null}
+
+        {activeSection === "settings" ? (
+          <SettingsView currency={currency} onCurrencyChange={handleCurrencyChange} />
         ) : null}
       </SidebarInset>
 
@@ -577,11 +610,11 @@ export default function Home() {
       </Modal>
 
       <Modal open={activeModal === "payment"} title="Добавить оплату" onClose={() => setActiveModal(null)}>
-        <PaymentForm students={students} lessonPackages={lessonPackages} onSubmit={handlePaymentSubmit} />
+        <PaymentForm students={students} lessonPackages={lessonPackages} currency={currency} onSubmit={handlePaymentSubmit} />
       </Modal>
 
       <Modal open={activeModal === "package"} title="Добавить пакет" onClose={() => setActiveModal(null)}>
-        <PackageForm onSubmit={handlePackageSubmit} />
+        <PackageForm currency={currency} onSubmit={handlePackageSubmit} />
       </Modal>
 
       <Dialog open={!!deleteLessonTarget} onOpenChange={(open) => !open && setDeleteLessonTarget(null)}>
@@ -779,10 +812,12 @@ function ClientsView({
 
 function PaymentsView({
   payments,
+  currency,
   getStudent,
   onAddPayment
 }: {
   payments: Snapshot["payments"];
+  currency: CurrencyCode;
   getStudent: (studentId: string) => Student | undefined;
   onAddPayment: () => void;
 }) {
@@ -814,7 +849,7 @@ function PaymentsView({
                   <TableCell className="font-medium">{getStudent(payment.studentId)?.fullName ?? "Ученик удален"}</TableCell>
                   <TableCell className="text-muted-foreground">{formatFullDate(payment.paidAt)}</TableCell>
                   <TableCell>{payment.lessonCount}</TableCell>
-                  <TableCell className="text-right font-semibold">{payment.amount}</TableCell>
+                  <TableCell className="text-right font-semibold">{formatMoney(payment.amount, currency)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -827,10 +862,12 @@ function PaymentsView({
 
 function SessionsView({
   lessonPackages,
+  currency,
   onAddPackage,
   onDeletePackage
 }: {
   lessonPackages: LessonPackage[];
+  currency: CurrencyCode;
   onAddPackage: () => void;
   onDeletePackage: (lessonPackage: LessonPackage) => void;
 }) {
@@ -844,7 +881,6 @@ function SessionsView({
               <Plus className="size-4" />
             </Button>
           </CardTitle>
-          <CardDescription>Например, пакеты на 4 или 8 занятий.</CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-3 gap-4">
           {lessonPackages.map((lessonPackage) => (
@@ -857,10 +893,10 @@ function SessionsView({
               </CardHeader>
               <CardContent>
               <p className="text-sm text-muted-foreground">
-                {lessonPackage.lessonCount} занятий · {lessonPackage.price}
+                {lessonPackage.lessonCount} занятий · {formatMoney(lessonPackage.price, currency)}
               </p>
               <Badge variant="secondary" className="mt-3">
-                {Math.round(lessonPackage.price / lessonPackage.lessonCount)} за занятие
+                {formatMoney(Math.round(lessonPackage.price / lessonPackage.lessonCount), currency)} за занятие
               </Badge>
               </CardContent>
             </Card>
@@ -956,13 +992,58 @@ function LessonForm({
   );
 }
 
+function SettingsView({
+  currency,
+  onCurrencyChange
+}: {
+  currency: CurrencyCode;
+  onCurrencyChange: (currency: CurrencyCode) => void;
+}) {
+  return (
+    <section className="p-6 px-10 pb-10" id="settings">
+      <Card className="max-w-xl">
+        <CardHeader>
+          <CardTitle>Настройки</CardTitle>
+          <CardDescription>Общие параметры приложения.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="settings-currency">Валюта</FieldLabel>
+              <Select value={currency} onValueChange={(value) => onCurrencyChange(value as CurrencyCode)}>
+                <SelectTrigger id="settings-currency" className="w-full">
+                  <SelectValue placeholder="Выберите валюту" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {CURRENCIES.map((item) => (
+                      <SelectItem key={item.code} value={item.code}>
+                        {item.label} ({item.code})
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <FieldDescription>
+                Суммы в оплатах и пакетах отображаются в выбранной валюте. По умолчанию — белорусский рубль.
+              </FieldDescription>
+            </Field>
+          </FieldGroup>
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
 function PaymentForm({
   students,
   lessonPackages,
+  currency,
   onSubmit
 }: {
   students: Student[];
   lessonPackages: LessonPackage[];
+  currency: CurrencyCode;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
@@ -989,7 +1070,7 @@ function PaymentForm({
               .filter((item) => item.active)
               .map((item) => (
                 <NativeSelectOption key={item.id} value={item.id}>
-                  {item.name}: {item.lessonCount} / {item.price}
+                  {item.name}: {item.lessonCount} / {formatMoney(item.price, currency)}
                 </NativeSelectOption>
               ))}
           </NativeSelect>
@@ -1001,7 +1082,7 @@ function PaymentForm({
           </Field>
           <Field>
             <FieldLabel htmlFor="payment-amount">Сумма</FieldLabel>
-            <Input id="payment-amount" name="amount" type="number" min="0" placeholder="Сумма" />
+            <CurrencyInput id="payment-amount" name="amount" currency={currency} placeholder="0" />
           </Field>
         </FieldGroup>
         <Field>
@@ -1018,7 +1099,13 @@ function PaymentForm({
   );
 }
 
-function PackageForm({ onSubmit }: { onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+function PackageForm({
+  currency,
+  onSubmit
+}: {
+  currency: CurrencyCode;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
   return (
     <form onSubmit={onSubmit}>
       <FieldGroup className="gap-3">
@@ -1033,7 +1120,7 @@ function PackageForm({ onSubmit }: { onSubmit: (event: FormEvent<HTMLFormElement
           </Field>
           <Field>
             <FieldLabel htmlFor="package-price">Цена</FieldLabel>
-            <Input id="package-price" name="price" type="number" min="0" placeholder="Цена" required />
+            <CurrencyInput id="package-price" name="price" currency={currency} placeholder="0" required />
           </Field>
         </FieldGroup>
         <Button type="submit">Добавить пакет</Button>

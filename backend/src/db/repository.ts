@@ -158,6 +158,20 @@ export async function ensureDefaults(): Promise<void> {
   }
 }
 
+export async function updateAppSettings(settings: AppSettings): Promise<void> {
+  await db
+    .update(appSettings)
+    .set({
+      lessonReminderMinutes: settings.lessonReminderMinutes,
+      individualDurationMinutes: settings.individualDurationMinutes,
+      groupDurationMinutes: settings.groupDurationMinutes,
+      defaultSingleLessonPrice: settings.defaultSingleLessonPrice,
+      currency: settings.currency,
+      cancellationPolicy: settings.cancellationPolicy
+    })
+    .where(eq(appSettings.id, "default"));
+}
+
 export async function insertStudent(student: Student): Promise<void> {
   await db.insert(students).values({
     id: student.id,

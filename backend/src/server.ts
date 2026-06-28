@@ -17,6 +17,8 @@ const routes: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
   route("GET", /^\/api\/dashboard$/, async (_request, response) => jsonOk(response, await store.getDashboard())),
   route("GET", /^\/api\/balances$/, async (_request, response) => jsonOk(response, await store.getBalances())),
 
+  route("PATCH", /^\/api\/settings$/, updateSettings),
+
   route("POST", /^\/api\/students$/, createStudent),
   route("PATCH", /^\/api\/students\/([^/]+)$/, updateStudent),
   route("DELETE", /^\/api\/students\/([^/]+)$/, deleteStudent),
@@ -85,6 +87,10 @@ async function getSnapshot(_request: IncomingMessage, response: ServerResponse) 
     store.getDashboard()
   ]);
   jsonOk(response, { ...snapshot, balances, dashboard });
+}
+
+async function updateSettings(request: IncomingMessage, response: ServerResponse) {
+  jsonOk(response, await store.updateSettings(await readJson(request)));
 }
 
 async function createStudent(request: IncomingMessage, response: ServerResponse) {

@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import type {
+  AppSettings,
   BalanceAdjustment,
   Database,
   Lesson,
@@ -13,6 +14,7 @@ import type {
   StudentBalance,
   TelegramInteraction
 } from "@crm/shared";
+import { isSupportedCurrency } from "@crm/shared/currency";
 import {
   deleteLessonsByIds,
   deleteLessonPackageRecord,
@@ -32,7 +34,8 @@ import {
   replaceParticipantDebtFlags,
   updateRecurringScheduleRecord,
   updateReminderRecord,
-  updateStudentRecord
+  updateStudentRecord,
+  updateAppSettings
 } from "./db/repository";
 import {
   buildLesson,
@@ -153,6 +156,20 @@ export class Store {
     const db = await loadDatabase();
     mustFind(db.lessonPackages, id, "LessonPackage");
     await deleteLessonPackageRecord(id);
+  }
+
+  async updateSettings(input: Partial<Pick<AppSettings, "currency">>): Promise<AppSettings> {
+    const db = await loadDatabase();
+    if (input.currency !== undefined && !isSupportedCurrency(input.currency)) {
+      throw new Error("Unsupported currency");
+    }
+
+    const settings: AppSettings = {
+      ...db.settings,
+      ...input
+    };
+    await updateAppSettings(settings);
+    return settings;
   }
 
   async createLesson(input: {
