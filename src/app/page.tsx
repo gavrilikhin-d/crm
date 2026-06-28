@@ -204,10 +204,10 @@ export default function Home() {
   };
 
   return (
-    <div className="mx-auto my-[5.5vh] grid min-h-[820px] w-[88vw] max-w-[1500px] grid-cols-[132px_minmax(1040px,1fr)] bg-white shadow-[0_26px_60px_rgb(68_45_30/12%)] max-[1180px]:my-0 max-[1180px]:w-full max-[1180px]:grid-cols-1">
-      <aside className="flex min-h-[820px] flex-col border-r border-stone-200 px-6 py-8 max-[1180px]:min-h-0 max-[1180px]:border-b max-[1180px]:border-r-0">
-        <div className="mb-20 text-lg font-black tracking-[0.42em] text-orange-600 max-[1180px]:mb-6">VOCAL</div>
-        <nav className="grid gap-5 max-[1180px]:flex max-[1180px]:flex-wrap" aria-label="Main navigation">
+    <div className="grid min-h-screen w-screen grid-cols-[132px_minmax(0,1fr)] bg-white max-[900px]:grid-cols-1">
+      <aside className="flex min-h-screen flex-col border-r border-stone-200 px-6 py-8 max-[900px]:min-h-0 max-[900px]:border-b max-[900px]:border-r-0">
+        <div className="mb-20 text-lg font-black tracking-[0.42em] text-orange-600 max-[900px]:mb-6">VOCAL</div>
+        <nav className="grid gap-5 max-[900px]:flex max-[900px]:flex-wrap" aria-label="Main navigation">
           <SidebarLink
             icon={<CreditCard className="size-4" />}
             active={activeSection === "payments"}
@@ -237,7 +237,7 @@ export default function Home() {
             Sessions
           </SidebarLink>
         </nav>
-        <div className="mt-auto grid gap-3 text-sm text-stone-500 max-[1180px]:mt-6 max-[1180px]:flex">
+        <div className="mt-auto grid gap-3 text-sm text-stone-500 max-[900px]:mt-6 max-[900px]:flex">
           <a className="flex items-center gap-2 hover:text-stone-900" href="#settings">
             <Settings className="size-4" /> Settings
           </a>
@@ -250,7 +250,7 @@ export default function Home() {
         </div>
       </aside>
 
-      <main className="min-w-0">
+      <main className="min-w-0 overflow-x-auto">
         <header className="flex min-h-22 items-center justify-between border-b border-stone-200 px-10 py-5">
           <div>
             <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-stone-400">Lesson Scheduling CRM</p>
@@ -282,7 +282,7 @@ export default function Home() {
         ) : null}
 
         {activeSection === "schedule" ? (
-        <section className="grid grid-cols-[minmax(720px,1fr)_330px] gap-6 p-6 px-10 pb-10 max-[1180px]:grid-cols-1" id="schedule">
+        <section className="grid grid-cols-[minmax(720px,1fr)_330px] gap-6 p-6 px-10 pb-10 max-[900px]:grid-cols-1" id="schedule">
           <div className="min-w-0">
             <div className="mb-3 flex h-12 items-center justify-between">
               <Button variant="secondary" size="sm">
@@ -450,7 +450,7 @@ function ClientsView({
   onAction: (action: () => Promise<string | void>) => void;
 }) {
   return (
-    <section className="grid grid-cols-[360px_minmax(0,1fr)] gap-6 p-6 px-10 pb-10 max-[1180px]:grid-cols-1">
+    <section className="grid grid-cols-[360px_minmax(0,1fr)] gap-6 p-6 px-10 pb-10 max-[900px]:grid-cols-1">
       <Card>
         <CardHeader>
           <CardTitle>Add client</CardTitle>
@@ -537,7 +537,7 @@ function PaymentsView({
   onPackageSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
-    <section className="grid grid-cols-[360px_minmax(0,1fr)] gap-6 p-6 px-10 pb-10 max-[1180px]:grid-cols-1">
+    <section className="grid grid-cols-[360px_minmax(0,1fr)] gap-6 p-6 px-10 pb-10 max-[900px]:grid-cols-1">
       <div className="grid content-start gap-4">
         <Card>
           <CardHeader>
@@ -591,7 +591,7 @@ function SessionsView({
   onPackageSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
-    <section className="grid grid-cols-[360px_minmax(0,1fr)] gap-6 p-6 px-10 pb-10 max-[1180px]:grid-cols-1">
+    <section className="grid grid-cols-[360px_minmax(0,1fr)] gap-6 p-6 px-10 pb-10 max-[900px]:grid-cols-1">
       <Card>
         <CardHeader>
           <CardTitle>Add package</CardTitle>
