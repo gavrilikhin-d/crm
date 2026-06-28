@@ -343,7 +343,6 @@ export default function Home() {
     setLessonDialogOpen(true);
   }
 
-  const debtLessons = snapshot?.balances.reduce((sum, balance) => sum + balance.debtLessons, 0) ?? 0;
   const activeTitle: Record<ActiveSection, string> = {
     schedule: "Расписание",
     clients: "Ученики",
