@@ -49,6 +49,7 @@ import {
   buildLesson,
   buildRecurringSchedule,
   createTelegramBindToken,
+  findStudentByTelegramUser,
   getStudentBalance,
   materializeRecurringLessons,
   mustFind,
@@ -79,6 +80,7 @@ export class Store {
     fullName: string;
     avatarDataUrl?: string;
     telegramUsername?: string;
+    telegramUserId?: string;
     telegramChatId?: string;
     defaultLessonPrice?: number;
   }): Promise<Student> {
@@ -105,13 +107,27 @@ export class Store {
     return student;
   }
 
-  async bindTelegramChat(token: string, chatId: number | string, username?: string): Promise<Student> {
+  async bindTelegramChat(
+    token: string,
+    chatId: number | string,
+    userId: number | string,
+    username?: string
+  ): Promise<Student> {
     const db = await loadDatabase();
     const student = db.students.find((item) => item.telegramBindToken === token);
     if (!student) {
       throw new Error("Telegram binding token is invalid");
     }
 
+    const telegramUserId = String(userId);
+    const linkedToAnother = db.students.find(
+      (item) => item.id !== student.id && item.telegramUserId === telegramUserId
+    );
+    if (linkedToAnother) {
+      throw new Error("This Telegram account is already linked to another student");
+    }
+
+    student.telegramUserId = telegramUserId;
     student.telegramChatId = String(chatId);
     student.telegramUsername = optional(username) ?? student.telegramUsername;
     student.updatedAt = now();
@@ -120,11 +136,11 @@ export class Store {
   }
 
   async getTelegramStudentProfile(
-    chatId: string | number,
+    userId: string | number,
     options?: { days?: number }
   ): Promise<TelegramStudentProfile> {
     const db = await this.getSnapshot();
-    const student = db.students.find((item) => item.telegramChatId === String(chatId));
+    const student = findStudentByTelegramUser(db.students, userId);
     if (!student) {
       throw new Error("Student not found");
     }
@@ -176,6 +192,7 @@ export class Store {
       ...rest,
       fullName: input.fullName !== undefined ? input.fullName.trim() : student.fullName,
       telegramUsername: input.telegramUsername === "" ? undefined : input.telegramUsername,
+      telegramUserId: input.telegramUserId === "" ? undefined : input.telegramUserId,
       telegramChatId: input.telegramChatId === "" ? undefined : input.telegramChatId,
       updatedAt: now()
     });

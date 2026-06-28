@@ -25,6 +25,7 @@ const maria = await store.createStudent({
 const sophia = await store.createStudent({
   fullName: "София Лебедева",
   telegramUsername: "@sophia_voice",
+  telegramUserId: "1000000001",
   telegramChatId: "1000000001",
   defaultLessonPrice: 3000
 });

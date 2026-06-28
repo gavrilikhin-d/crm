@@ -5,6 +5,7 @@ const backendUrl = process.env.BACKEND_INTERNAL_URL ?? "http://localhost:4000";
 export async function bindTelegramChat(input: {
   token: string;
   chatId: number | string;
+  userId: number | string;
   username?: string;
 }): Promise<Student> {
   return api<Student>("/internal/telegram/bind", {
@@ -14,10 +15,10 @@ export async function bindTelegramChat(input: {
 }
 
 export async function getTelegramStudentProfile(
-  chatId: number | string,
+  userId: number | string,
   options?: { days?: number }
 ): Promise<TelegramStudentProfile> {
-  const params = new URLSearchParams({ chatId: String(chatId) });
+  const params = new URLSearchParams({ userId: String(userId) });
   if (options?.days !== undefined) {
     params.set("days", String(options.days));
   }

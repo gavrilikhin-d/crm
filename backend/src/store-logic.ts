@@ -44,6 +44,20 @@ export function optional(value?: string): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+export function isStudentTelegramLinked(student: Student): boolean {
+  return Boolean(student.telegramUserId ?? student.telegramChatId);
+}
+
+export function findStudentByTelegramUser(students: Student[], userId: string | number): Student | undefined {
+  const id = String(userId);
+  const byUserId = students.find((item) => item.telegramUserId === id);
+  if (byUserId) {
+    return byUserId;
+  }
+
+  return students.find((item) => !item.telegramUserId && item.telegramChatId === id);
+}
+
 export function mustFind<T extends { id: string }>(items: T[], id: string, entityName: string): T {
   const item = items.find((candidate) => candidate.id === id);
   if (!item) {

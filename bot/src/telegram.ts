@@ -29,29 +29,46 @@ export function getTelegramBot(): Telegraf | null {
 
   bot.start(async (ctx) => {
     const payload = getStartPayload(ctx.message);
-    if (!payload || !ctx.chat) {
+    const isGroup = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
+
+    if (!payload || !ctx.chat || !ctx.from) {
       await ctx.reply(
         [
           "Здравствуйте! Это бот CRM преподавателя.",
           "Чтобы подключить напоминания, откройте персональную ссылку из CRM преподавателя.",
           "",
-          formatHelpMessage()
+          formatHelpMessage(isGroup)
         ].join("\n")
       );
       return;
     }
 
     try {
-      const student = await bindTelegramChat({ token: payload, chatId: ctx.chat.id, username: ctx.from?.username });
-      await ctx.reply(
-        [
-          `${student.fullName}, Telegram подключен. Теперь сюда будут приходить напоминания о занятиях.`,
-          "",
-          "Спросить расписание: /schedule (7 дней) или /schedule 14",
-          "Спросить баланс: /balance"
-        ].join("\n")
+      const student = await bindTelegramChat({
+        token: payload,
+        chatId: ctx.chat.id,
+        userId: ctx.from.id,
+        username: ctx.from.username
+      });
+      const connectedLines = isGroup
+        ? [
+            `${student.fullName}, ваш Telegram подключен.`,
+            "Напоминания и команды будут работать в этом чате для вас лично.",
+            "",
+            "Расписание: /schedule (7 дней) или /schedule 14",
+            "Баланс: /balance"
+          ]
+        : [
+            `${student.fullName}, Telegram подключен. Теперь сюда будут приходить напоминания о занятиях.`,
+            "",
+            "Спросить расписание: /schedule (7 дней) или /schedule 14",
+            "Спросить баланс: /balance"
+          ];
+
+      await ctx.reply(connectedLines.join("\n"));
+      console.log(
+        `Telegram linked: student=${student.id} user=${ctx.from.id} chat=${ctx.chat.id} group=${isGroup}`
       );
-      console.log(`Telegram chat linked: student=${student.id} chat=${ctx.chat.id}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown Telegram binding error";
       console.error("Telegram binding failed:", message);
@@ -74,10 +91,15 @@ export function getTelegramBot(): Telegraf | null {
   });
 
   bot.command(["help", "помощь"], async (ctx) => {
-    await ctx.reply(formatHelpMessage());
+    const isGroup = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
+    await ctx.reply(formatHelpMessage(isGroup));
   });
 
   bot.hears(/^расписание(?:\s+на)?\s+\d+\s*(?:дн(?:я|ей)?)?$/i, async (ctx) => {
+    if (!isPrivateChat(ctx)) {
+      return;
+    }
+
     if (!ctx.message || !("text" in ctx.message) || typeof ctx.message.text !== "string") {
       await replyWithSchedule(ctx, DEFAULT_SCHEDULE_DAYS);
       return;
@@ -88,15 +110,29 @@ export function getTelegramBot(): Telegraf | null {
   });
 
   bot.hears(/^(расписание|занятия|когда занятие|следующ(?:ее|ие) занят(?:ие|ия))$/i, async (ctx) => {
+    if (!isPrivateChat(ctx)) {
+      return;
+    }
+
     await replyWithSchedule(ctx, DEFAULT_SCHEDULE_DAYS);
   });
 
   bot.hears(/^(баланс|сколько осталось|остаток)$/i, async (ctx) => {
+    if (!isPrivateChat(ctx)) {
+      return;
+    }
+
     await replyWithProfile(ctx, formatBalanceMessage);
   });
 
   bot.action(/^(?:la|ld):[^:]+:[^:]+$|^lesson:.+:student:.+:(?:attend|decline)$/, async (ctx) => {
     try {
+      const userId = ctx.from?.id;
+      if (!userId) {
+        await ctx.answerCbQuery("Не удалось определить пользователя.", { show_alert: true });
+        return;
+      }
+
       const callbackData =
         "data" in ctx.callbackQuery && typeof ctx.callbackQuery.data === "string"
           ? ctx.callbackQuery.data
@@ -107,6 +143,13 @@ export function getTelegramBot(): Telegraf | null {
         return;
       }
       const { lessonId, studentId, action } = parsed;
+
+      const profile = await getTelegramStudentProfile(userId);
+      if (profile.student.id !== studentId) {
+        await ctx.answerCbQuery("Эта кнопка предназначена для другого ученика.", { show_alert: true });
+        return;
+      }
+
       const status = action === "attend" ? "confirmed" : "declined";
       const lesson = await setParticipantStatus({ lessonId, studentId, status, action });
       await ctx.answerCbQuery(action === "attend" ? "Отмечено: будете" : "Отмечено: не будете");
@@ -180,12 +223,13 @@ export async function sendPaymentReminder(student: Student, unpaidLessons: numbe
 }
 
 async function replyWithSchedule(ctx: Context, days: number): Promise<void> {
-  if (!ctx.chat) {
+  const userId = ctx.from?.id;
+  if (!userId) {
     return;
   }
 
   try {
-    const profile = await getTelegramStudentProfile(ctx.chat.id, { days });
+    const profile = await getTelegramStudentProfile(userId, { days });
     const reply = formatScheduleMessage(profile);
     if (typeof reply === "string") {
       await ctx.reply(reply);
@@ -207,12 +251,13 @@ async function replyWithProfile(
   ctx: Context,
   format: (profile: Awaited<ReturnType<typeof getTelegramStudentProfile>>) => BotReply
 ): Promise<void> {
-  if (!ctx.chat) {
+  const userId = ctx.from?.id;
+  if (!userId) {
     return;
   }
 
   try {
-    const profile = await getTelegramStudentProfile(ctx.chat.id);
+    const profile = await getTelegramStudentProfile(userId);
     const reply = format(profile);
     if (typeof reply === "string") {
       await ctx.reply(reply);
@@ -228,6 +273,10 @@ async function replyWithProfile(
     console.error("Telegram profile query failed:", message);
     await ctx.reply("Не удалось получить данные. Попробуйте позже.");
   }
+}
+
+function isPrivateChat(ctx: Context): boolean {
+  return ctx.chat?.type === "private";
 }
 
 function lessonKeyboard(lessonId: string, studentId: string): InlineKeyboardMarkup {

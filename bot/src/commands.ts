@@ -8,22 +8,31 @@ const botCommands: BotCommand[] = [
   { command: "help", description: "Список команд" }
 ];
 
-function formatHelpMessage(): string {
-  return [
+function formatHelpMessage(isGroup = false): string {
+  const lines = [
     "Доступные команды:",
     ...botCommands.map((item) => `/${item.command} — ${item.description}`),
     "",
     "Расписание: /schedule или /schedule 14 — на 14 дней.",
-    "Работает и /shedule (с опечаткой).",
-    "Можно также написать: «расписание», «баланс», «сколько осталось»."
-  ].join("\n");
+    "Работает и /shedule (с опечаткой)."
+  ];
+
+  if (isGroup) {
+    lines.push("", "В группе используйте команды с упоминанием бота, например /schedule@имя_бота.");
+  } else {
+    lines.push("", "Можно также написать: «расписание», «баланс», «сколько осталось».");
+  }
+
+  return lines.join("\n");
 }
 
 async function registerBotCommands(telegram: Telegram): Promise<void> {
-  const scope = { type: "all_private_chats" as const };
+  const scopes = [{ type: "all_private_chats" as const }, { type: "all_group_chats" as const }];
 
-  await telegram.setMyCommands(botCommands, { scope });
-  await telegram.setMyCommands(botCommands, { scope, language_code: "ru" });
+  for (const scope of scopes) {
+    await telegram.setMyCommands(botCommands, { scope });
+    await telegram.setMyCommands(botCommands, { scope, language_code: "ru" });
+  }
 }
 
 export { botCommands, formatHelpMessage, registerBotCommands };

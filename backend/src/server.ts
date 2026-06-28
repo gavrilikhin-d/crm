@@ -205,19 +205,27 @@ async function createAdjustment(request: IncomingMessage, response: ServerRespon
 
 async function bindTelegram(request: IncomingMessage, response: ServerResponse) {
   const body = await readJson(request);
-  requireFields(body, ["token", "chatId"]);
-  jsonOk(response, await store.bindTelegramChat(String(body.token), String(body.chatId), stringValue(body.username)));
+  requireFields(body, ["token", "chatId", "userId"]);
+  jsonOk(
+    response,
+    await store.bindTelegramChat(
+      String(body.token),
+      String(body.chatId),
+      String(body.userId),
+      stringValue(body.username)
+    )
+  );
 }
 
 async function getTelegramProfile(request: IncomingMessage, response: ServerResponse) {
   const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
-  const chatId = url.searchParams.get("chatId");
-  if (!chatId) {
-    jsonError(response, new Error("Missing required field: chatId"));
+  const userId = url.searchParams.get("userId") ?? url.searchParams.get("chatId");
+  if (!userId) {
+    jsonError(response, new Error("Missing required field: userId"));
     return;
   }
 
-  jsonOk(response, await store.getTelegramStudentProfile(chatId, { days: parseScheduleDaysParam(url.searchParams.get("days")) }));
+  jsonOk(response, await store.getTelegramStudentProfile(userId, { days: parseScheduleDaysParam(url.searchParams.get("days")) }));
 }
 
 function parseScheduleDaysParam(value: string | null): number | undefined {

@@ -30,6 +30,7 @@ export interface Student {
   fullName: string;
   avatarUrl?: string;
   telegramUsername?: string;
+  telegramUserId?: string;
   telegramChatId?: string;
   telegramBindToken: string;
   status: StudentStatus;

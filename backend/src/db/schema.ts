@@ -5,6 +5,7 @@ export const students = pgTable("students", {
   fullName: text("full_name").notNull(),
   avatarUrl: text("avatar_url"),
   telegramUsername: text("telegram_username"),
+  telegramUserId: text("telegram_user_id"),
   telegramChatId: text("telegram_chat_id"),
   telegramBindToken: text("telegram_bind_token").notNull(),
   status: text("status").notNull(),
