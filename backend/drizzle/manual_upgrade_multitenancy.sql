@@ -1,0 +1,5 @@
+-- Prefer running: bun run migrate:multitenancy
+-- That script safely migrates app_settings from id PK to account_id PK.
+--
+-- db:push alone fails on existing databases because it tries to add
+-- account_id as a second primary key while id is still the PK.

@@ -1,21 +1,38 @@
-import "dotenv/config";
+import "./load-env.js";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { LessonType, PaymentMethod, RecurringDeleteScope, Reminder } from "@crm/shared";
-import { store } from "./store";
+import {
+  assertAuthSyncSecret,
+  assertInternalToken,
+  authenticateRequest,
+  type AuthContext
+} from "./auth";
+import { getAccountById, getLessonAccountId, getReminderAccountId, listAccountIds } from "./db/repository";
+import { PlanLimitError, store } from "./store";
 
 type Handler = (
   request: IncomingMessage,
   response: ServerResponse,
-  match: RegExpMatchArray
+  match: RegExpMatchArray,
+  ctx?: AuthContext
 ) => Promise<void> | void;
 
 const port = Number(process.env.PORT ?? 4000);
 
-const routes: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
+const publicRoutes: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
   route("GET", /^\/api\/health$/, async (_request, response) => jsonOk(response, { ok: true })),
+  route("POST", /^\/api\/auth\/sync$/, syncAccount)
+];
+
+const protectedRoutes: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
+  route("GET", /^\/api\/account$/, getAccount),
   route("GET", /^\/api\/snapshot$/, getSnapshot),
-  route("GET", /^\/api\/dashboard$/, async (_request, response) => jsonOk(response, await store.getDashboard())),
-  route("GET", /^\/api\/balances$/, async (_request, response) => jsonOk(response, await store.getBalances())),
+  route("GET", /^\/api\/dashboard$/, async (_request, response, _match, ctx) =>
+    jsonOk(response, await store.getDashboard(ctx!))
+  ),
+  route("GET", /^\/api\/balances$/, async (_request, response, _match, ctx) =>
+    jsonOk(response, await store.getBalances(ctx!))
+  ),
 
   route("PATCH", /^\/api\/settings$/, updateSettings),
 
@@ -35,8 +52,12 @@ const routes: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
   route("POST", /^\/api\/lessons\/([^/]+)\/participants\/([^/]+)\/status$/, setParticipantStatus),
 
   route("POST", /^\/api\/payments$/, createPayment),
-  route("POST", /^\/api\/balance-adjustments$/, createAdjustment),
+  route("POST", /^\/api\/balance-adjustments$/, createAdjustment)
+];
 
+const internalRoutes: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
+  route("GET", /^\/internal\/worker\/snapshots$/, getWorkerSnapshots),
+  route("POST", /^\/internal\/lessons\/([^/]+)\/participants\/([^/]+)\/status$/, setParticipantStatusInternal),
   route("POST", /^\/internal\/telegram\/bind$/, bindTelegram),
   route("GET", /^\/internal\/telegram\/profile$/, getTelegramProfile),
   route("POST", /^\/internal\/reminders$/, upsertReminder),
@@ -53,7 +74,7 @@ async function startServer() {
 
   createServer(async (request, response) => {
     try {
-      setCorsHeaders(response);
+      setCorsHeaders(request, response);
 
       if (request.method === "OPTIONS") {
         response.writeHead(204);
@@ -62,16 +83,47 @@ async function startServer() {
       }
 
       const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
-      const route = routes.find((candidate) => candidate.method === request.method && url.pathname.match(candidate.pattern));
 
-      if (!route) {
+      const publicRoute = publicRoutes.find(
+        (candidate) => candidate.method === request.method && url.pathname.match(candidate.pattern)
+      );
+      if (publicRoute) {
+        const match = url.pathname.match(publicRoute.pattern);
+        await publicRoute.handler(request, response, match as RegExpMatchArray);
+        return;
+      }
+
+      const internalRoute = internalRoutes.find(
+        (candidate) => candidate.method === request.method && url.pathname.match(candidate.pattern)
+      );
+      if (internalRoute) {
+        assertInternalToken(request);
+        const match = url.pathname.match(internalRoute.pattern);
+        await internalRoute.handler(request, response, match as RegExpMatchArray);
+        return;
+      }
+
+      const protectedRoute = protectedRoutes.find(
+        (candidate) => candidate.method === request.method && url.pathname.match(candidate.pattern)
+      );
+      if (!protectedRoute) {
         jsonError(response, new Error("Route not found"), 404);
         return;
       }
 
-      const match = url.pathname.match(route.pattern);
-      await route.handler(request, response, match as RegExpMatchArray);
+      const ctx = await authenticateRequest(request);
+      const match = url.pathname.match(protectedRoute.pattern);
+      await protectedRoute.handler(request, response, match as RegExpMatchArray, ctx);
     } catch (error) {
+      if (error instanceof PlanLimitError) {
+        jsonError(response, error, 403, { code: error.code });
+        return;
+      }
+      const message = error instanceof Error ? error.message : "Unexpected error";
+      if (message === "Unauthorized" || message === "Invalid token payload") {
+        jsonError(response, error, 401);
+        return;
+      }
       jsonError(response, error);
     }
   }).listen(port, () => {
@@ -83,17 +135,37 @@ function route(method: string, pattern: RegExp, handler: Handler) {
   return { method, pattern, handler };
 }
 
-async function getSnapshot(_request: IncomingMessage, response: ServerResponse) {
-  const [snapshot, balances, dashboard] = await Promise.all([
-    store.getSnapshot(),
-    store.getBalances(),
-    store.getDashboard()
-  ]);
-  jsonOk(response, { ...snapshot, balances, dashboard });
+async function syncAccount(request: IncomingMessage, response: ServerResponse) {
+  assertAuthSyncSecret(request);
+  const body = await readJson(request);
+  requireFields(body, ["googleSub", "email", "name"]);
+  jsonOk(
+    response,
+    await store.syncAccount({
+      googleSub: String(body.googleSub),
+      email: String(body.email),
+      name: String(body.name),
+      image: stringValue(body.image)
+    })
+  );
 }
 
-async function getStudentAvatar(_request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray) {
-  const avatar = await store.getStudentAvatar(match[1]);
+async function getAccount(_request: IncomingMessage, response: ServerResponse, _match: RegExpMatchArray, ctx?: AuthContext) {
+  jsonOk(response, await store.getAccountInfo(ctx!));
+}
+
+async function getSnapshot(_request: IncomingMessage, response: ServerResponse, _match: RegExpMatchArray, ctx?: AuthContext) {
+  const [snapshot, balances, dashboard, accountInfo] = await Promise.all([
+    store.getSnapshot(ctx!),
+    store.getBalances(ctx!),
+    store.getDashboard(ctx!),
+    store.getAccountInfo(ctx!)
+  ]);
+  jsonOk(response, { ...snapshot, balances, dashboard, account: accountInfo });
+}
+
+async function getStudentAvatar(_request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray, ctx?: AuthContext) {
+  const avatar = await store.getStudentAvatar(ctx!, match[1]);
   if (!avatar) {
     jsonError(response, new Error("Avatar not found"), 404);
     return;
@@ -103,58 +175,70 @@ async function getStudentAvatar(_request: IncomingMessage, response: ServerRespo
   response.end(avatar.buffer);
 }
 
-async function updateSettings(request: IncomingMessage, response: ServerResponse) {
-  jsonOk(response, await store.updateSettings(await readJson(request)));
+async function updateSettings(request: IncomingMessage, response: ServerResponse, _match: RegExpMatchArray, ctx?: AuthContext) {
+  jsonOk(response, await store.updateSettings(ctx!, await readJson(request)));
 }
 
-async function createStudent(request: IncomingMessage, response: ServerResponse) {
+async function createStudent(request: IncomingMessage, response: ServerResponse, _match: RegExpMatchArray, ctx?: AuthContext) {
   const body = await readJson(request);
   requireFields(body, ["fullName"]);
-  jsonOk(response, await store.createStudent(body as {
-    fullName: string;
-    avatarDataUrl?: string;
-    telegramUsername?: string;
-    telegramChatId?: string;
-    defaultLessonPrice?: number;
-  }), 201);
+  jsonOk(
+    response,
+    await store.createStudent(ctx!, body as {
+      fullName: string;
+      avatarDataUrl?: string;
+      telegramUsername?: string;
+      telegramChatId?: string;
+      defaultLessonPrice?: number;
+    }),
+    201
+  );
 }
 
-async function updateStudent(request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray) {
-  jsonOk(response, await store.updateStudent(match[1], await readJson(request)));
+async function updateStudent(request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray, ctx?: AuthContext) {
+  jsonOk(response, await store.updateStudent(ctx!, match[1], await readJson(request)));
 }
 
-async function deleteStudent(_request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray) {
-  await store.deleteStudent(match[1]);
+async function deleteStudent(_request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray, ctx?: AuthContext) {
+  await store.deleteStudent(ctx!, match[1]);
   jsonOk(response, { ok: true });
 }
 
-async function createLessonPackage(request: IncomingMessage, response: ServerResponse) {
+async function createLessonPackage(request: IncomingMessage, response: ServerResponse, _match: RegExpMatchArray, ctx?: AuthContext) {
   const body = await readJson(request);
   requireFields(body, ["name", "lessonCount", "price"]);
-  jsonOk(response, await store.createLessonPackage(body as { name: string; lessonCount: number; price: number }), 201);
+  jsonOk(
+    response,
+    await store.createLessonPackage(ctx!, body as { name: string; lessonCount: number; price: number }),
+    201
+  );
 }
 
-async function deleteLessonPackage(_request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray) {
-  await store.deleteLessonPackage(match[1]);
+async function deleteLessonPackage(_request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray, ctx?: AuthContext) {
+  await store.deleteLessonPackage(ctx!, match[1]);
   jsonOk(response, { ok: true });
 }
 
-async function createLesson(request: IncomingMessage, response: ServerResponse) {
+async function createLesson(request: IncomingMessage, response: ServerResponse, _match: RegExpMatchArray, ctx?: AuthContext) {
   const body = await readJson(request);
   requireFields(body, ["startsAt", "lessonType", "studentIds"]);
-  jsonOk(response, await store.createLesson(body as {
-    startsAt: string;
-    durationMinutes?: number;
-    lessonType: LessonType;
-    studentIds: string[];
-    repeatWeekly?: boolean;
-  }), 201);
+  jsonOk(
+    response,
+    await store.createLesson(ctx!, body as {
+      startsAt: string;
+      durationMinutes?: number;
+      lessonType: LessonType;
+      studentIds: string[];
+      repeatWeekly?: boolean;
+    }),
+    201
+  );
 }
 
-async function deleteLesson(request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray) {
+async function deleteLesson(request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray, ctx?: AuthContext) {
   const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
   const scope = parseRecurringDeleteScope(url.searchParams.get("scope"));
-  await store.deleteLesson(match[1], scope);
+  await store.deleteLesson(ctx!, match[1], scope);
   jsonOk(response, { ok: true });
 }
 
@@ -165,42 +249,81 @@ function parseRecurringDeleteScope(value: string | null): RecurringDeleteScope {
   return "single";
 }
 
-async function cancelLesson(_request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray) {
-  jsonOk(response, await store.cancelLesson(match[1]));
+async function cancelLesson(_request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray, ctx?: AuthContext) {
+  jsonOk(response, await store.cancelLesson(ctx!, match[1]));
 }
 
-async function completeLesson(_request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray) {
-  jsonOk(response, await store.completeLesson(match[1]));
+async function completeLesson(_request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray, ctx?: AuthContext) {
+  jsonOk(response, await store.completeLesson(ctx!, match[1]));
 }
 
-async function removeLessonParticipant(_request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray) {
-  const lesson = await store.removeLessonParticipant(match[1], match[2]);
+async function removeLessonParticipant(_request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray, ctx?: AuthContext) {
+  const lesson = await store.removeLessonParticipant(ctx!, match[1], match[2]);
   jsonOk(response, lesson ?? { ok: true });
 }
 
-async function setParticipantStatus(request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray) {
+async function setParticipantStatus(request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray, ctx?: AuthContext) {
   const body = await readJson(request);
   requireFields(body, ["status"]);
-  jsonOk(response, await store.setParticipantStatus(match[1], match[2], body.status, body.action));
+  jsonOk(response, await store.setParticipantStatus(ctx!, match[1], match[2], body.status, body.action));
 }
 
-async function createPayment(request: IncomingMessage, response: ServerResponse) {
+async function createPayment(request: IncomingMessage, response: ServerResponse, _match: RegExpMatchArray, ctx?: AuthContext) {
   const body = await readJson(request);
   requireFields(body, ["studentId", "method"]);
-  jsonOk(response, await store.createPayment(body as {
-    studentId: string;
-    amount?: number;
-    paidAt?: string;
-    method: PaymentMethod;
-    packageId?: string;
-    lessonCount?: number;
-  }), 201);
+  jsonOk(
+    response,
+    await store.createPayment(ctx!, body as {
+      studentId: string;
+      amount?: number;
+      paidAt?: string;
+      method: PaymentMethod;
+      packageId?: string;
+      lessonCount?: number;
+    }),
+    201
+  );
 }
 
-async function createAdjustment(request: IncomingMessage, response: ServerResponse) {
+async function createAdjustment(request: IncomingMessage, response: ServerResponse, _match: RegExpMatchArray, ctx?: AuthContext) {
   const body = await readJson(request);
   requireFields(body, ["studentId", "lessonDelta", "reason"]);
-  jsonOk(response, await store.createAdjustment(body as { studentId: string; lessonDelta: number; reason: string }), 201);
+  jsonOk(
+    response,
+    await store.createAdjustment(ctx!, body as { studentId: string; lessonDelta: number; reason: string }),
+    201
+  );
+}
+
+async function getWorkerSnapshots(_request: IncomingMessage, response: ServerResponse) {
+  const accountIds = await listAccountIds();
+  const snapshots = await Promise.all(
+    accountIds.map(async (accountId) => {
+      const account = await getAccountById(accountId);
+      if (!account) {
+        return null;
+      }
+      const ctx = { accountId, email: account.email, plan: account.plan };
+      const snapshot = await store.getSnapshot(ctx);
+      const balances = await store.getBalances(ctx);
+      return { accountId, snapshot, balances, settings: snapshot.settings };
+    })
+  );
+  jsonOk(response, snapshots.filter(Boolean));
+}
+
+async function setParticipantStatusInternal(request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray) {
+  const body = await readJson(request);
+  requireFields(body, ["status"]);
+  const accountId = await getLessonAccountId(match[1]);
+  if (!accountId) {
+    jsonError(response, new Error("Lesson not found"), 404);
+    return;
+  }
+  jsonOk(
+    response,
+    await store.setParticipantStatusForAccount(accountId, match[1], match[2], body.status, body.action)
+  );
 }
 
 async function bindTelegram(request: IncomingMessage, response: ServerResponse) {
@@ -242,11 +365,22 @@ function parseScheduleDaysParam(value: string | null): number | undefined {
 }
 
 async function upsertReminder(request: IncomingMessage, response: ServerResponse) {
-  jsonOk(response, await store.upsertReminder(await readJson(request) as Omit<Reminder, "id" | "createdAt">), 201);
+  const body = (await readJson(request)) as Omit<Reminder, "id" | "createdAt">;
+  const accountId = body.lessonId ? await getLessonAccountId(body.lessonId) : null;
+  if (!accountId) {
+    throw new Error("Lesson not found");
+  }
+  jsonOk(response, await store.upsertReminder(accountId, body), 201);
 }
 
 async function updateReminder(request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray) {
-  jsonOk(response, await store.updateReminder(match[1], await readJson(request)));
+  const body = await readJson(request);
+  const accountId = await getReminderAccountId(match[1]);
+  if (!accountId) {
+    jsonError(response, new Error("Reminder not found"), 404);
+    return;
+  }
+  jsonOk(response, await store.updateReminder(accountId, match[1], body));
 }
 
 async function readJson(request: IncomingMessage): Promise<Record<string, any>> {
@@ -268,10 +402,10 @@ function jsonOk(response: ServerResponse, payload: unknown, status = 200) {
   response.end(JSON.stringify(payload));
 }
 
-function jsonError(response: ServerResponse, error: unknown, status?: number) {
+function jsonError(response: ServerResponse, error: unknown, status?: number, extra?: Record<string, unknown>) {
   const message = error instanceof Error ? error.message : "Unexpected error";
   response.writeHead(status ?? (message.includes("not found") ? 404 : 400), { "content-type": "application/json" });
-  response.end(JSON.stringify({ error: message }));
+  response.end(JSON.stringify({ error: message, ...extra }));
 }
 
 function requireFields(body: Record<string, unknown>, fields: string[]): void {
@@ -282,10 +416,12 @@ function requireFields(body: Record<string, unknown>, fields: string[]): void {
   }
 }
 
-function setCorsHeaders(response: ServerResponse) {
-  response.setHeader("access-control-allow-origin", "*");
+function setCorsHeaders(request: IncomingMessage, response: ServerResponse) {
+  const origin = request.headers.origin;
+  const allowedOrigin = process.env.APP_BASE_URL ?? "http://localhost:3000";
+  response.setHeader("access-control-allow-origin", origin === allowedOrigin ? origin : allowedOrigin);
   response.setHeader("access-control-allow-methods", "GET,POST,PATCH,DELETE,OPTIONS");
-  response.setHeader("access-control-allow-headers", "content-type");
+  response.setHeader("access-control-allow-headers", "content-type,authorization");
 }
 
 function stringValue(value: unknown): string | undefined {

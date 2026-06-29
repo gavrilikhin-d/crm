@@ -12,12 +12,15 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "migrate:json": "tsx src/migrate-json.ts",
+    "migrate:legacy-account": "tsx src/migrate-legacy-account.ts",
+    "migrate:multitenancy": "tsx src/migrate-multitenancy.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@crm/shared": "0.1.0",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.45.2",
+    "jose": "^6.0.11",
     "nanoid": "^5.0.9",
     "postgres": "^3.4.9"
   },

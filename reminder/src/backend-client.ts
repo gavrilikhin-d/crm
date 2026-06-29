@@ -1,13 +1,27 @@
 import type { Database, Lesson, Reminder, StudentBalance } from "@crm/shared";
 
 const backendUrl = process.env.BACKEND_INTERNAL_URL ?? "http://localhost:4000";
+const internalToken = process.env.INTERNAL_API_TOKEN ?? "";
 
-export async function getSnapshot(): Promise<Database> {
-  return api<Database>("/api/snapshot");
+type WorkerSnapshot = {
+  accountId: string;
+  snapshot: Database;
+  balances: StudentBalance[];
+  settings: Database["settings"];
+};
+
+function internalHeaders(body?: unknown): HeadersInit {
+  const headers: Record<string, string> = {
+    authorization: `Bearer ${internalToken}`
+  };
+  if (body) {
+    headers["content-type"] = "application/json";
+  }
+  return headers;
 }
 
-export async function getBalances(): Promise<StudentBalance[]> {
-  return api<StudentBalance[]>("/api/balances");
+export async function getWorkerSnapshots(): Promise<WorkerSnapshot[]> {
+  return api<WorkerSnapshot[]>("/internal/worker/snapshots");
 }
 
 export async function upsertReminder(reminder: Omit<Reminder, "id" | "createdAt">): Promise<Reminder> {
@@ -29,7 +43,7 @@ export async function setParticipantStatus(input: {
   studentId: string;
   status: string;
 }): Promise<Lesson> {
-  return api<Lesson>(`/api/lessons/${input.lesson.id}/participants/${input.studentId}/status`, {
+  return api<Lesson>(`/internal/lessons/${input.lesson.id}/participants/${input.studentId}/status`, {
     method: "POST",
     body: { status: input.status }
   });
@@ -38,7 +52,7 @@ export async function setParticipantStatus(input: {
 async function api<T>(path: string, options?: { method?: string; body?: unknown }): Promise<T> {
   const response = await fetch(`${backendUrl}${path}`, {
     method: options?.method ?? "GET",
-    headers: options?.body ? { "content-type": "application/json" } : undefined,
+    headers: internalHeaders(options?.body),
     body: options?.body ? JSON.stringify(options.body) : undefined
   });
 

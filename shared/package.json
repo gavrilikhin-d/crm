@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/types.ts",
+    "./plans": "./src/plans.ts",
     "./currency": "./src/currency.ts",
     "./student-initials": "./src/student-initials.ts",
     "./lesson-callback": "./src/lesson-callback.ts"

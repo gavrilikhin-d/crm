@@ -1,5 +1,7 @@
 import { nanoid } from "nanoid";
 import type {
+  Account,
+  AccountInfo,
   AppSettings,
   BalanceAdjustment,
   Database,
@@ -15,7 +17,9 @@ import type {
   TelegramInteraction,
   TelegramStudentProfile
 } from "@crm/shared";
+import { getPlanLimits } from "@crm/shared/plans";
 import { isSupportedCurrency } from "@crm/shared/currency";
+import type { AuthContext } from "./auth";
 import {
   deleteStudentAvatar,
   ensureAvatarsDir,
@@ -28,7 +32,9 @@ import {
   deleteLessonPackageRecord,
   deleteRecurringScheduleRecord,
   deleteStudentRecords,
-  ensureDefaults,
+  findStudentByBindToken,
+  findStudentByTelegramUser,
+  getAccountById,
   insertBalanceAdjustment,
   insertLessonPackage,
   insertLessons,
@@ -37,19 +43,26 @@ import {
   insertReminder,
   insertStudent,
   insertTelegramInteraction,
-  loadDatabase,
+  loadAccountDatabase,
   replaceLesson,
   replaceParticipantDebtFlags,
   updateRecurringScheduleRecord,
   updateReminderRecord,
   updateStudentRecord,
-  updateAppSettings
+  updateAppSettings,
+  upsertAccountByGoogle
 } from "./db/repository";
+import {
+  assertCanCreateLesson,
+  assertCanCreatePackage,
+  assertCanCreateStudent,
+  getAccountUsage,
+  PlanLimitError
+} from "./plan-limits";
 import {
   buildLesson,
   buildRecurringSchedule,
   createTelegramBindToken,
-  findStudentByTelegramUser,
   getStudentBalance,
   materializeRecurringLessons,
   mustFind,
@@ -60,31 +73,59 @@ import {
   refreshParticipantDebtFlags
 } from "./store-logic";
 
-export { parseReminderMinutes };
+export { parseReminderMinutes, PlanLimitError };
 
 export class Store {
   async initialize(): Promise<void> {
-    await Promise.all([ensureDefaults(), ensureAvatarsDir()]);
+    await ensureAvatarsDir();
   }
 
-  async getSnapshot(): Promise<Database> {
-    const db = await loadDatabase();
+  async syncAccount(input: {
+    googleSub: string;
+    email: string;
+    name: string;
+    image?: string;
+  }): Promise<Account> {
+    return upsertAccountByGoogle(input);
+  }
+
+  async getAccountInfo(ctx: AuthContext): Promise<AccountInfo> {
+    const account = await getAccountById(ctx.accountId);
+    if (!account) {
+      throw new Error("Account not found");
+    }
+
+    const usage = await getAccountUsage(ctx.accountId);
+    return {
+      account,
+      usage,
+      limits: getPlanLimits(account.plan)
+    };
+  }
+
+  async getSnapshot(ctx: AuthContext): Promise<Database> {
+    const db = await loadAccountDatabase(ctx.accountId);
     const created = materializeRecurringLessons(db);
     if (created.length) {
-      await insertLessons(created);
+      await insertLessons(ctx.accountId, created);
+      db.lessons.push(...created);
     }
     return structuredClone(db);
   }
 
-  async createStudent(input: {
-    fullName: string;
-    avatarDataUrl?: string;
-    telegramUsername?: string;
-    telegramUserId?: string;
-    telegramChatId?: string;
-    defaultLessonPrice?: number;
-  }): Promise<Student> {
-    const db = await loadDatabase();
+  async createStudent(
+    ctx: AuthContext,
+    input: {
+      fullName: string;
+      avatarDataUrl?: string;
+      telegramUsername?: string;
+      telegramUserId?: string;
+      telegramChatId?: string;
+      defaultLessonPrice?: number;
+    }
+  ): Promise<Student> {
+    await assertCanCreateStudent(ctx.accountId, ctx.plan);
+    const db = await loadAccountDatabase(ctx.accountId);
     const timestamp = now();
     const student: Student = {
       id: nanoid(),
@@ -103,7 +144,7 @@ export class Store {
       student.avatarUrl = studentAvatarPath(student.id);
     }
 
-    await insertStudent(student);
+    await insertStudent(ctx.accountId, student);
     return student;
   }
 
@@ -113,11 +154,13 @@ export class Store {
     userId: number | string,
     username?: string
   ): Promise<Student> {
-    const db = await loadDatabase();
-    const student = db.students.find((item) => item.telegramBindToken === token);
-    if (!student) {
+    const linked = await findStudentByBindToken(token);
+    if (!linked) {
       throw new Error("Telegram binding token is invalid");
     }
+
+    const db = await loadAccountDatabase(linked.accountId);
+    const student = mustFind(db.students, linked.id, "Student");
 
     const telegramUserId = String(userId);
     const linkedToAnother = db.students.find(
@@ -139,20 +182,22 @@ export class Store {
     userId: string | number,
     options?: { days?: number }
   ): Promise<TelegramStudentProfile> {
-    const db = await this.getSnapshot();
-    const student = findStudentByTelegramUser(db.students, userId);
-    if (!student) {
+    const linked = await findStudentByTelegramUser(String(userId));
+    if (!linked) {
       throw new Error("Student not found");
     }
 
+    const db = await this.getSnapshot({ accountId: linked.accountId, email: "", plan: "free" });
+    const student = mustFind(db.students, linked.id, "Student");
+
     const days = Math.min(90, Math.max(1, options?.days ?? 7));
-    const now = Date.now();
-    const windowEnd = now + days * 24 * 60 * 60 * 1000;
+    const currentTime = Date.now();
+    const windowEnd = currentTime + days * 24 * 60 * 60 * 1000;
     const balance = getStudentBalance(db, student.id);
     const upcomingLessons = db.lessons
       .filter((lesson) => {
         const startsAt = new Date(lesson.startsAt).getTime();
-        if (startsAt < now || startsAt > windowEnd) {
+        if (startsAt < currentTime || startsAt > windowEnd) {
           return false;
         }
         if (lesson.status === "cancelled_by_teacher") {
@@ -171,10 +216,11 @@ export class Store {
   }
 
   async updateStudent(
+    ctx: AuthContext,
     id: string,
     input: Partial<Omit<Student, "id" | "createdAt">> & { avatarDataUrl?: string | null }
   ): Promise<Student> {
-    const db = await loadDatabase();
+    const db = await loadAccountDatabase(ctx.accountId);
     const student = mustFind(db.students, id, "Student");
 
     if (input.avatarDataUrl !== undefined) {
@@ -204,14 +250,14 @@ export class Store {
     return student;
   }
 
-  async getStudentAvatar(id: string): Promise<{ buffer: Buffer; mime: string } | null> {
-    const db = await loadDatabase();
+  async getStudentAvatar(ctx: AuthContext, id: string): Promise<{ buffer: Buffer; mime: string } | null> {
+    const db = await loadAccountDatabase(ctx.accountId);
     mustFind(db.students, id, "Student");
     return readStudentAvatar(id);
   }
 
-  async deleteStudent(id: string): Promise<void> {
-    const db = await loadDatabase();
+  async deleteStudent(ctx: AuthContext, id: string): Promise<void> {
+    const db = await loadAccountDatabase(ctx.accountId);
     mustFind(db.students, id, "Student");
 
     for (const lesson of db.lessons) {
@@ -231,7 +277,11 @@ export class Store {
     ]);
   }
 
-  async createLessonPackage(input: { name: string; lessonCount: number; price: number }): Promise<LessonPackage> {
+  async createLessonPackage(
+    ctx: AuthContext,
+    input: { name: string; lessonCount: number; price: number }
+  ): Promise<LessonPackage> {
+    await assertCanCreatePackage(ctx.accountId, ctx.plan);
     const timestamp = now();
     const lessonPackage: LessonPackage = {
       id: nanoid(),
@@ -242,18 +292,18 @@ export class Store {
       createdAt: timestamp,
       updatedAt: timestamp
     };
-    await insertLessonPackage(lessonPackage);
+    await insertLessonPackage(ctx.accountId, lessonPackage);
     return lessonPackage;
   }
 
-  async deleteLessonPackage(id: string): Promise<void> {
-    const db = await loadDatabase();
+  async deleteLessonPackage(ctx: AuthContext, id: string): Promise<void> {
+    const db = await loadAccountDatabase(ctx.accountId);
     mustFind(db.lessonPackages, id, "LessonPackage");
     await deleteLessonPackageRecord(id);
   }
 
-  async updateSettings(input: Partial<Pick<AppSettings, "currency">>): Promise<AppSettings> {
-    const db = await loadDatabase();
+  async updateSettings(ctx: AuthContext, input: Partial<Pick<AppSettings, "currency">>): Promise<AppSettings> {
+    const db = await loadAccountDatabase(ctx.accountId);
     if (input.currency !== undefined && !isSupportedCurrency(input.currency)) {
       throw new Error("Unsupported currency");
     }
@@ -262,18 +312,21 @@ export class Store {
       ...db.settings,
       ...input
     };
-    await updateAppSettings(settings);
+    await updateAppSettings(ctx.accountId, settings);
     return settings;
   }
 
-  async createLesson(input: {
-    startsAt: string;
-    durationMinutes?: number;
-    lessonType: "individual" | "group";
-    studentIds: string[];
-    repeatWeekly?: boolean;
-  }): Promise<Lesson> {
-    const db = await loadDatabase();
+  async createLesson(
+    ctx: AuthContext,
+    input: {
+      startsAt: string;
+      durationMinutes?: number;
+      lessonType: "individual" | "group";
+      studentIds: string[];
+      repeatWeekly?: boolean;
+    }
+  ): Promise<Lesson> {
+    const db = await loadAccountDatabase(ctx.accountId);
     const uniqueStudentIds = [...new Set(input.studentIds)].filter(Boolean);
     if (uniqueStudentIds.length === 0) {
       throw new Error("Lesson requires at least one student");
@@ -290,13 +343,14 @@ export class Store {
     const toInsert: Lesson[] = [];
 
     if (input.repeatWeekly) {
+      await assertCanCreateLesson(ctx.accountId, ctx.plan, { repeatWeekly: true });
       const schedule = buildRecurringSchedule({
         startsAt,
         durationMinutes,
         lessonType: input.lessonType,
         studentIds: uniqueStudentIds
       });
-      await insertRecurringSchedule(schedule);
+      await insertRecurringSchedule(ctx.accountId, schedule);
       recurringScheduleId = schedule.id;
     }
 
@@ -310,19 +364,22 @@ export class Store {
     toInsert.push(lesson);
 
     db.lessons.push(lesson);
-    toInsert.push(...materializeRecurringLessons(db));
+    const materialized = materializeRecurringLessons(db);
+    toInsert.push(...materialized);
 
-    await insertLessons(toInsert);
+    await assertCanCreateLesson(ctx.accountId, ctx.plan, { additionalLessons: toInsert.length });
+    await insertLessons(ctx.accountId, toInsert);
     return lesson;
   }
 
   async setParticipantStatus(
+    ctx: AuthContext,
     lessonId: string,
     studentId: string,
     status: ParticipantStatus,
     action?: TelegramInteraction["action"]
   ): Promise<Lesson> {
-    const db = await loadDatabase();
+    const db = await loadAccountDatabase(ctx.accountId);
     const lesson = mustFind(db.lessons, lessonId, "Lesson");
     const participant = lesson.participants.find((item) => item.studentId === studentId);
     if (!participant) {
@@ -334,7 +391,7 @@ export class Store {
     lesson.updatedAt = now();
 
     if (action) {
-      await insertTelegramInteraction({
+      await insertTelegramInteraction(ctx.accountId, {
         id: nanoid(),
         lessonId,
         studentId,
@@ -348,8 +405,28 @@ export class Store {
     return lesson;
   }
 
-  async removeLessonParticipant(lessonId: string, studentId: string): Promise<Lesson | null> {
-    const db = await loadDatabase();
+  async setParticipantStatusForAccount(
+    accountId: string,
+    lessonId: string,
+    studentId: string,
+    status: ParticipantStatus,
+    action?: TelegramInteraction["action"]
+  ): Promise<Lesson> {
+    const account = await getAccountById(accountId);
+    if (!account) {
+      throw new Error("Account not found");
+    }
+    return this.setParticipantStatus(
+      { accountId, email: account.email, plan: account.plan },
+      lessonId,
+      studentId,
+      status,
+      action
+    );
+  }
+
+  async removeLessonParticipant(ctx: AuthContext, lessonId: string, studentId: string): Promise<Lesson | null> {
+    const db = await loadAccountDatabase(ctx.accountId);
     const lesson = mustFind(db.lessons, lessonId, "Lesson");
 
     if (lesson.status === "completed") {
@@ -372,8 +449,8 @@ export class Store {
     return lesson;
   }
 
-  async completeLesson(lessonId: string): Promise<Lesson> {
-    const db = await loadDatabase();
+  async completeLesson(ctx: AuthContext, lessonId: string): Promise<Lesson> {
+    const db = await loadAccountDatabase(ctx.accountId);
     const lesson = mustFind(db.lessons, lessonId, "Lesson");
 
     for (const participant of lesson.participants) {
@@ -400,8 +477,8 @@ export class Store {
     return lesson;
   }
 
-  async cancelLesson(lessonId: string): Promise<Lesson> {
-    const db = await loadDatabase();
+  async cancelLesson(ctx: AuthContext, lessonId: string): Promise<Lesson> {
+    const db = await loadAccountDatabase(ctx.accountId);
     const lesson = mustFind(db.lessons, lessonId, "Lesson");
     lesson.status = "cancelled_by_teacher";
     lesson.participants.forEach((participant) => {
@@ -414,8 +491,8 @@ export class Store {
     return lesson;
   }
 
-  async deleteLesson(lessonId: string, scope: RecurringDeleteScope = "single"): Promise<void> {
-    const db = await loadDatabase();
+  async deleteLesson(ctx: AuthContext, lessonId: string, scope: RecurringDeleteScope = "single"): Promise<void> {
+    const db = await loadAccountDatabase(ctx.accountId);
     const lesson = mustFind(db.lessons, lessonId, "Lesson");
 
     if (!lesson.recurringScheduleId) {
@@ -458,15 +535,18 @@ export class Store {
     await deleteRecurringScheduleRecord(schedule.id);
   }
 
-  async createPayment(input: {
-    studentId: string;
-    amount?: number;
-    paidAt?: string;
-    method: PaymentMethod;
-    packageId?: string;
-    lessonCount?: number;
-  }): Promise<Payment> {
-    const db = await loadDatabase();
+  async createPayment(
+    ctx: AuthContext,
+    input: {
+      studentId: string;
+      amount?: number;
+      paidAt?: string;
+      method: PaymentMethod;
+      packageId?: string;
+      lessonCount?: number;
+    }
+  ): Promise<Payment> {
+    const db = await loadAccountDatabase(ctx.accountId);
     mustFind(db.students, input.studentId, "Student");
 
     const lessonPackage = input.packageId
@@ -474,7 +554,12 @@ export class Store {
       : undefined;
 
     if (!lessonPackage) {
-      if (input.lessonCount === undefined || input.lessonCount === null || input.amount === undefined || input.amount === null) {
+      if (
+        input.lessonCount === undefined ||
+        input.lessonCount === null ||
+        input.amount === undefined ||
+        input.amount === null
+      ) {
         throw new Error("Lesson count and amount are required when no package is selected");
       }
     }
@@ -496,7 +581,7 @@ export class Store {
       createdAt: now()
     };
 
-    await insertPayment(payment);
+    await insertPayment(ctx.accountId, payment);
 
     const balance = getStudentBalance({ ...db, payments: [...db.payments, payment] }, input.studentId);
     refreshParticipantDebtFlags(db, input.studentId, balance);
@@ -504,12 +589,11 @@ export class Store {
       lesson.participants
         .filter((participant) => participant.studentId === input.studentId && !participant.balanceCharged)
         .map((participant) => ({
-          lessonId: lesson.id,
           participantId: participant.id,
           hasDebt: participant.hasDebt
         }))
     );
-    await replaceParticipantDebtFlags(input.studentId, flags);
+    await replaceParticipantDebtFlags(flags);
     await Promise.all(
       db.lessons
         .filter((lesson) => lesson.participants.some((participant) => participant.studentId === input.studentId))
@@ -519,8 +603,11 @@ export class Store {
     return payment;
   }
 
-  async createAdjustment(input: { studentId: string; lessonDelta: number; reason: string }): Promise<BalanceAdjustment> {
-    const db = await loadDatabase();
+  async createAdjustment(
+    ctx: AuthContext,
+    input: { studentId: string; lessonDelta: number; reason: string }
+  ): Promise<BalanceAdjustment> {
+    const db = await loadAccountDatabase(ctx.accountId);
     mustFind(db.students, input.studentId, "Student");
     const adjustment: BalanceAdjustment = {
       id: nanoid(),
@@ -529,7 +616,7 @@ export class Store {
       reason: input.reason.trim(),
       createdAt: now()
     };
-    await insertBalanceAdjustment(adjustment);
+    await insertBalanceAdjustment(ctx.accountId, adjustment);
 
     const balance = getStudentBalance(
       { ...db, balanceAdjustments: [...db.balanceAdjustments, adjustment] },
@@ -540,12 +627,11 @@ export class Store {
       lesson.participants
         .filter((participant) => participant.studentId === input.studentId && !participant.balanceCharged)
         .map((participant) => ({
-          lessonId: lesson.id,
           participantId: participant.id,
           hasDebt: participant.hasDebt
         }))
     );
-    await replaceParticipantDebtFlags(input.studentId, flags);
+    await replaceParticipantDebtFlags(flags);
     await Promise.all(
       db.lessons
         .filter((lesson) => lesson.participants.some((participant) => participant.studentId === input.studentId))
@@ -555,8 +641,8 @@ export class Store {
     return adjustment;
   }
 
-  async upsertReminder(reminder: Omit<Reminder, "id" | "createdAt">): Promise<Reminder> {
-    const db = await loadDatabase();
+  async upsertReminder(accountId: string, reminder: Omit<Reminder, "id" | "createdAt">): Promise<Reminder> {
+    const db = await loadAccountDatabase(accountId);
     const existing = db.reminders.find((item) => item.dedupeKey === reminder.dedupeKey);
     if (existing) {
       return existing;
@@ -567,25 +653,25 @@ export class Store {
       id: nanoid(),
       createdAt: now()
     };
-    await insertReminder(created);
+    await insertReminder(accountId, created);
     return created;
   }
 
-  async updateReminder(id: string, patch: Partial<Reminder>): Promise<Reminder> {
-    const db = await loadDatabase();
+  async updateReminder(accountId: string, id: string, patch: Partial<Reminder>): Promise<Reminder> {
+    const db = await loadAccountDatabase(accountId);
     const reminder = mustFind(db.reminders, id, "Reminder");
     Object.assign(reminder, patch);
     await updateReminderRecord(reminder);
     return reminder;
   }
 
-  async getBalances(): Promise<StudentBalance[]> {
-    const db = await loadDatabase();
+  async getBalances(ctx: AuthContext): Promise<StudentBalance[]> {
+    const db = await loadAccountDatabase(ctx.accountId);
     return db.students.map((student) => getStudentBalance(db, student.id));
   }
 
-  async getDashboard() {
-    const db = await this.getSnapshot();
+  async getDashboard(ctx: AuthContext) {
+    const db = await this.getSnapshot(ctx);
     const balances = db.students.map((student) => ({
       student,
       balance: getStudentBalance(db, student.id)

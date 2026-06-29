@@ -25,6 +25,31 @@ export type PaymentMethod = "cash" | "transfer" | "other";
 
 export type RecurringDeleteScope = "single" | "following" | "all";
 
+export type AccountPlan = "free" | "standard" | "premium";
+
+export interface Account {
+  id: string;
+  email: string;
+  name: string;
+  image?: string;
+  plan: AccountPlan;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AccountUsage = {
+  students: number;
+  lessonsThisMonth: number;
+  packages: number;
+  recurringSchedules: number;
+};
+
+export type AccountInfo = {
+  account: Account;
+  usage: AccountUsage;
+  limits: import("./plans").PlanLimits;
+};
+
 export interface Student {
   id: string;
   fullName: string;

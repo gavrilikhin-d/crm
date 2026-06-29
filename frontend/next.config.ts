@@ -1,4 +1,10 @@
+import { loadEnvConfig } from "@next/env";
 import type { NextConfig } from "next";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const frontendDir = path.dirname(fileURLToPath(import.meta.url));
+loadEnvConfig(path.resolve(frontendDir, ".."));
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -13,8 +19,8 @@ const nextConfig: NextConfig = {
         destination: `${reminderUrl}/api/payment-reminders/:path*`
       },
       {
-        source: "/api/:path*",
-        destination: `${backendUrl}/api/:path*`
+        source: "/api/((?!auth).*)",
+        destination: `${backendUrl}/api/$1`
       }
     ];
   }

@@ -29,6 +29,7 @@
     "typecheck": "bun --filter '*' typecheck",
     "seed": "cd backend && bun run seed",
     "db:push": "cd backend && bun run db:push",
+    "migrate:multitenancy": "cd backend && bun run migrate:multitenancy",
     "migrate:json": "cd backend && bun run migrate:json"
   }
 }

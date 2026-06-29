@@ -7,12 +7,14 @@ import {
   ChevronRight,
   CreditCard,
   GraduationCap,
+  LogOut,
   Plus,
   Pencil,
   Settings,
   Trash2,
   Users
 } from "lucide-react";
+import { signOut, useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { DateTimePicker } from "@/components/date-time-picker";
 import { CurrencyInput } from "@/components/examples/input/special/currency-input";
@@ -74,6 +76,7 @@ import {
 } from "@/i18n/format";
 import { getPaymentMethodLabel, getWeekdayShortLabels } from "@/i18n/labels";
 import type {
+  AccountInfo,
   AppSettings,
   Database,
   Lesson,
@@ -84,9 +87,11 @@ import type {
   StudentBalance
 } from "@crm/shared";
 import { CURRENCIES, formatMoney, resolveCurrency, type CurrencyCode } from "@crm/shared/currency";
+import { PLAN_META } from "@crm/shared/plans";
 
 type Snapshot = Database & {
   balances: StudentBalance[];
+  account?: AccountInfo;
   dashboard: {
     upcomingLessons: Lesson[];
     debtors: Array<{ student: Student; balance: StudentBalance }>;
@@ -245,7 +250,23 @@ export default function Home() {
       }
       await loadSnapshot();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("toast.actionFailed"));
+      const apiError = error as Error & { code?: string };
+      switch (apiError.code) {
+        case "student_limit":
+          toast.error(t("plan.limit.students"));
+          break;
+        case "lesson_limit":
+          toast.error(t("plan.limit.lessons"));
+          break;
+        case "package_limit":
+          toast.error(t("plan.limit.packages"));
+          break;
+        case "recurring_disabled":
+          toast.error(t("plan.limit.recurring"));
+          break;
+        default:
+          toast.error(apiError.message || t("toast.actionFailed"));
+      }
     }
   }
 
@@ -534,10 +555,11 @@ export default function Home() {
             <SidebarTrigger className="-ml-2 shrink-0" />
             <h1 className="truncate text-base font-bold text-stone-900 sm:text-lg">{activeTitle[activeSection]}</h1>
           </div>
-          <div className="hidden shrink-0 items-center gap-2 sm:flex sm:gap-3">
-            <Button type="button" onClick={openLessonDialog}>
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <Button type="button" className="hidden sm:inline-flex" onClick={openLessonDialog}>
               {t("calendar.scheduleLesson")}
             </Button>
+            <AccountMenu />
           </div>
         </header>
 
@@ -594,6 +616,7 @@ export default function Home() {
                     <LessonForm
                       key={lessonFormKey}
                       students={students}
+                      recurringEnabled={snapshot?.account?.limits.recurringEnabled ?? true}
                       defaultStartsAt={getDefaultLessonStartsAt(selectedDate)}
                       onSubmit={handleLessonSubmit}
                     />
@@ -676,7 +699,11 @@ export default function Home() {
         ) : null}
 
         {activeSection === "settings" ? (
-          <SettingsView currency={currency} onCurrencyChange={handleCurrencyChange} />
+          <SettingsView
+            accountInfo={snapshot?.account ?? null}
+            currency={currency}
+            onCurrencyChange={handleCurrencyChange}
+          />
         ) : null}
 
         <MobileFab activeSection={activeSection} onScheduleLesson={openLessonDialog} onAddStudent={() => {
@@ -1053,10 +1080,12 @@ function Modal({
 
 function LessonForm({
   students,
+  recurringEnabled,
   defaultStartsAt,
   onSubmit
 }: {
   students: Student[];
+  recurringEnabled: boolean;
   defaultStartsAt: string;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
@@ -1094,12 +1123,16 @@ function LessonForm({
           />
         </Field>
 
-        <Field orientation="horizontal">
-          <Checkbox id="lesson-repeat-weekly" name="repeatWeekly" />
-          <FieldContent>
-            <FieldLabel htmlFor="lesson-repeat-weekly">{t("form.repeatWeekly")}</FieldLabel>
-          </FieldContent>
-        </Field>
+        {recurringEnabled ? (
+          <Field orientation="horizontal">
+            <Checkbox id="lesson-repeat-weekly" name="repeatWeekly" />
+            <FieldContent>
+              <FieldLabel htmlFor="lesson-repeat-weekly">{t("form.repeatWeekly")}</FieldLabel>
+            </FieldContent>
+          </Field>
+        ) : (
+          <p className="text-sm text-muted-foreground">{t("plan.recurringDisabled")}</p>
+        )}
 
         <Button type="submit" disabled={!activeStudents.length || !selectedStudentIds.length}>
           {t("form.addToCalendar")}
@@ -1109,46 +1142,126 @@ function LessonForm({
   );
 }
 
+function AccountMenu() {
+  const { t } = useI18n();
+  const { data: session } = useSession();
+
+  if (!session?.user) {
+    return null;
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="hidden min-w-0 text-right sm:block">
+        <p className="truncate text-sm font-medium text-stone-900">{session.user.name}</p>
+        <p className="truncate text-xs text-muted-foreground">{session.user.email}</p>
+      </div>
+      <Button
+        variant="outline"
+        size="icon-sm"
+        type="button"
+        aria-label={t("auth.signOut")}
+        onClick={() => void signOut({ callbackUrl: "/login" })}
+      >
+        <LogOut className="size-4" />
+      </Button>
+    </div>
+  );
+}
+
 function SettingsView({
+  accountInfo,
   currency,
   onCurrencyChange
 }: {
+  accountInfo: AccountInfo | null;
   currency: CurrencyCode;
   onCurrencyChange: (currency: CurrencyCode) => void;
 }) {
   const { t } = useI18n();
+  const plan = accountInfo?.account.plan ?? "free";
 
   return (
     <section className={pageSectionClass} id="settings">
-      <Card className="max-w-xl">
-        <CardHeader>
-          <CardTitle>{t("settings.title")}</CardTitle>
-          <CardDescription>{t("settings.description")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="settings-currency">{t("settings.currency")}</FieldLabel>
-              <Select value={currency} onValueChange={(value) => onCurrencyChange(value as CurrencyCode)}>
-                <SelectTrigger id="settings-currency" className="w-full">
-                  <SelectValue placeholder={t("settings.selectCurrency")} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {CURRENCIES.map((item) => (
-                      <SelectItem key={item.code} value={item.code}>
-                        {item.label} ({item.code})
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <FieldDescription>{t("settings.currencyHint")}</FieldDescription>
-            </Field>
-          </FieldGroup>
-        </CardContent>
-      </Card>
+      <div className="grid max-w-xl gap-4">
+        {accountInfo ? (
+          <Card size="sm" className="gap-2 py-3 sm:gap-4 sm:py-4">
+            <CardHeader className="pb-0">
+              <CardTitle className="flex flex-wrap items-center gap-2">
+                {t("plan.current")}
+                <Badge variant="secondary">{t(`plan.${plan}`)}</Badge>
+                {PLAN_META[plan].hasPrioritySupport ? (
+                  <Badge variant="outline">{t("plan.prioritySupport")}</Badge>
+                ) : null}
+              </CardTitle>
+              <CardDescription>{t("plan.usageDescription")}</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-2 px-3 sm:px-4">
+              <PlanUsageRow
+                label={t("plan.usage.students")}
+                used={accountInfo.usage.students}
+                limit={accountInfo.limits.maxStudents}
+              />
+              <PlanUsageRow
+                label={t("plan.usage.lessonsThisMonth")}
+                used={accountInfo.usage.lessonsThisMonth}
+                limit={accountInfo.limits.maxLessonsPerMonth}
+              />
+              <PlanUsageRow
+                label={t("plan.usage.packages")}
+                used={accountInfo.usage.packages}
+                limit={accountInfo.limits.maxPackages}
+              />
+              <p className="text-sm text-muted-foreground">
+                {accountInfo.limits.recurringEnabled ? t("plan.recurringEnabled") : t("plan.recurringDisabled")}
+              </p>
+              <Button type="button" disabled className="mt-2 w-full sm:w-auto">
+                {t("plan.upgradeSoon")}
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        <Card className="max-w-xl">
+          <CardHeader>
+            <CardTitle>{t("settings.title")}</CardTitle>
+            <CardDescription>{t("settings.description")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="settings-currency">{t("settings.currency")}</FieldLabel>
+                <Select value={currency} onValueChange={(value) => onCurrencyChange(value as CurrencyCode)}>
+                  <SelectTrigger id="settings-currency" className="w-full">
+                    <SelectValue placeholder={t("settings.selectCurrency")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {CURRENCIES.map((item) => (
+                        <SelectItem key={item.code} value={item.code}>
+                          {item.label} ({item.code})
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <FieldDescription>{t("settings.currencyHint")}</FieldDescription>
+              </Field>
+            </FieldGroup>
+          </CardContent>
+        </Card>
+      </div>
     </section>
+  );
+}
+
+function PlanUsageRow({ label, used, limit }: { label: string; used: number; limit: number | null }) {
+  const value = limit === null ? `${used} / ∞` : `${used} / ${limit}`;
+  return (
+    <div className="flex items-center justify-between gap-3 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium tabular-nums">{value}</span>
+    </div>
   );
 }
 

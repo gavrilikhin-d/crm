@@ -1,17 +1,73 @@
 import "dotenv/config";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { nanoid } from "nanoid";
 import type { Database } from "@crm/shared";
-import { importDatabase } from "./db/repository";
+import { db } from "./db/client";
+import { accounts } from "./db/schema";
+import {
+  ensureAccountDefaults,
+  insertBalanceAdjustment,
+  insertLessonPackage,
+  insertLessons,
+  insertPayment,
+  insertRecurringSchedule,
+  insertReminder,
+  insertStudent,
+  insertTelegramInteraction,
+  updateAppSettings
+} from "./db/repository";
 
-const dbPath = process.env.DATA_FILE_PATH ?? join(process.cwd(), "data", "db.json");
-
-const raw = await readFile(dbPath, "utf8");
+const dataFilePath = process.env.DATA_FILE_PATH ?? "backend/data/db.json";
+const raw = await readFile(dataFilePath, "utf8");
 const snapshot = JSON.parse(raw) as Database;
 
-if (!snapshot.recurringSchedules) {
-  snapshot.recurringSchedules = [];
+const accountId = nanoid();
+const timestamp = new Date().toISOString();
+
+await db.insert(accounts).values({
+  id: accountId,
+  email: "legacy@local.crm",
+  name: "Legacy Import",
+  image: null,
+  googleSub: `legacy-import-${accountId}`,
+  plan: "standard",
+  createdAt: timestamp,
+  updatedAt: timestamp
+});
+
+await ensureAccountDefaults(accountId);
+await updateAppSettings(accountId, snapshot.settings);
+
+for (const student of snapshot.students) {
+  await insertStudent(accountId, student);
 }
 
-await importDatabase(snapshot);
-console.log(`Imported ${dbPath} into PostgreSQL`);
+for (const lessonPackage of snapshot.lessonPackages) {
+  await insertLessonPackage(accountId, lessonPackage);
+}
+
+for (const schedule of snapshot.recurringSchedules) {
+  await insertRecurringSchedule(accountId, schedule);
+}
+
+if (snapshot.lessons.length) {
+  await insertLessons(accountId, snapshot.lessons);
+}
+
+for (const payment of snapshot.payments) {
+  await insertPayment(accountId, payment);
+}
+
+for (const adjustment of snapshot.balanceAdjustments) {
+  await insertBalanceAdjustment(accountId, adjustment);
+}
+
+for (const reminder of snapshot.reminders) {
+  await insertReminder(accountId, reminder);
+}
+
+for (const interaction of snapshot.telegramInteractions) {
+  await insertTelegramInteraction(accountId, interaction);
+}
+
+console.log(`Imported legacy JSON into account ${accountId}`);

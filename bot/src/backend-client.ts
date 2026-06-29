@@ -1,6 +1,17 @@
 import type { Lesson, Student, TelegramStudentProfile } from "@crm/shared";
 
 const backendUrl = process.env.BACKEND_INTERNAL_URL ?? "http://localhost:4000";
+const internalToken = process.env.INTERNAL_API_TOKEN ?? "";
+
+function internalHeaders(body?: unknown): HeadersInit {
+  const headers: Record<string, string> = {
+    authorization: `Bearer ${internalToken}`
+  };
+  if (body) {
+    headers["content-type"] = "application/json";
+  }
+  return headers;
+}
 
 export async function bindTelegramChat(input: {
   token: string;
@@ -32,7 +43,7 @@ export async function setParticipantStatus(input: {
   status: string;
   action: "attend" | "decline";
 }): Promise<Lesson> {
-  return api<Lesson>(`/api/lessons/${input.lessonId}/participants/${input.studentId}/status`, {
+  return api<Lesson>(`/internal/lessons/${input.lessonId}/participants/${input.studentId}/status`, {
     method: "POST",
     body: {
       status: input.status,
@@ -44,7 +55,7 @@ export async function setParticipantStatus(input: {
 async function api<T>(path: string, options?: { method?: string; body?: unknown }): Promise<T> {
   const response = await fetch(`${backendUrl}${path}`, {
     method: options?.method ?? "GET",
-    headers: options?.body ? { "content-type": "application/json" } : undefined,
+    headers: internalHeaders(options?.body),
     body: options?.body ? JSON.stringify(options.body) : undefined
   });
 

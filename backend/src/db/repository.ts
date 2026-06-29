@@ -1,6 +1,8 @@
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type {
+  Account,
+  AccountPlan,
   AppSettings,
   BalanceAdjustment,
   Database,
@@ -15,6 +17,7 @@ import type {
 } from "@crm/shared";
 import { db } from "./client";
 import {
+  accounts,
   appSettings,
   balanceAdjustments,
   lessonPackages,
@@ -30,33 +33,130 @@ import {
 } from "./schema";
 import { createDefaultSettings } from "../store-logic";
 
-export async function loadDatabase(): Promise<Database> {
+export async function getReminderAccountId(id: string): Promise<string | null> {
+  const rows = await db.select({ accountId: reminders.accountId }).from(reminders).where(eq(reminders.id, id)).limit(1);
+  return rows[0]?.accountId ?? null;
+}
+
+export async function listAccountIds(): Promise<string[]> {
+  const rows = await db.select({ id: accounts.id }).from(accounts);
+  return rows.map((row) => row.id);
+}
+
+export async function findStudentById(studentId: string): Promise<(Student & { accountId: string }) | null> {
+  const rows = await db.select().from(students).where(eq(students.id, studentId)).limit(1);
+  if (!rows[0]) {
+    return null;
+  }
+  return { ...mapStudent(rows[0]), accountId: rows[0].accountId };
+}
+
+export async function upsertAccountByGoogle(input: {
+  googleSub: string;
+  email: string;
+  name: string;
+  image?: string;
+}): Promise<Account> {
+  const existing = await getAccountByGoogleSub(input.googleSub);
+  const timestamp = new Date().toISOString();
+
+  if (existing) {
+    await db
+      .update(accounts)
+      .set({
+        email: input.email,
+        name: input.name,
+        image: input.image ?? null,
+        updatedAt: timestamp
+      })
+      .where(eq(accounts.id, existing.id));
+
+    return {
+      ...existing,
+      email: input.email,
+      name: input.name,
+      image: input.image,
+      updatedAt: timestamp
+    };
+  }
+
+  const account: Account = {
+    id: nanoid(),
+    email: input.email,
+    name: input.name,
+    image: input.image,
+    plan: "free",
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
+
+  await db.insert(accounts).values({
+    id: account.id,
+    email: account.email,
+    name: account.name,
+    image: account.image ?? null,
+    googleSub: input.googleSub,
+    plan: account.plan,
+    createdAt: account.createdAt,
+    updatedAt: account.updatedAt
+  });
+
+  await ensureAccountDefaults(account.id);
+  return account;
+}
+
+export async function getAccountById(id: string): Promise<Account | null> {
+  const rows = await db.select().from(accounts).where(eq(accounts.id, id)).limit(1);
+  return rows[0] ? mapAccount(rows[0]) : null;
+}
+
+export async function getAccountByGoogleSub(googleSub: string): Promise<Account | null> {
+  const rows = await db.select().from(accounts).where(eq(accounts.googleSub, googleSub)).limit(1);
+  return rows[0] ? mapAccount(rows[0]) : null;
+}
+
+export async function loadAccountDatabase(accountId: string): Promise<Database> {
   const [
     studentRows,
     packageRows,
     lessonRows,
-    participantRows,
     scheduleRows,
-    scheduleStudentRows,
-    skippedRows,
     paymentRows,
     reminderRows,
     interactionRows,
     adjustmentRows,
     settingsRows
   ] = await Promise.all([
-    db.select().from(students),
-    db.select().from(lessonPackages),
-    db.select().from(lessons),
-    db.select().from(lessonParticipants),
-    db.select().from(recurringSchedules),
-    db.select().from(recurringScheduleStudents),
-    db.select().from(recurringSkippedOccurrences),
-    db.select().from(payments),
-    db.select().from(reminders),
-    db.select().from(telegramInteractions),
-    db.select().from(balanceAdjustments),
-    db.select().from(appSettings)
+    db.select().from(students).where(eq(students.accountId, accountId)),
+    db.select().from(lessonPackages).where(eq(lessonPackages.accountId, accountId)),
+    db.select().from(lessons).where(eq(lessons.accountId, accountId)),
+    db.select().from(recurringSchedules).where(eq(recurringSchedules.accountId, accountId)),
+    db.select().from(payments).where(eq(payments.accountId, accountId)),
+    db.select().from(reminders).where(eq(reminders.accountId, accountId)),
+    db.select().from(telegramInteractions).where(eq(telegramInteractions.accountId, accountId)),
+    db.select().from(balanceAdjustments).where(eq(balanceAdjustments.accountId, accountId)),
+    db.select().from(appSettings).where(eq(appSettings.accountId, accountId))
+  ]);
+
+  const lessonIds = lessonRows.map((row) => row.id);
+  const scheduleIds = scheduleRows.map((row) => row.id);
+
+  const [participantRows, scheduleStudentRows, skippedRows] = await Promise.all([
+    lessonIds.length
+      ? db.select().from(lessonParticipants).where(inArray(lessonParticipants.lessonId, lessonIds))
+      : Promise.resolve([]),
+    scheduleIds.length
+      ? db
+          .select()
+          .from(recurringScheduleStudents)
+          .where(inArray(recurringScheduleStudents.scheduleId, scheduleIds))
+      : Promise.resolve([]),
+    scheduleIds.length
+      ? db
+          .select()
+          .from(recurringSkippedOccurrences)
+          .where(inArray(recurringSkippedOccurrences.scheduleId, scheduleIds))
+      : Promise.resolve([])
   ]);
 
   const participantsByLesson = new Map<string, LessonParticipant[]>();
@@ -105,16 +205,54 @@ export async function loadDatabase(): Promise<Database> {
   };
 }
 
-export async function ensureDefaults(): Promise<void> {
+export async function countActiveStudents(accountId: string): Promise<number> {
+  const rows = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(students)
+    .where(and(eq(students.accountId, accountId), eq(students.status, "active")));
+  return Number(rows[0]?.count ?? 0);
+}
+
+export async function countLessonsInMonth(accountId: string, monthStart: Date, monthEnd: Date): Promise<number> {
+  const rows = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(lessons)
+    .where(
+      and(
+        eq(lessons.accountId, accountId),
+        gte(lessons.startsAt, monthStart.toISOString()),
+        lt(lessons.startsAt, monthEnd.toISOString())
+      )
+    );
+  return Number(rows[0]?.count ?? 0);
+}
+
+export async function countPackages(accountId: string): Promise<number> {
+  const rows = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(lessonPackages)
+    .where(eq(lessonPackages.accountId, accountId));
+  return Number(rows[0]?.count ?? 0);
+}
+
+export async function countRecurringSchedules(accountId: string): Promise<number> {
+  const rows = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(recurringSchedules)
+    .where(eq(recurringSchedules.accountId, accountId));
+  return Number(rows[0]?.count ?? 0);
+}
+
+export async function ensureAccountDefaults(accountId: string): Promise<void> {
   const [settingsCount, packagesCount] = await Promise.all([
-    db.select({ count: sql<number>`count(*)` }).from(appSettings),
-    db.select({ count: sql<number>`count(*)` }).from(lessonPackages)
+    db.select({ count: sql<number>`count(*)` }).from(appSettings).where(eq(appSettings.accountId, accountId)),
+    db.select({ count: sql<number>`count(*)` }).from(lessonPackages).where(eq(lessonPackages.accountId, accountId))
   ]);
 
   if (Number(settingsCount[0]?.count ?? 0) === 0) {
     const defaults = createDefaultSettings();
     await db.insert(appSettings).values({
-      id: "default",
+      accountId,
       lessonReminderMinutes: defaults.lessonReminderMinutes,
       individualDurationMinutes: defaults.individualDurationMinutes,
       groupDurationMinutes: defaults.groupDurationMinutes,
@@ -129,6 +267,7 @@ export async function ensureDefaults(): Promise<void> {
     await db.insert(lessonPackages).values([
       {
         id: nanoid(),
+        accountId,
         name: "Разовое занятие",
         lessonCount: 1,
         price: 3000,
@@ -138,6 +277,7 @@ export async function ensureDefaults(): Promise<void> {
       },
       {
         id: nanoid(),
+        accountId,
         name: "Пакет 4 занятия",
         lessonCount: 4,
         price: 11000,
@@ -147,6 +287,7 @@ export async function ensureDefaults(): Promise<void> {
       },
       {
         id: nanoid(),
+        accountId,
         name: "Пакет 8 занятий",
         lessonCount: 8,
         price: 20000,
@@ -158,7 +299,7 @@ export async function ensureDefaults(): Promise<void> {
   }
 }
 
-export async function updateAppSettings(settings: AppSettings): Promise<void> {
+export async function updateAppSettings(accountId: string, settings: AppSettings): Promise<void> {
   await db
     .update(appSettings)
     .set({
@@ -169,12 +310,13 @@ export async function updateAppSettings(settings: AppSettings): Promise<void> {
       currency: settings.currency,
       cancellationPolicy: settings.cancellationPolicy
     })
-    .where(eq(appSettings.id, "default"));
+    .where(eq(appSettings.accountId, accountId));
 }
 
-export async function insertStudent(student: Student): Promise<void> {
+export async function insertStudent(accountId: string, student: Student): Promise<void> {
   await db.insert(students).values({
     id: student.id,
+    accountId,
     fullName: student.fullName,
     avatarUrl: student.avatarUrl ?? null,
     telegramUsername: student.telegramUsername ?? null,
@@ -186,6 +328,22 @@ export async function insertStudent(student: Student): Promise<void> {
     createdAt: student.createdAt,
     updatedAt: student.updatedAt
   });
+}
+
+export async function findStudentByBindToken(token: string): Promise<(Student & { accountId: string }) | null> {
+  const rows = await db.select().from(students).where(eq(students.telegramBindToken, token)).limit(1);
+  if (!rows[0]) {
+    return null;
+  }
+  return { ...mapStudent(rows[0]), accountId: rows[0].accountId };
+}
+
+export async function findStudentByTelegramUser(userId: string): Promise<(Student & { accountId: string }) | null> {
+  const rows = await db.select().from(students).where(eq(students.telegramUserId, userId)).limit(1);
+  if (!rows[0]) {
+    return null;
+  }
+  return { ...mapStudent(rows[0]), accountId: rows[0].accountId };
 }
 
 export async function updateStudentRecord(student: Student): Promise<void> {
@@ -209,9 +367,10 @@ export async function deleteStudentRecords(studentId: string): Promise<void> {
   await db.delete(students).where(eq(students.id, studentId));
 }
 
-export async function insertLessonPackage(lessonPackage: LessonPackage): Promise<void> {
+export async function insertLessonPackage(accountId: string, lessonPackage: LessonPackage): Promise<void> {
   await db.insert(lessonPackages).values({
     id: lessonPackage.id,
+    accountId,
     name: lessonPackage.name,
     lessonCount: lessonPackage.lessonCount,
     price: lessonPackage.price,
@@ -225,9 +384,10 @@ export async function deleteLessonPackageRecord(id: string): Promise<void> {
   await db.delete(lessonPackages).where(eq(lessonPackages.id, id));
 }
 
-export async function insertRecurringSchedule(schedule: RecurringSchedule): Promise<void> {
+export async function insertRecurringSchedule(accountId: string, schedule: RecurringSchedule): Promise<void> {
   await db.insert(recurringSchedules).values({
     id: schedule.id,
+    accountId,
     weekday: schedule.weekday,
     time: schedule.time,
     durationMinutes: schedule.durationMinutes,
@@ -287,12 +447,12 @@ export async function deleteRecurringScheduleRecord(id: string): Promise<void> {
   await db.delete(recurringSchedules).where(eq(recurringSchedules.id, id));
 }
 
-export async function insertLessons(lessonList: Lesson[]): Promise<void> {
+export async function insertLessons(accountId: string, lessonList: Lesson[]): Promise<void> {
   if (!lessonList.length) {
     return;
   }
 
-  await db.insert(lessons).values(lessonList.map(mapLessonInsert));
+  await db.insert(lessons).values(lessonList.map((lesson) => mapLessonInsert(accountId, lesson)));
   const participantRows = lessonList.flatMap((lesson) =>
     lesson.participants.map((participant) => mapParticipantInsert(lesson.id, participant))
   );
@@ -330,9 +490,10 @@ export async function deleteLessonsByIds(ids: string[]): Promise<void> {
   await db.delete(lessons).where(inArray(lessons.id, ids));
 }
 
-export async function insertPayment(payment: Payment): Promise<void> {
+export async function insertPayment(accountId: string, payment: Payment): Promise<void> {
   await db.insert(payments).values({
     id: payment.id,
+    accountId,
     studentId: payment.studentId,
     amount: payment.amount,
     paidAt: payment.paidAt,
@@ -343,9 +504,10 @@ export async function insertPayment(payment: Payment): Promise<void> {
   });
 }
 
-export async function insertBalanceAdjustment(adjustment: BalanceAdjustment): Promise<void> {
+export async function insertBalanceAdjustment(accountId: string, adjustment: BalanceAdjustment): Promise<void> {
   await db.insert(balanceAdjustments).values({
     id: adjustment.id,
+    accountId,
     studentId: adjustment.studentId,
     lessonDelta: adjustment.lessonDelta,
     reason: adjustment.reason,
@@ -353,9 +515,10 @@ export async function insertBalanceAdjustment(adjustment: BalanceAdjustment): Pr
   });
 }
 
-export async function insertReminder(reminder: Reminder): Promise<void> {
+export async function insertReminder(accountId: string, reminder: Reminder): Promise<void> {
   await db.insert(reminders).values({
     id: reminder.id,
+    accountId,
     type: reminder.type,
     lessonId: reminder.lessonId ?? null,
     studentId: reminder.studentId ?? null,
@@ -384,9 +547,10 @@ export async function updateReminderRecord(reminder: Reminder): Promise<void> {
     .where(eq(reminders.id, reminder.id));
 }
 
-export async function insertTelegramInteraction(interaction: TelegramInteraction): Promise<void> {
+export async function insertTelegramInteraction(accountId: string, interaction: TelegramInteraction): Promise<void> {
   await db.insert(telegramInteractions).values({
     id: interaction.id,
+    accountId,
     lessonId: interaction.lessonId,
     studentId: interaction.studentId,
     action: interaction.action,
@@ -395,8 +559,7 @@ export async function insertTelegramInteraction(interaction: TelegramInteraction
 }
 
 export async function replaceParticipantDebtFlags(
-  studentId: string,
-  flags: Array<{ lessonId: string; participantId: string; hasDebt: boolean }>
+  flags: Array<{ participantId: string; hasDebt: boolean }>
 ): Promise<void> {
   await Promise.all(
     flags.map((flag) =>
@@ -408,161 +571,52 @@ export async function replaceParticipantDebtFlags(
   );
 }
 
-export async function importDatabase(snapshot: Database): Promise<void> {
-  await db.transaction(async (tx) => {
-    await tx.delete(telegramInteractions);
-    await tx.delete(reminders);
-    await tx.delete(lessonParticipants);
-    await tx.delete(lessons);
-    await tx.delete(recurringSkippedOccurrences);
-    await tx.delete(recurringScheduleStudents);
-    await tx.delete(recurringSchedules);
-    await tx.delete(payments);
-    await tx.delete(balanceAdjustments);
-    await tx.delete(students);
-    await tx.delete(lessonPackages);
-    await tx.delete(appSettings);
-
-    await tx.insert(appSettings).values({
-      id: "default",
-      lessonReminderMinutes: snapshot.settings.lessonReminderMinutes,
-      individualDurationMinutes: snapshot.settings.individualDurationMinutes,
-      groupDurationMinutes: snapshot.settings.groupDurationMinutes,
-      defaultSingleLessonPrice: snapshot.settings.defaultSingleLessonPrice,
-      currency: snapshot.settings.currency,
-      cancellationPolicy: snapshot.settings.cancellationPolicy
-    });
-
-    if (snapshot.students.length) {
-      await tx.insert(students).values(snapshot.students.map((student) => ({
-        id: student.id,
-        fullName: student.fullName,
-        avatarUrl: student.avatarUrl ?? null,
-        telegramUsername: student.telegramUsername ?? null,
-        telegramUserId: student.telegramUserId ?? null,
-        telegramChatId: student.telegramChatId ?? null,
-        telegramBindToken: student.telegramBindToken,
-        status: student.status,
-        defaultLessonPrice: student.defaultLessonPrice,
-        createdAt: student.createdAt,
-        updatedAt: student.updatedAt
-      })));
-    }
-
-    if (snapshot.lessonPackages.length) {
-      await tx.insert(lessonPackages).values(snapshot.lessonPackages.map((item) => ({
-        id: item.id,
-        name: item.name,
-        lessonCount: item.lessonCount,
-        price: item.price,
-        active: item.active,
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt
-      })));
-    }
-
-    if (snapshot.recurringSchedules.length) {
-      await tx.insert(recurringSchedules).values(
-        snapshot.recurringSchedules.map((schedule) => ({
-          id: schedule.id,
-          weekday: schedule.weekday,
-          time: schedule.time,
-          durationMinutes: schedule.durationMinutes,
-          lessonType: schedule.lessonType,
-          activeFrom: schedule.activeFrom,
-          activeTo: schedule.activeTo ?? null,
-          createdAt: schedule.createdAt,
-          updatedAt: schedule.updatedAt
-        }))
-      );
-
-      const scheduleStudents = snapshot.recurringSchedules.flatMap((schedule) =>
-        schedule.studentIds.map((studentId) => ({
-          scheduleId: schedule.id,
-          studentId
-        }))
-      );
-      if (scheduleStudents.length) {
-        await tx.insert(recurringScheduleStudents).values(scheduleStudents);
-      }
-
-      const skipped = snapshot.recurringSchedules.flatMap((schedule) =>
-        (schedule.skippedOccurrences ?? []).map((startsAt) => ({
-          scheduleId: schedule.id,
-          startsAt
-        }))
-      );
-      if (skipped.length) {
-        await tx.insert(recurringSkippedOccurrences).values(skipped);
-      }
-    }
-
-    if (snapshot.lessons.length) {
-      await tx.insert(lessons).values(snapshot.lessons.map(mapLessonInsert));
-      const participants = snapshot.lessons.flatMap((lesson) =>
-        lesson.participants.map((participant) => mapParticipantInsert(lesson.id, participant))
-      );
-      if (participants.length) {
-        await tx.insert(lessonParticipants).values(participants);
-      }
-    }
-
-    if (snapshot.payments.length) {
-      await tx.insert(payments).values(snapshot.payments.map((payment) => ({
-        id: payment.id,
-        studentId: payment.studentId,
-        amount: payment.amount,
-        paidAt: payment.paidAt,
-        method: payment.method,
-        packageId: payment.packageId ?? null,
-        lessonCount: payment.lessonCount,
-        createdAt: payment.createdAt
-      })));
-    }
-
-    if (snapshot.balanceAdjustments.length) {
-      await tx.insert(balanceAdjustments).values(snapshot.balanceAdjustments);
-    }
-
-    if (snapshot.reminders.length) {
-      await tx.insert(reminders).values(
-        snapshot.reminders.map((reminder) => ({
-          id: reminder.id,
-          type: reminder.type,
-          lessonId: reminder.lessonId ?? null,
-          studentId: reminder.studentId ?? null,
-          scheduledFor: reminder.scheduledFor,
-          status: reminder.status,
-          sentAt: reminder.sentAt ?? null,
-          error: reminder.error ?? null,
-          dedupeKey: reminder.dedupeKey,
-          createdAt: reminder.createdAt
-        }))
-      );
-    }
-
-    if (snapshot.telegramInteractions.length) {
-      await tx.insert(telegramInteractions).values(snapshot.telegramInteractions);
-    }
-  });
+export async function getLessonAccountId(lessonId: string): Promise<string | null> {
+  const rows = await db.select({ accountId: lessons.accountId }).from(lessons).where(eq(lessons.id, lessonId)).limit(1);
+  return rows[0]?.accountId ?? null;
 }
 
-export async function resetDatabase(): Promise<void> {
-  await db.transaction(async (tx) => {
-    await tx.delete(telegramInteractions);
-    await tx.delete(reminders);
-    await tx.delete(lessonParticipants);
-    await tx.delete(lessons);
-    await tx.delete(recurringSkippedOccurrences);
-    await tx.delete(recurringScheduleStudents);
-    await tx.delete(recurringSchedules);
-    await tx.delete(payments);
-    await tx.delete(balanceAdjustments);
-    await tx.delete(students);
-    await tx.delete(lessonPackages);
-    await tx.delete(appSettings);
-  });
-  await ensureDefaults();
+export async function assignLegacyDataToAccount(accountId: string): Promise<void> {
+  await db.update(students).set({ accountId }).where(sql`account_id IS NULL OR account_id = ''`);
+  await db.update(lessonPackages).set({ accountId }).where(sql`account_id IS NULL OR account_id = ''`);
+  await db.update(recurringSchedules).set({ accountId }).where(sql`account_id IS NULL OR account_id = ''`);
+  await db.update(lessons).set({ accountId }).where(sql`account_id IS NULL OR account_id = ''`);
+  await db.update(payments).set({ accountId }).where(sql`account_id IS NULL OR account_id = ''`);
+  await db.update(reminders).set({ accountId }).where(sql`account_id IS NULL OR account_id = ''`);
+  await db.update(telegramInteractions).set({ accountId }).where(sql`account_id IS NULL OR account_id = ''`);
+  await db.update(balanceAdjustments).set({ accountId }).where(sql`account_id IS NULL OR account_id = ''`);
+
+  const legacySettings = await db.select().from(appSettings).where(sql`account_id = 'default'`).limit(1);
+  if (legacySettings[0]) {
+    const row = legacySettings[0];
+    await db
+      .insert(appSettings)
+      .values({
+        accountId,
+        lessonReminderMinutes: row.lessonReminderMinutes,
+        individualDurationMinutes: row.individualDurationMinutes,
+        groupDurationMinutes: row.groupDurationMinutes,
+        defaultSingleLessonPrice: row.defaultSingleLessonPrice,
+        currency: row.currency,
+        cancellationPolicy: row.cancellationPolicy
+      })
+      .onConflictDoNothing();
+    await db.delete(appSettings).where(eq(appSettings.accountId, "default" as never));
+  } else {
+    await ensureAccountDefaults(accountId);
+  }
+}
+
+function mapAccount(row: typeof accounts.$inferSelect): Account {
+  return {
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    image: row.image ?? undefined,
+    plan: row.plan as AccountPlan,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt
+  };
 }
 
 function mapStudent(row: typeof students.$inferSelect): Student {
@@ -593,10 +647,7 @@ function mapLessonPackage(row: typeof lessonPackages.$inferSelect): LessonPackag
   };
 }
 
-function mapLesson(
-  row: typeof lessons.$inferSelect,
-  participants: LessonParticipant[]
-): Lesson {
+function mapLesson(row: typeof lessons.$inferSelect, participants: LessonParticipant[]): Lesson {
   return {
     id: row.id,
     startsAt: row.startsAt,
@@ -690,9 +741,10 @@ function mapSettings(row: typeof appSettings.$inferSelect): AppSettings {
   };
 }
 
-function mapLessonInsert(lesson: Lesson) {
+function mapLessonInsert(accountId: string, lesson: Lesson) {
   return {
     id: lesson.id,
+    accountId,
     startsAt: lesson.startsAt,
     durationMinutes: lesson.durationMinutes,
     originalType: lesson.originalType,

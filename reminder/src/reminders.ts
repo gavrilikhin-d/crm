@@ -1,5 +1,5 @@
 import { sendLessonReminder, sendPaymentReminder } from "./telegram";
-import { getBalances, getSnapshot, updateReminder, upsertReminder } from "./backend-client";
+import { getWorkerSnapshots, updateReminder, upsertReminder } from "./backend-client";
 import type { Lesson, Student } from "@crm/shared";
 
 const minuteMs = 60_000;
@@ -17,52 +17,61 @@ export function startReminderScheduler(): void {
 }
 
 export async function runReminderTick(): Promise<void> {
-  const db = await getSnapshot();
+  const workerSnapshots = await getWorkerSnapshots();
   const now = Date.now();
 
-  for (const lesson of db.lessons) {
-    if (lesson.status === "cancelled_by_teacher" || lesson.status === "cancelled_by_student") {
-      continue;
-    }
+  for (const worker of workerSnapshots) {
+    const db = worker.snapshot;
 
-    const startsAt = new Date(lesson.startsAt).getTime();
-    for (const leadMinutes of db.settings.lessonReminderMinutes) {
-      const scheduledFor = startsAt - leadMinutes * minuteMs;
-      const shouldSend = scheduledFor <= now && startsAt > now;
-      if (!shouldSend) {
+    for (const lesson of db.lessons) {
+      if (lesson.status === "cancelled_by_teacher" || lesson.status === "cancelled_by_student") {
         continue;
       }
 
-      for (const participant of lesson.participants) {
-        if (participant.status === "declined") {
+      const startsAt = new Date(lesson.startsAt).getTime();
+      for (const leadMinutes of worker.settings.lessonReminderMinutes) {
+        const scheduledFor = startsAt - leadMinutes * minuteMs;
+        const shouldSend = scheduledFor <= now && startsAt > now;
+        if (!shouldSend) {
           continue;
         }
 
-        const student = db.students.find((candidate) => candidate.id === participant.studentId);
-        if (!student) {
-          continue;
-        }
+        for (const participant of lesson.participants) {
+          if (participant.status === "declined") {
+            continue;
+          }
 
-        await sendReminderOnce({
-          student,
-          lesson,
-          scheduledFor: new Date(scheduledFor).toISOString(),
-          dedupeKey: `lesson:${lesson.id}:${student.id}:${leadMinutes}`
-        });
+          const student = db.students.find((candidate) => candidate.id === participant.studentId);
+          if (!student) {
+            continue;
+          }
+
+          await sendReminderOnce({
+            student,
+            lesson,
+            scheduledFor: new Date(scheduledFor).toISOString(),
+            dedupeKey: `lesson:${lesson.id}:${student.id}:${leadMinutes}`
+          });
+        }
       }
     }
   }
 }
 
 export async function sendManualPaymentReminder(studentId: string): Promise<{ sent: boolean; reason?: string }> {
-  const db = await getSnapshot();
+  const workerSnapshots = await getWorkerSnapshots();
+  const worker = workerSnapshots.find((item) => item.snapshot.students.some((student) => student.id === studentId));
+  if (!worker) {
+    throw new Error("Student not found");
+  }
+
+  const db = worker.snapshot;
   const student = db.students.find((candidate) => candidate.id === studentId);
   if (!student) {
     throw new Error("Student not found");
   }
 
-  const balances = await getBalances();
-  const balance = balances.find((candidate) => candidate.studentId === studentId);
+  const balance = worker.balances.find((candidate) => candidate.studentId === studentId);
   const unpaidLessons = balance?.debtLessons ?? 0;
   const hasNoPaidLessons = (balance?.remainingLessons ?? 0) < 1;
 

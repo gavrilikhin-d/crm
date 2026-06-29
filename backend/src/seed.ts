@@ -1,28 +1,52 @@
 import "dotenv/config";
-import { resetDatabase } from "./db/repository";
+import { nanoid } from "nanoid";
+import { db } from "./db/client";
+import { accounts } from "./db/schema";
+import { ensureAccountDefaults } from "./db/repository";
 import { store } from "./store";
+import type { AuthContext } from "./auth";
 
-await resetDatabase();
+const timestamp = new Date().toISOString();
+const accountId = nanoid();
 
-const anna = await store.createStudent({
+await db.insert(accounts).values({
+  id: accountId,
+  email: "seed@local.crm",
+  name: "Seed Account",
+  image: null,
+  googleSub: `seed-${accountId}`,
+  plan: "standard",
+  createdAt: timestamp,
+  updatedAt: timestamp
+});
+
+await ensureAccountDefaults(accountId);
+
+const ctx: AuthContext = {
+  accountId,
+  email: "seed@local.crm",
+  plan: "standard"
+};
+
+const anna = await store.createStudent(ctx, {
   fullName: "Анна Смирнова",
   telegramUsername: "@anna_voice",
   defaultLessonPrice: 3000
 });
 
-const ivan = await store.createStudent({
+const ivan = await store.createStudent(ctx, {
   fullName: "Иван Петров",
   telegramUsername: "@ivan_music",
   defaultLessonPrice: 3000
 });
 
-const maria = await store.createStudent({
+const maria = await store.createStudent(ctx, {
   fullName: "Мария Орлова",
   telegramUsername: "@maria_sings",
   defaultLessonPrice: 3000
 });
 
-const sophia = await store.createStudent({
+const sophia = await store.createStudent(ctx, {
   fullName: "София Лебедева",
   telegramUsername: "@sophia_voice",
   telegramUserId: "1000000001",
@@ -30,12 +54,12 @@ const sophia = await store.createStudent({
   defaultLessonPrice: 3000
 });
 
-const snapshot = await store.getSnapshot();
+const snapshot = await store.getSnapshot(ctx);
 const fourLessonPackage = snapshot.lessonPackages.find((item) => item.lessonCount === 4);
 const eightLessonPackage = snapshot.lessonPackages.find((item) => item.lessonCount === 8);
 
 if (fourLessonPackage) {
-  await store.createPayment({
+  await store.createPayment(ctx, {
     studentId: anna.id,
     method: "transfer",
     packageId: fourLessonPackage.id
@@ -43,14 +67,14 @@ if (fourLessonPackage) {
 }
 
 if (eightLessonPackage) {
-  await store.createPayment({
+  await store.createPayment(ctx, {
     studentId: sophia.id,
     method: "transfer",
     packageId: eightLessonPackage.id
   });
 }
 
-await store.createPayment({
+await store.createPayment(ctx, {
   studentId: ivan.id,
   method: "cash",
   lessonCount: 1,
@@ -59,61 +83,61 @@ await store.createPayment({
 
 const weekStart = getCurrentMonday();
 
-const mondayGroup = await store.createLesson({
+const mondayGroup = await store.createLesson(ctx, {
   startsAt: atWeekTime(weekStart, 0, 15, 0),
   lessonType: "group",
   studentIds: [anna.id, ivan.id, maria.id]
 });
-await store.setParticipantStatus(mondayGroup.id, anna.id, "confirmed");
-await store.setParticipantStatus(mondayGroup.id, ivan.id, "confirmed");
-await store.completeLesson(mondayGroup.id);
+await store.setParticipantStatus(ctx, mondayGroup.id, anna.id, "confirmed");
+await store.setParticipantStatus(ctx, mondayGroup.id, ivan.id, "confirmed");
+await store.completeLesson(ctx, mondayGroup.id);
 
-const tuesdayIndividual = await store.createLesson({
+const tuesdayIndividual = await store.createLesson(ctx, {
   startsAt: atWeekTime(weekStart, 1, 11, 0),
   lessonType: "individual",
   studentIds: [sophia.id]
 });
-await store.setParticipantStatus(tuesdayIndividual.id, sophia.id, "confirmed");
+await store.setParticipantStatus(ctx, tuesdayIndividual.id, sophia.id, "confirmed");
 
-const tuesdayEvening = await store.createLesson({
+const tuesdayEvening = await store.createLesson(ctx, {
   startsAt: atWeekTime(weekStart, 1, 18, 30),
   lessonType: "individual",
   studentIds: [anna.id]
 });
-await store.setParticipantStatus(tuesdayEvening.id, anna.id, "confirmed");
+await store.setParticipantStatus(ctx, tuesdayEvening.id, anna.id, "confirmed");
 
-const wednesdayGroup = await store.createLesson({
+const wednesdayGroup = await store.createLesson(ctx, {
   startsAt: atWeekTime(weekStart, 2, 13, 30),
   lessonType: "group",
   studentIds: [anna.id, ivan.id, sophia.id]
 });
-await store.setParticipantStatus(wednesdayGroup.id, anna.id, "confirmed");
-await store.setParticipantStatus(wednesdayGroup.id, ivan.id, "declined");
-await store.setParticipantStatus(wednesdayGroup.id, sophia.id, "declined");
+await store.setParticipantStatus(ctx, wednesdayGroup.id, anna.id, "confirmed");
+await store.setParticipantStatus(ctx, wednesdayGroup.id, ivan.id, "declined");
+await store.setParticipantStatus(ctx, wednesdayGroup.id, sophia.id, "declined");
 
 await store
-  .createLesson({
+  .createLesson(ctx, {
     startsAt: atWeekTime(weekStart, 3, 16, 0),
     lessonType: "individual",
     studentIds: [maria.id]
   })
-  .then((lesson) => store.completeLesson(lesson.id));
+  .then((lesson) => store.completeLesson(ctx, lesson.id));
 
-const fridayGroup = await store.createLesson({
+const fridayGroup = await store.createLesson(ctx, {
   startsAt: atWeekTime(weekStart, 4, 12, 0),
   lessonType: "group",
   studentIds: [anna.id, maria.id, sophia.id]
 });
-await store.setParticipantStatus(fridayGroup.id, anna.id, "confirmed");
-await store.setParticipantStatus(fridayGroup.id, maria.id, "confirmed");
+await store.setParticipantStatus(ctx, fridayGroup.id, anna.id, "confirmed");
+await store.setParticipantStatus(ctx, fridayGroup.id, maria.id, "confirmed");
 
-const saturdayIndividual = await store.createLesson({
+const saturdayIndividual = await store.createLesson(ctx, {
   startsAt: atWeekTime(weekStart, 5, 10, 30),
   lessonType: "individual",
   studentIds: [ivan.id]
 });
-await store.setParticipantStatus(saturdayIndividual.id, ivan.id, "confirmed");
-await store.completeLesson(saturdayIndividual.id);
+await store.setParticipantStatus(ctx, saturdayIndividual.id, ivan.id, "confirmed");
+await store.completeLesson(ctx, saturdayIndividual.id);
 
 console.log("Seed data created");
 

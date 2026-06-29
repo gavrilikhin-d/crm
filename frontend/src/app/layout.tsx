@@ -1,3 +1,4 @@
+import { Providers } from "@/app/providers";
 import type { Metadata, Viewport } from "next";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { I18nProvider } from "@/i18n/context";
@@ -24,7 +25,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="ru" className={cn("font-sans", geist.variable)}>
       <body>
         <I18nProvider>
-          <TooltipProvider>{children}</TooltipProvider>
+          <Providers>
+            <TooltipProvider>{children}</TooltipProvider>
+          </Providers>
         </I18nProvider>
       </body>
     </html>
