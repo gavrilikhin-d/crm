@@ -1,8 +1,7 @@
 import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
-const AVATARS_DIR = join(dirname(fileURLToPath(import.meta.url)), "../data/avatars");
+const AVATARS_DIR = join(process.cwd(), "data/avatars");
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
 const MIME_TO_EXT: Record<string, string> = {
