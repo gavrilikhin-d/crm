@@ -56,8 +56,10 @@ import {
   SidebarMenuItem,
   SidebarProvider,
   SidebarRail,
+  SidebarSeparator,
   SidebarTrigger
 } from "@/components/ui/sidebar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Toaster } from "@/components/ui/sonner";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { api } from "@/lib/api";
@@ -88,6 +90,7 @@ import type {
 } from "@crm/shared";
 import { CURRENCIES, formatMoney, resolveCurrency, type CurrencyCode } from "@crm/shared/currency";
 import { PLAN_META } from "@crm/shared/plans";
+import { getStudentInitials } from "@crm/shared/student-initials";
 
 type Snapshot = Database & {
   balances: StudentBalance[];
@@ -545,6 +548,7 @@ export default function Home() {
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
+          <SidebarAccount />
         </SidebarFooter>
         <SidebarRail />
       </Sidebar>
@@ -559,7 +563,6 @@ export default function Home() {
             <Button type="button" className="hidden sm:inline-flex" onClick={openLessonDialog}>
               {t("calendar.scheduleLesson")}
             </Button>
-            <AccountMenu />
           </div>
         </header>
 
@@ -1142,7 +1145,7 @@ function LessonForm({
   );
 }
 
-function AccountMenu() {
+function SidebarAccount() {
   const { t } = useI18n();
   const { data: session } = useSession();
 
@@ -1150,22 +1153,37 @@ function AccountMenu() {
     return null;
   }
 
+  const initials = getStudentInitials(session.user.name || session.user.email);
+
   return (
-    <div className="flex items-center gap-2">
-      <div className="hidden min-w-0 text-right sm:block">
-        <p className="truncate text-sm font-medium text-stone-900">{session.user.name}</p>
-        <p className="truncate text-xs text-muted-foreground">{session.user.email}</p>
-      </div>
-      <Button
-        variant="outline"
-        size="icon-sm"
-        type="button"
-        aria-label={t("auth.signOut")}
-        onClick={() => void signOut({ callbackUrl: "/login" })}
-      >
-        <LogOut className="size-4" />
-      </Button>
-    </div>
+    <>
+      <SidebarSeparator className="mx-0" />
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <div className="flex w-full items-center gap-2 rounded-md px-2 py-1.5">
+            <Avatar className="size-8 shrink-0 rounded-lg">
+              <AvatarImage src={session.user.image ?? undefined} alt={session.user.name} />
+              <AvatarFallback className="rounded-lg text-xs">{initials}</AvatarFallback>
+            </Avatar>
+            <div className="min-w-0 flex-1 overflow-hidden group-data-[collapsible=icon]:hidden">
+              <p className="truncate text-sm font-medium">{session.user.name}</p>
+              <p className="truncate text-xs text-muted-foreground">{session.user.email}</p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="shrink-0 text-muted-foreground hover:text-foreground"
+              aria-label={t("auth.signOut")}
+              title={t("auth.signOut")}
+              onClick={() => void signOut({ callbackUrl: "/login" })}
+            >
+              <LogOut className="size-4" />
+            </Button>
+          </div>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    </>
   );
 }
 
