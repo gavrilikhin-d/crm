@@ -104,7 +104,7 @@ const defaultCalendarEndHour = 22;
 const hourHeight = 76;
 const pageHeaderClass =
   "flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 px-4 py-4 sm:px-6 sm:py-5 lg:px-10";
-const pageSectionClass = "px-3 py-3 pb-6 sm:p-6 sm:pb-10 lg:px-10";
+const pageSectionClass = "px-3 py-3 pb-24 sm:p-6 sm:pb-10 lg:px-10";
 const lessonDurationByType = {
   group: 90,
   individual: 60
@@ -534,11 +534,8 @@ export default function Home() {
             <SidebarTrigger className="-ml-2 shrink-0" />
             <h1 className="truncate text-base font-bold text-stone-900 sm:text-lg">{activeTitle[activeSection]}</h1>
           </div>
-          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-            <Button type="button" size="icon" className="sm:hidden" onClick={openLessonDialog} aria-label={t("calendar.scheduleLesson")}>
-              <Plus className="size-4" />
-            </Button>
-            <Button type="button" className="hidden sm:inline-flex" onClick={openLessonDialog}>
+          <div className="hidden shrink-0 items-center gap-2 sm:flex sm:gap-3">
+            <Button type="button" onClick={openLessonDialog}>
               {t("calendar.scheduleLesson")}
             </Button>
           </div>
@@ -586,7 +583,7 @@ export default function Home() {
                 </Button>
                 <Dialog open={lessonDialogOpen} onOpenChange={setLessonDialogOpen}>
                   <DialogTrigger asChild>
-                    <Button size="icon" type="button" aria-label={t("calendar.createLesson")}>
+                    <Button size="icon" type="button" className="hidden sm:inline-flex" aria-label={t("calendar.createLesson")}>
                       <Plus className="size-4" />
                     </Button>
                   </DialogTrigger>
@@ -681,6 +678,14 @@ export default function Home() {
         {activeSection === "settings" ? (
           <SettingsView currency={currency} onCurrencyChange={handleCurrencyChange} />
         ) : null}
+
+        <MobileFab activeSection={activeSection} onScheduleLesson={openLessonDialog} onAddStudent={() => {
+              setStudentFormKey((key) => key + 1);
+              setActiveModal("student");
+            }} onAddPayment={() => {
+              setPaymentFormKey((key) => key + 1);
+              setActiveModal("payment");
+            }} onAddPackage={() => setActiveModal("package")} />
       </SidebarInset>
 
       <Modal open={activeModal === "student"} title={t("modal.addStudent")} onClose={() => setActiveModal(null)}>
@@ -724,6 +729,47 @@ export default function Home() {
 
       <Toaster />
     </SidebarProvider>
+  );
+}
+
+function MobileFab({
+  activeSection,
+  onScheduleLesson,
+  onAddStudent,
+  onAddPayment,
+  onAddPackage
+}: {
+  activeSection: ActiveSection;
+  onScheduleLesson: () => void;
+  onAddStudent: () => void;
+  onAddPayment: () => void;
+  onAddPackage: () => void;
+}) {
+  const { t } = useI18n();
+
+  const actionBySection: Partial<
+    Record<ActiveSection, { label: string; onClick: () => void }>
+  > = {
+    schedule: { label: t("calendar.scheduleLesson"), onClick: onScheduleLesson },
+    clients: { label: t("clients.addStudentAria"), onClick: onAddStudent },
+    payments: { label: t("payments.addPaymentAria"), onClick: onAddPayment },
+    sessions: { label: t("packages.addPackageAria"), onClick: onAddPackage }
+  };
+
+  const action = actionBySection[activeSection];
+  if (!action) {
+    return null;
+  }
+
+  return (
+    <Button
+      type="button"
+      className="fixed right-4 bottom-[calc(1.5rem+env(safe-area-inset-bottom,0px))] z-40 size-14 rounded-full shadow-lg sm:hidden"
+      onClick={action.onClick}
+      aria-label={action.label}
+    >
+      <Plus className="size-6" />
+    </Button>
   );
 }
 
@@ -791,7 +837,7 @@ function ClientsView({
         <CardHeader className="pb-0">
           <CardTitle className="flex flex-wrap items-center justify-between gap-2">
             {t("clients.title")} <Badge variant="secondary">{students.length}</Badge>
-            <Button size="icon-sm" type="button" onClick={onAddStudent} aria-label={t("clients.addStudentAria")}>
+            <Button size="icon-sm" type="button" className="hidden sm:inline-flex" onClick={onAddStudent} aria-label={t("clients.addStudentAria")}>
               <Plus className="size-4" />
             </Button>
           </CardTitle>
@@ -872,7 +918,7 @@ function PaymentsView({
         <CardHeader className="pb-0">
           <CardTitle className="flex flex-wrap items-center justify-between gap-2">
             {t("payments.title")} <Badge variant="secondary">{payments.length}</Badge>
-            <Button size="icon-sm" type="button" onClick={onAddPayment} aria-label={t("payments.addPaymentAria")}>
+            <Button size="icon-sm" type="button" className="hidden sm:inline-flex" onClick={onAddPayment} aria-label={t("payments.addPaymentAria")}>
               <Plus className="size-4" />
             </Button>
           </CardTitle>
@@ -941,7 +987,7 @@ function SessionsView({
         <CardHeader className="pb-0">
           <CardTitle className="flex flex-wrap items-center justify-between gap-2">
             {t("section.packages")} <Badge variant="secondary">{lessonPackages.length}</Badge>
-            <Button size="icon-sm" type="button" onClick={onAddPackage} aria-label={t("packages.addPackageAria")}>
+            <Button size="icon-sm" type="button" className="hidden sm:inline-flex" onClick={onAddPackage} aria-label={t("packages.addPackageAria")}>
               <Plus className="size-4" />
             </Button>
           </CardTitle>
