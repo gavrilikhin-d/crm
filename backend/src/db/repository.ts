@@ -244,9 +244,8 @@ export async function countRecurringSchedules(accountId: string): Promise<number
 }
 
 export async function ensureAccountDefaults(accountId: string): Promise<void> {
-  const [settingsCount, packagesCount] = await Promise.all([
+  const [settingsCount] = await Promise.all([
     db.select({ count: sql<number>`count(*)` }).from(appSettings).where(eq(appSettings.accountId, accountId)),
-    db.select({ count: sql<number>`count(*)` }).from(lessonPackages).where(eq(lessonPackages.accountId, accountId))
   ]);
 
   if (Number(settingsCount[0]?.count ?? 0) === 0) {
@@ -260,42 +259,6 @@ export async function ensureAccountDefaults(accountId: string): Promise<void> {
       currency: defaults.currency,
       cancellationPolicy: defaults.cancellationPolicy
     });
-  }
-
-  if (Number(packagesCount[0]?.count ?? 0) === 0) {
-    const timestamp = new Date().toISOString();
-    await db.insert(lessonPackages).values([
-      {
-        id: nanoid(),
-        accountId,
-        name: "Разовое занятие",
-        lessonCount: 1,
-        price: 3000,
-        active: true,
-        createdAt: timestamp,
-        updatedAt: timestamp
-      },
-      {
-        id: nanoid(),
-        accountId,
-        name: "Пакет 4 занятия",
-        lessonCount: 4,
-        price: 11000,
-        active: true,
-        createdAt: timestamp,
-        updatedAt: timestamp
-      },
-      {
-        id: nanoid(),
-        accountId,
-        name: "Пакет 8 занятий",
-        lessonCount: 8,
-        price: 20000,
-        active: true,
-        createdAt: timestamp,
-        updatedAt: timestamp
-      }
-    ]);
   }
 }
 
