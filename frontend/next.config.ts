@@ -18,9 +18,10 @@ const nextConfig: NextConfig = {
         source: "/api/payment-reminders/:path*",
         destination: `${reminderUrl}/api/payment-reminders/:path*`
       },
+      // App routes under /api/auth/* take priority; everything else proxies to backend
       {
-        source: "/api/((?!auth).*)",
-        destination: `${backendUrl}/api/$1`
+        source: "/api/:path*",
+        destination: `${backendUrl}/api/:path*`
       }
     ];
   }

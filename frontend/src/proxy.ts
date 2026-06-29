@@ -22,5 +22,6 @@ export const proxy = auth((request) => {
 });
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"]
+  // Pages only — /api/* uses Bearer tokens and Next.js rewrites to the backend
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"]
 };

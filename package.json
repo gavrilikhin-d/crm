@@ -12,11 +12,17 @@
     "reminder"
   ],
   "scripts": {
+    "check-env": "bun scripts/check-env.ts",
     "dev": "bun --filter @crm/frontend dev",
+    "predev:all": "bun scripts/check-env.ts dev",
     "dev:all": "set -a; [ ! -f .env ] || . ./.env; set +a; PORT=4000 bun run dev:backend & PORT=3000 bun run dev:frontend & bun run dev:bot & PORT=4001 bun run dev:reminder & wait",
+    "predev:frontend": "bun scripts/check-env.ts frontend",
     "dev:frontend": "bun --filter @crm/frontend dev",
-    "dev:backend": "bun --filter @crm/backend dev",
+    "predev:backend": "bun scripts/check-env.ts backend",
+    "dev:backend": "PORT=4000 bun --filter @crm/backend dev",
+    "predev:bot": "bun scripts/check-env.ts bot",
     "dev:bot": "bun --filter @crm/bot dev",
+    "predev:reminder": "bun scripts/check-env.ts reminder",
     "dev:reminder": "bun --filter @crm/reminder dev",
     "dev:reminders": "bun --filter @crm/reminder dev",
     "start": "bun --filter @crm/frontend start",
