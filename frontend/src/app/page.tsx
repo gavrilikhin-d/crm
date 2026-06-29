@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
   ChevronLeft,
@@ -57,13 +57,14 @@ import {
   SidebarTrigger
 } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { api } from "@/lib/api";
 import { readFileAsDataUrl } from "@/lib/files";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useI18n } from "@/i18n/context";
 import {
+  formatDateTime,
   formatDay,
   formatFullDate,
   formatMonth,
@@ -101,6 +102,9 @@ type ActiveModal = "student" | "payment" | "package" | null;
 const defaultCalendarStartHour = 9;
 const defaultCalendarEndHour = 22;
 const hourHeight = 76;
+const pageHeaderClass =
+  "flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 px-4 py-4 sm:px-6 sm:py-5 lg:px-10";
+const pageSectionClass = "px-3 py-3 pb-6 sm:p-6 sm:pb-10 lg:px-10";
 const lessonDurationByType = {
   group: 90,
   individual: 60
@@ -114,6 +118,8 @@ type CalendarRange = {
 
 export default function Home() {
   const { t } = useI18n();
+  const isMobile = useIsMobile();
+  const hasMobileScheduleDefault = useRef(false);
   const scheduleViewLabels: Record<ScheduleView, string> = {
     day: t("calendar.view.day"),
     week: t("calendar.view.week"),
@@ -132,6 +138,13 @@ export default function Home() {
   const [paymentFormKey, setPaymentFormKey] = useState(0);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isMobile && !hasMobileScheduleDefault.current) {
+      hasMobileScheduleDefault.current = true;
+      setScheduleView("day");
+    }
+  }, [isMobile]);
 
   const students = snapshot?.students ?? [];
   const lessonPackages = snapshot?.lessonPackages ?? [];
@@ -515,23 +528,26 @@ export default function Home() {
         <SidebarRail />
       </Sidebar>
 
-      <SidebarInset className="min-w-0 overflow-x-auto bg-white">
-        <header className="flex min-h-22 items-center justify-between border-b border-stone-200 px-10 py-5">
-          <div className="flex h-9 items-center gap-3">
-            <SidebarTrigger className="-ml-2" />
-            <h1 className="text-lg leading-none font-bold text-stone-900">{activeTitle[activeSection]}</h1>
+      <SidebarInset className="min-w-0 bg-white">
+        <header className={pageHeaderClass}>
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <SidebarTrigger className="-ml-2 shrink-0" />
+            <h1 className="truncate text-base font-bold text-stone-900 sm:text-lg">{activeTitle[activeSection]}</h1>
           </div>
-          <div className="flex items-center gap-3">
-            <Button type="button" onClick={openLessonDialog}>
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <Button type="button" size="icon" className="sm:hidden" onClick={openLessonDialog} aria-label={t("calendar.scheduleLesson")}>
+              <Plus className="size-4" />
+            </Button>
+            <Button type="button" className="hidden sm:inline-flex" onClick={openLessonDialog}>
               {t("calendar.scheduleLesson")}
             </Button>
           </div>
         </header>
 
         {activeSection === "schedule" ? (
-        <section className="p-6 px-10 pb-10" id="schedule">
+        <section className={pageSectionClass} id="schedule">
           <div className="min-w-0">
-            <div className="mb-3 flex h-12 items-center justify-between gap-3">
+            <div className="mb-3 flex flex-col gap-3 sm:h-12 sm:flex-row sm:items-center sm:justify-between">
               <ToggleGroup
                 type="single"
                 value={scheduleView}
@@ -543,21 +559,22 @@ export default function Home() {
                 variant="outline"
                 size="sm"
                 spacing={0}
+                className="w-full sm:w-auto"
               >
                 {(["day", "week", "month"] as const).map((view) => (
-                  <ToggleGroupItem key={view} value={view} aria-label={scheduleViewLabels[view]}>
+                  <ToggleGroupItem key={view} value={view} aria-label={scheduleViewLabels[view]} className="flex-1 sm:flex-none">
                     {scheduleViewLabels[view]}
                   </ToggleGroupItem>
                 ))}
               </ToggleGroup>
 
-              <div className="min-w-52 text-center text-xs font-extrabold uppercase tracking-wide text-stone-400">
+              <div className="text-center text-xs font-extrabold uppercase tracking-wide text-stone-400 sm:min-w-52">
                 {scheduleView === "day" ? formatFullDate(selectedDate.toISOString()) : null}
                 {scheduleView === "week" ? formatWeekRange(weekDays) : null}
                 {scheduleView === "month" ? formatMonth(selectedDate) : null}
               </div>
               
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center gap-2 sm:justify-end">
                 <Button variant="secondary" size="icon" type="button" onClick={() => shiftCalendar(-1)} aria-label={t("calendar.prevPeriod")}>
                   <ChevronLeft className="size-4" />
                 </Button>
@@ -573,7 +590,7 @@ export default function Home() {
                       <Plus className="size-4" />
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="sm:max-w-md">
+                  <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md">
                     <DialogHeader>
                       <DialogTitle>{t("calendar.createLessonTitle")}</DialogTitle>
                     </DialogHeader>
@@ -589,36 +606,40 @@ export default function Home() {
             </div>
 
             {scheduleView === "day" ? (
-              <DayCalendar
-                day={selectedDate}
-                calendarRange={dayCalendarRange}
-                currentTime={currentTime}
-                lessons={dayLessons}
-                getStudent={getStudent}
-                onSelectLesson={openLessonOverview}
-              />
+              <CalendarScrollArea>
+                <DayCalendar
+                  day={selectedDate}
+                  calendarRange={dayCalendarRange}
+                  currentTime={currentTime}
+                  lessons={dayLessons}
+                  getStudent={getStudent}
+                  onSelectLesson={openLessonOverview}
+                />
+              </CalendarScrollArea>
             ) : null}
 
             {scheduleView === "week" ? (
-              <WeekCalendar
-                weekDays={weekDays}
-                calendarRange={weekCalendarRange}
-                currentTime={currentTime}
-                lessons={weekLessons}
-                getStudent={getStudent}
-                onSelectLesson={openLessonOverview}
-              />
+              <CalendarScrollArea minWidth={664}>
+                <WeekCalendar
+                  weekDays={weekDays}
+                  calendarRange={weekCalendarRange}
+                  currentTime={currentTime}
+                  lessons={weekLessons}
+                  getStudent={getStudent}
+                  onSelectLesson={openLessonOverview}
+                />
+              </CalendarScrollArea>
             ) : null}
 
             {scheduleView === "month" ? (
-              <MonthCalendar
-                selectedDate={selectedDate}
-                monthDays={monthDays}
-                currentTime={currentTime}
-                lessons={monthLessons}
-                getStudent={getStudent}
-                onSelectLesson={openLessonOverview}
-              />
+                <MonthCalendar
+                  selectedDate={selectedDate}
+                  monthDays={monthDays}
+                  currentTime={currentTime}
+                  lessons={monthLessons}
+                  getStudent={getStudent}
+                  onSelectLesson={openLessonOverview}
+                />
             ) : null}
           </div>
         </section>
@@ -765,61 +786,65 @@ function ClientsView({
   }
 
   return (
-    <section className="p-6 px-10 pb-10">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
+    <section className={pageSectionClass}>
+      <Card size="sm" className="gap-2 py-3 sm:gap-4 sm:py-4">
+        <CardHeader className="pb-0">
+          <CardTitle className="flex flex-wrap items-center justify-between gap-2">
             {t("clients.title")} <Badge variant="secondary">{students.length}</Badge>
-            <Button size="icon" type="button" onClick={onAddStudent} aria-label={t("clients.addStudentAria")}>
+            <Button size="icon-sm" type="button" onClick={onAddStudent} aria-label={t("clients.addStudentAria")}>
               <Plus className="size-4" />
             </Button>
           </CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-3">
+        <CardContent className="grid gap-1.5 px-3 sm:px-4">
           {students.map((student) => {
             const telegramBindUrl = getTelegramBindUrl(student);
             return (
-              <Card key={student.id}>
-                <CardContent className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 p-4">
-                <StudentLink studentId={student.id}>
-                  <StudentAvatar student={student} size="lg" />
+              <div
+                key={student.id}
+                className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 rounded-lg border px-2.5 py-2 sm:gap-3 sm:px-3 sm:py-2.5"
+              >
+                <StudentLink studentId={student.id} className="shrink-0">
+                  <StudentAvatar student={student} size="sm" className="sm:hidden" />
+                  <StudentAvatar student={student} size="default" className="hidden sm:flex" />
                 </StudentLink>
-                <div>
-                  <h3 className="font-semibold text-stone-900">
+                <div className="min-w-0">
+                  <h3 className="truncate text-sm font-semibold text-stone-900 sm:text-base">
                     <StudentLink studentId={student.id}>{student.fullName}</StudentLink>
                   </h3>
                   {student.telegramChatId ? (
-                    <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                      <TelegramIcon className="size-3.5 shrink-0" />
-                      {student.telegramUsername ? `@${student.telegramUsername}` : t("clients.telegramConnected")}
+                    <p className="flex items-center gap-1 truncate text-xs text-muted-foreground sm:text-sm">
+                      <TelegramIcon className="size-3 shrink-0 sm:size-3.5" />
+                      <span className="truncate">
+                        {student.telegramUsername ? `@${student.telegramUsername}` : t("clients.telegramConnected")}
+                      </span>
                     </p>
                   ) : telegramBindUrl ? (
                     <Button
                       variant="outline"
                       size="sm"
                       type="button"
-                      className="mt-1"
+                      className="mt-0.5 h-6 px-2 text-[0.6875rem] sm:mt-1 sm:h-7 sm:text-xs"
                       onClick={() => void copyTelegramBindText(telegramBindUrl)}
                     >
                       <TelegramIcon data-icon="inline-start" />
                       {t("clients.connectTelegram")}
                     </Button>
                   ) : (
-                    <Badge variant="secondary" className="mt-1">
+                    <Badge variant="secondary" className="mt-0.5 text-[0.6875rem] sm:mt-1 sm:text-xs">
                       {t("clients.telegramBotUsernameMissing")}
                     </Badge>
                   )}
                 </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="ghost" size="icon" type="button" onClick={() => onEditStudent(student)} aria-label={t("clients.editStudentAria", { name: student.fullName })}>
-                    <Pencil className="size-4" />
+                <div className="flex shrink-0 items-center gap-0.5">
+                  <Button variant="ghost" size="icon-sm" type="button" onClick={() => onEditStudent(student)} aria-label={t("clients.editStudentAria", { name: student.fullName })}>
+                    <Pencil className="size-3.5 sm:size-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" type="button" onClick={() => onDeleteStudent(student)}>
-                    <Trash2 className="size-4" />
+                  <Button variant="ghost" size="icon-sm" type="button" onClick={() => onDeleteStudent(student)}>
+                    <Trash2 className="size-3.5 sm:size-4" />
                   </Button>
                 </div>
-                </CardContent>
-              </Card>
+              </div>
             );
           })}
         </CardContent>
@@ -842,51 +867,55 @@ function PaymentsView({
   const { t } = useI18n();
 
   return (
-    <section className="p-6 px-10 pb-10">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
+    <section className={pageSectionClass}>
+      <Card size="sm" className="gap-2 py-3 sm:gap-4 sm:py-4">
+        <CardHeader className="pb-0">
+          <CardTitle className="flex flex-wrap items-center justify-between gap-2">
             {t("payments.title")} <Badge variant="secondary">{payments.length}</Badge>
-            <Button size="icon" type="button" onClick={onAddPayment} aria-label={t("payments.addPaymentAria")}>
+            <Button size="icon-sm" type="button" onClick={onAddPayment} aria-label={t("payments.addPaymentAria")}>
               <Plus className="size-4" />
             </Button>
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("table.student")}</TableHead>
-                <TableHead>{t("table.date")}</TableHead>
-                <TableHead>{t("table.lessonCount")}</TableHead>
-                <TableHead className="text-right">{t("table.amount")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {payments.map((payment) => {
-                const student = getStudent(payment.studentId);
-                return (
-                <TableRow key={payment.id}>
-                  <TableCell className="font-medium">
-                    <div className="flex items-center gap-3">
-                      {student ? (
-                        <StudentLink studentId={student.id} className="flex items-center gap-3">
-                          <StudentAvatar student={student} size="sm" />
-                          <span>{student.fullName}</span>
-                        </StudentLink>
-                      ) : (
-                        <span>{t("payments.studentDeleted")}</span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{formatFullDate(payment.paidAt)}</TableCell>
-                  <TableCell>{payment.lessonCount}</TableCell>
-                  <TableCell className="text-right font-semibold">{formatMoney(payment.amount, currency)}</TableCell>
-                </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+        <CardContent className="grid gap-1.5 px-3 sm:px-4">
+          {payments.map((payment) => {
+            const student = getStudent(payment.studentId);
+
+            return (
+              <div
+                key={payment.id}
+                className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 rounded-lg border px-2.5 py-2 sm:gap-3 sm:px-3 sm:py-2.5"
+              >
+                {student ? (
+                  <StudentLink studentId={student.id} className="shrink-0">
+                    <StudentAvatar student={student} size="sm" />
+                  </StudentLink>
+                ) : (
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
+                    ?
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-stone-900 sm:text-base">
+                    {student ? (
+                      <StudentLink studentId={student.id}>{student.fullName}</StudentLink>
+                    ) : (
+                      t("payments.studentDeleted")
+                    )}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground sm:text-sm">
+                    <span className="sm:hidden">{formatDateTime(payment.paidAt)}</span>
+                    <span className="hidden sm:inline">{formatFullDate(payment.paidAt)}</span>
+                    {" · "}
+                    {t("common.lessonsCount", { count: payment.lessonCount })}
+                  </p>
+                </div>
+                <p className="shrink-0 text-right text-sm font-bold sm:text-base">
+                  {formatMoney(payment.amount, currency)}
+                </p>
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
     </section>
@@ -907,47 +936,43 @@ function SessionsView({
   const { t } = useI18n();
 
   return (
-    <section className="p-6 px-10 pb-10">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
+    <section className={pageSectionClass}>
+      <Card size="sm" className="gap-2 py-3 sm:gap-4 sm:py-4">
+        <CardHeader className="pb-0">
+          <CardTitle className="flex flex-wrap items-center justify-between gap-2">
             {t("section.packages")} <Badge variant="secondary">{lessonPackages.length}</Badge>
-            <Button size="icon" type="button" onClick={onAddPackage} aria-label={t("packages.addPackageAria")}>
+            <Button size="icon-sm" type="button" onClick={onAddPackage} aria-label={t("packages.addPackageAria")}>
               <Plus className="size-4" />
             </Button>
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3">
+        <CardContent className="grid gap-1.5 px-3 sm:px-4">
           {lessonPackages.map((lessonPackage) => {
             const unitPrice = Math.round(lessonPackage.price / lessonPackage.lessonCount);
 
             return (
               <div
                 key={lessonPackage.id}
-                className="flex items-center justify-between gap-4 rounded-3xl border-2 border-primary p-4"
+                className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2.5 rounded-lg border border-primary px-2.5 py-2 sm:gap-3 sm:rounded-2xl sm:border-2 sm:px-3 sm:py-2.5"
               >
-                <p className="text-lg font-medium">{lessonPackage.name}</p>
-                <div className="flex items-center gap-2">
-                  <div className="flex flex-col items-end">
-                    <span className="text-xl font-bold text-primary">
-                      {formatMoney(lessonPackage.price, currency)}
-                    </span>
-                    <span className="text-sm text-muted-foreground">
-                      {formatMoney(unitPrice, currency)}
-                      {t("packages.perLesson")}
-                    </span>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    type="button"
-                    className="text-muted-foreground"
-                    onClick={() => onDeletePackage(lessonPackage)}
-                    aria-label={t("packages.deletePackageAria", { name: lessonPackage.name })}
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
+                <p className="truncate text-sm font-medium sm:text-lg">{lessonPackage.name}</p>
+                <div className="text-right">
+                  <p className="text-sm font-bold text-primary sm:text-xl">{formatMoney(lessonPackage.price, currency)}</p>
+                  <p className="text-[0.6875rem] text-muted-foreground sm:text-sm">
+                    {formatMoney(unitPrice, currency)}
+                    {t("packages.perLesson")}
+                  </p>
                 </div>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  type="button"
+                  className="text-muted-foreground"
+                  onClick={() => onDeletePackage(lessonPackage)}
+                  aria-label={t("packages.deletePackageAria", { name: lessonPackage.name })}
+                >
+                  <Trash2 className="size-3.5 sm:size-4" />
+                </Button>
               </div>
             );
           })}
@@ -970,7 +995,7 @@ function Modal({
 }) {
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
@@ -1048,7 +1073,7 @@ function SettingsView({
   const { t } = useI18n();
 
   return (
-    <section className="p-6 px-10 pb-10" id="settings">
+    <section className={pageSectionClass} id="settings">
       <Card className="max-w-xl">
         <CardHeader>
           <CardTitle>{t("settings.title")}</CardTitle>
@@ -1149,7 +1174,7 @@ function PaymentForm({
           ) : null}
         </Field>
         {!selectedPackageId ? (
-          <FieldGroup className="grid grid-cols-2 gap-3">
+          <FieldGroup className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="payment-lesson-count">{t("form.lessonCount")}</FieldLabel>
               <Input id="payment-lesson-count" name="lessonCount" type="number" min="1" placeholder={t("form.lessonCount")} required />
@@ -1190,7 +1215,7 @@ function PackageForm({
           <FieldLabel htmlFor="package-name">{t("form.packageName")}</FieldLabel>
           <Input id="package-name" name="name" placeholder={t("form.packageName")} required />
         </Field>
-        <FieldGroup className="grid grid-cols-2 gap-3">
+        <FieldGroup className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field>
             <FieldLabel htmlFor="package-lesson-count">{t("form.lessonCount")}</FieldLabel>
             <Input id="package-lesson-count" name="lessonCount" type="number" min="1" placeholder={t("form.lessonCount")} required />
@@ -1203,6 +1228,14 @@ function PackageForm({
         <Button type="submit">{t("form.addPackage")}</Button>
       </FieldGroup>
     </form>
+  );
+}
+
+function CalendarScrollArea({ children, minWidth }: { children: ReactNode; minWidth?: number }) {
+  return (
+    <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:overflow-visible sm:px-0">
+      <div style={minWidth ? { minWidth } : undefined}>{children}</div>
+    </div>
   );
 }
 
@@ -1389,12 +1422,17 @@ function MonthCalendar({
   onSelectLesson: (lesson: Lesson) => void;
 }) {
   const { t } = useI18n();
+  const isMobile = useIsMobile();
   const weekDayLabels = getWeekdayShortLabels("mon");
+  const maxVisibleLessons = isMobile ? 2 : 4;
 
   return (
-    <div className="grid grid-cols-7 overflow-hidden rounded-xl border border-stone-200">
+    <div className="grid grid-cols-[repeat(7,minmax(0,1fr))] overflow-hidden rounded-xl border border-stone-200">
       {weekDayLabels.map((day) => (
-        <div className="border-b border-stone-200 bg-stone-50 px-3 py-2 text-xs font-bold uppercase text-stone-500" key={day}>
+        <div
+          className="border-b border-stone-200 bg-stone-50 px-1 py-1 text-center text-[0.625rem] font-bold uppercase text-stone-500 sm:px-2 sm:py-2 sm:text-xs"
+          key={day}
+        >
           {day}
         </div>
       ))}
@@ -1404,29 +1442,33 @@ function MonthCalendar({
         const isToday = currentTime ? sameDate(day, currentTime) : false;
         return (
           <div
-            className={cn("min-h-32 border-b border-r border-stone-100 p-2", isToday && "ring-1 ring-inset ring-stone-200")}
+            className={cn(
+              "min-h-16 min-w-0 overflow-hidden border-b border-r border-stone-100 p-1 sm:min-h-28 sm:p-1.5 md:min-h-32 md:p-2",
+              isToday && "ring-1 ring-inset ring-stone-200"
+            )}
             key={day.toISOString()}
           >
             <div
               className={cn(
-                "mb-2 inline-flex size-6 items-center justify-center rounded-full text-xs font-bold",
+                "mb-1 inline-flex size-5 items-center justify-center rounded-full text-[0.625rem] font-bold sm:mb-2 sm:size-6 sm:text-xs",
                 isToday ? "bg-stone-900 text-white" : isOutsideMonth ? "text-stone-300" : "text-stone-700"
               )}
             >
               {day.getDate()}
             </div>
-            <div className="grid gap-1">
-              {dayLessons.slice(0, 4).map((lesson) => (
+            <div className="grid min-w-0 gap-0.5 sm:gap-1">
+              {dayLessons.slice(0, maxVisibleLessons).map((lesson) => (
                 <MonthLessonChip
                   key={lesson.id}
                   lesson={lesson}
+                  compact={isMobile}
                   getStudent={getStudent}
                   onSelect={() => onSelectLesson(lesson)}
                 />
               ))}
-              {dayLessons.length > 4 ? (
-                <span className="text-[0.68rem] text-stone-400">
-                  {t("calendar.moreLessons", { count: dayLessons.length - 4 })}
+              {dayLessons.length > maxVisibleLessons ? (
+                <span className="truncate text-[0.625rem] text-stone-400 sm:text-[0.68rem]">
+                  {t("calendar.moreLessons", { count: dayLessons.length - maxVisibleLessons })}
                 </span>
               ) : null}
             </div>
@@ -1516,29 +1558,53 @@ function CalendarLesson({
 
 function MonthLessonChip({
   lesson,
+  compact,
   getStudent,
   onSelect
 }: {
   lesson: Lesson;
+  compact?: boolean;
   getStudent: (studentId: string) => Student | undefined;
   onSelect: () => void;
 }) {
   const { t } = useI18n();
   const startsAt = new Date(lesson.startsAt);
 
+  if (compact) {
+    const firstStudent = lesson.participants
+      .map((participant) => getStudent(participant.studentId))
+      .find(Boolean);
+
+    return (
+      <button
+        type="button"
+        className="flex w-full min-w-0 items-center gap-1 overflow-hidden rounded border bg-card px-1 py-0.5 text-left transition-colors hover:bg-muted/50"
+        onClick={onSelect}
+      >
+        <span className="shrink-0 text-[0.625rem] font-semibold tabular-nums leading-none">
+          {formatTime(startsAt)}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-[0.625rem] leading-none text-muted-foreground">
+          {firstStudent?.fullName.split(/\s+/)[0] ?? t("calendar.lessonFallback")}
+        </span>
+        <LessonParticipantSummary participants={lesson.participants} compact />
+      </button>
+    );
+  }
+
   return (
     <button
       type="button"
-      className="flex w-full flex-col gap-0.5 rounded-md border bg-card px-2 py-1 text-left transition-colors hover:bg-muted/50"
+      className="flex w-full min-w-0 flex-col gap-0.5 overflow-hidden rounded-md border bg-card px-2 py-1 text-left transition-colors hover:bg-muted/50"
       onClick={onSelect}
     >
-      <div className="flex items-start justify-between gap-1">
-        <span className="shrink-0 text-[0.62rem] font-semibold tabular-nums leading-tight">
+      <div className="flex min-w-0 items-start justify-between gap-1">
+        <span className="truncate text-[0.62rem] font-semibold tabular-nums leading-tight">
           {formatTimeRange(startsAt, lesson.durationMinutes)}
         </span>
         <LessonParticipantSummary participants={lesson.participants} compact />
       </div>
-      <div className="flex flex-col gap-0.5 pb-1 pr-0.5">
+      <div className="flex min-w-0 flex-col gap-0.5 pb-1 pr-0.5">
         {lesson.participants.map((participant) => {
           const student = getStudent(participant.studentId);
           if (!student) {
@@ -1546,7 +1612,7 @@ function MonthLessonChip({
           }
 
           return (
-            <div key={participant.id} className="flex min-h-6 shrink-0 min-w-0 items-center gap-1">
+            <div key={participant.id} className="flex min-h-6 min-w-0 shrink-0 items-center gap-1">
               <ParticipantCardAvatar student={student} status={participant.status} compact />
               <div className="min-w-0 flex-1">
                 <ParticipantCardLabel name={student.fullName} studentId={student.id} compact />

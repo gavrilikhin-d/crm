@@ -30,7 +30,8 @@ const ru = {
     scheduleLesson: "Запланировать занятие",
     createLesson: "Создать занятие",
     createLessonTitle: "Создать занятие",
-    moreLessons: "+{count} еще"
+    moreLessons: "+{count} еще",
+    lessonFallback: "Занятие"
   },
   weekday: {
     short: {

@@ -13,12 +13,11 @@ import { StudentForm } from "@/components/student-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/api";
 import { readFileAsDataUrl } from "@/lib/files";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/context";
-import { formatFullDate, formatLongDate } from "@/i18n/format";
+import { formatDateTime, formatFullDate, formatLongDate } from "@/i18n/format";
 import {
   getLessonStatusLabel,
   getLessonTypeLabel,
@@ -161,7 +160,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
   }
 
   return (
-    <main className="mx-auto flex max-w-5xl flex-col gap-6 p-6 pb-10">
+    <main className="mx-auto flex max-w-5xl flex-col gap-6 p-4 pb-10 sm:p-6">
       <Button variant="ghost" className="w-fit" asChild>
         <Link href="/">
           <ArrowLeft data-icon="inline-start" />
@@ -191,7 +190,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
             <StudentAvatar student={student} size="lg" className="size-20" />
             <div className="flex min-w-0 flex-1 flex-col gap-3">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-semibold">{student.fullName}</h1>
+                <h1 className="text-xl font-semibold sm:text-2xl">{student.fullName}</h1>
                 <Badge variant={student.status === "active" ? "secondary" : "outline"}>
                   {getStudentStatusLabel(student.status)}
                 </Badge>
@@ -243,40 +242,41 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
+      <Card size="sm" className="gap-2 py-3 sm:gap-4 sm:py-4">
+        <CardHeader className="pb-0">
           <CardTitle>{t("studentPage.paymentsTitle")}</CardTitle>
           <CardDescription>{t("common.recordsCount", { count: payments.length })}</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="grid gap-1.5 px-3 sm:px-4">
           {payments.length ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("table.date")}</TableHead>
-                  <TableHead>{t("table.lessonCount")}</TableHead>
-                  <TableHead>{t("table.method")}</TableHead>
-                  <TableHead className="text-right">{t("table.amount")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {payments.map((payment) => (
-                  <TableRow key={payment.id}>
-                    <TableCell>{formatFullDate(payment.paidAt)}</TableCell>
-                    <TableCell>{payment.lessonCount}</TableCell>
-                    <TableCell>{getPaymentMethodLabel(payment.method)}</TableCell>
-                    <TableCell className="text-right font-medium">
-                      {formatMoney(payment.amount, currency)}
-                      {payment.packageId ? (
-                        <p className="text-xs font-normal text-muted-foreground">
-                          {packagesById.get(payment.packageId)?.name ?? t("payments.packageFallback")}
-                        </p>
-                      ) : null}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            payments.map((payment) => {
+              const packageName = payment.packageId
+                ? packagesById.get(payment.packageId)?.name ?? t("payments.packageFallback")
+                : null;
+
+              return (
+                <div
+                  key={payment.id}
+                  className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2.5 rounded-lg border px-2.5 py-2 sm:gap-3 sm:px-3 sm:py-2.5"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-stone-900 sm:text-base">
+                      <span className="sm:hidden">{formatDateTime(payment.paidAt)}</span>
+                      <span className="hidden sm:inline">{formatFullDate(payment.paidAt)}</span>
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground sm:text-sm">
+                      {t("common.lessonsCount", { count: payment.lessonCount })}
+                      {" · "}
+                      {getPaymentMethodLabel(payment.method)}
+                      {packageName ? ` · ${packageName}` : ""}
+                    </p>
+                  </div>
+                  <p className="shrink-0 text-right text-sm font-bold sm:text-base">
+                    {formatMoney(payment.amount, currency)}
+                  </p>
+                </div>
+              );
+            })
           ) : (
             <p className="text-sm text-muted-foreground">{t("studentPage.paymentsEmpty")}</p>
           )}
