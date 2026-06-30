@@ -104,13 +104,18 @@ docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
 Дополнительно к Loki/Grafana можно отправлять ошибки и warn/error-логи в [Sentry](https://sentry.io):
 
 ```bash
-NEXT_PUBLIC_SENTRY_DSN=https://...@....ingest.sentry.io/...
-SENTRY_DSN=https://...@....ingest.sentry.io/...
+NEXT_PUBLIC_SENTRY_DSN=https://...@....ingest.de.sentry.io/...   # Next.js (browser)
+SENTRY_DSN=https://...@....ingest.de.sentry.io/...               # Next.js server
+BACKEND_SENTRY_DSN=https://...@....ingest.de.sentry.io/...       # backend API
+BOT_SENTRY_DSN=https://...@....ingest.de.sentry.io/...           # Telegram bot
+REMINDER_SENTRY_DSN=https://...@....ingest.de.sentry.io/...      # reminder service
 SENTRY_AUTH_TOKEN=...   # для upload source maps при next build
 ```
 
 - **Next.js** — client/server/edge через `@sentry/nextjs` (ошибки, tracing, session replay, logs)
-- **backend / bot / reminder** — через `@sentry/node` + shared logger (warn/error)
+- **backend** — `BACKEND_SENTRY_DSN`
+- **bot** — `BOT_SENTRY_DSN`
+- **reminder** — `REMINDER_SENTRY_DSN`
 
 Tunnel route `/monitoring` обходит ad-blockers в браузере.
 

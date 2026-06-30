@@ -3,8 +3,8 @@ import type { LogLevel } from "./logger";
 
 let enabled = false;
 
-export function initSentryNode(service: string): void {
-  const dsn = process.env.SENTRY_DSN?.trim();
+export function initSentryNode(service: string, dsnOverride?: string): void {
+  const dsn = (dsnOverride ?? process.env.SENTRY_DSN)?.trim();
   if (!dsn || enabled) {
     return;
   }
@@ -13,6 +13,7 @@ export function initSentryNode(service: string): void {
     dsn,
     environment: process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? "development",
     tracesSampleRate: process.env.NODE_ENV === "development" ? 1.0 : 0.1,
+    includeLocalVariables: true,
     enableLogs: true
   });
 

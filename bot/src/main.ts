@@ -3,7 +3,7 @@ import { initSentryNode } from "@crm/shared/sentry-node";
 import { startTelegramBot } from "./telegram";
 import { log } from "./logger";
 
-initSentryNode("bot");
+initSentryNode("bot", process.env.BOT_SENTRY_DSN);
 
 void startTelegramBot()
   .then(() => {

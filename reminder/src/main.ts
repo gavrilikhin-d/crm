@@ -5,7 +5,7 @@ import { sendManualPaymentReminder, startReminderScheduler } from "./reminders";
 import { waitForBackend } from "./backend-client";
 import { log } from "./logger";
 
-initSentryNode("reminder");
+initSentryNode("reminder", process.env.REMINDER_SENTRY_DSN);
 
 const port = Number(process.env.PORT ?? 4001);
 
