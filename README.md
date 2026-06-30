@@ -60,6 +60,45 @@ bun run start:reminder
 docker compose up --build
 ```
 
+### Логи (Loki + Grafana)
+
+#### Локальная разработка (`bun dev:all`)
+
+Alloy собирает логи только из Docker-контейнеров, поэтому для local dev логи отправляются в Loki напрямую из `bot` и `reminder`:
+
+```bash
+bun run observability:up
+```
+
+Добавьте в `.env`:
+
+```bash
+LOKI_PUSH_URL=http://127.0.0.1:3100/loki/api/v1/push
+```
+
+Перезапустите `bun dev:all`. Grafana: http://localhost:3030
+
+#### Docker (production / полный стек)
+
+Alloy автоматически собирает stdout из контейнеров CRM:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
+```
+
+- **Grafana:** http://localhost:3030 (логин `admin`, пароль из `GRAFANA_ADMIN_PASSWORD`)
+- **Dashboard:** CRM → CRM Logs
+
+Примеры LogQL:
+
+```logql
+{service="bot"} | json | level="error"
+{service="reminder"} | json | msg=~"backend unreachable"
+{service="bot"} | json | handler=~"command:.*"
+```
+
+Логи `bot` и `reminder` — JSON. `backend` при local dev пока только в терминале (plain text).
+
 Telegram-бот опционален. Если `TELEGRAM_BOT_TOKEN` не задан, web app работает, а Telegram service не запускает polling.
 
 ## Telegram

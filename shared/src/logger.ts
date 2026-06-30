@@ -43,6 +43,37 @@ function serializeError(error: unknown): { name: string; message: string; stack?
   };
 }
 
+function pushToLoki(line: string): void {
+  const url = process.env.LOKI_PUSH_URL;
+  if (!url) {
+    return;
+  }
+
+  try {
+    const entry = JSON.parse(line) as Record<string, unknown>;
+    const labels = {
+      service: String(entry.service ?? "unknown"),
+      level: String(entry.level ?? "info")
+    };
+    const body = JSON.stringify({
+      streams: [
+        {
+          stream: labels,
+          values: [[`${Date.now()}000000`, line]]
+        }
+      ]
+    });
+
+    void fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body
+    }).catch(() => undefined);
+  } catch {
+    // Ignore malformed log lines.
+  }
+}
+
 function createLogger(service: string, options: Partial<LoggerOptions> = {}): Logger {
   const minLevel = options.minLevel ?? resolveMinLevel();
   const baseContext = options.context ?? {};
@@ -51,6 +82,7 @@ function createLogger(service: string, options: Partial<LoggerOptions> = {}): Lo
     ((line: string, level: LogLevel) => {
       const stream = level === "warn" || level === "error" ? process.stderr : process.stdout;
       stream.write(`${line}\n`);
+      pushToLoki(line);
     });
 
   function log(level: LogLevel, message: string, context: Record<string, unknown> = {}): void {
@@ -90,4 +122,4 @@ function createLogger(service: string, options: Partial<LoggerOptions> = {}): Lo
   };
 }
 
-export { createLogger, resolveMinLevel, type LogLevel, type Logger };
+export { createLogger, pushToLoki, resolveMinLevel, type LogLevel, type Logger };

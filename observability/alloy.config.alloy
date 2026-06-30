@@ -1,0 +1,63 @@
+// Collect logs from CRM Docker Compose services and ship them to Loki.
+
+discovery.docker "linux" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "crm_containers" {
+  targets = discovery.docker.linux.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    regex         = "backend|bot|reminder|frontend|postgres"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+}
+
+loki.source.docker "crm" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.crm_containers.output
+  forward_to = [loki.process.crm_logs.receiver]
+}
+
+loki.process "crm_logs" {
+  forward_to = [loki.write.local.receiver]
+
+  stage.docker {}
+
+  stage.match {
+    selector = "{service=~\"backend|bot|reminder|frontend\"}"
+
+    stage.json {
+      expressions = {
+        level   = "level",
+        service = "service",
+        msg     = "msg",
+        handler = "handler",
+      }
+    }
+
+    stage.labels {
+      values = {
+        level = "",
+      }
+    }
+  }
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

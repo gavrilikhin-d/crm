@@ -1,6 +1,8 @@
 services:
   postgres:
     image: postgres:16-alpine
+    networks:
+      - crm
     environment:
       POSTGRES_USER: crm
       POSTGRES_PASSWORD: crm
@@ -19,6 +21,8 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    networks:
+      - crm
     env_file:
       - .env
     environment:
@@ -34,6 +38,8 @@ services:
     build:
       context: .
       dockerfile: reminder/Dockerfile
+    networks:
+      - crm
     env_file:
       - .env
     environment:
@@ -48,6 +54,8 @@ services:
     build:
       context: .
       dockerfile: bot/Dockerfile
+    networks:
+      - crm
     env_file:
       - .env
     environment:
@@ -62,6 +70,8 @@ services:
       args:
         BACKEND_INTERNAL_URL: http://backend:4000
         REMINDER_INTERNAL_URL: http://reminder:4001
+    networks:
+      - crm
     env_file:
       - .env
     environment:
@@ -76,3 +86,7 @@ services:
 
 volumes:
   pg_data:
+
+networks:
+  crm:
+    name: crm
