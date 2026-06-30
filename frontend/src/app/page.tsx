@@ -33,7 +33,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -72,7 +72,6 @@ import { useSnapshotAutoRefresh } from "@/hooks/use-snapshot-auto-refresh";
 import { useI18n } from "@/i18n/context";
 import {
   formatDateTime,
-  formatDay,
   formatFullDate,
   formatMonth,
   formatTime,
@@ -87,7 +86,6 @@ import type {
   Lesson,
   LessonPackage,
   RecurringDeleteScope,
-  RecurringSchedule,
   Student,
   StudentBalance
 } from "@crm/shared";
@@ -138,11 +136,16 @@ export default function Home() {
     month: t("calendar.view.month")
   };
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [activeSection, setActiveSection] = useState<ActiveSection>("schedule");
+  const [activeSection, setActiveSection] = useState<ActiveSection>(() => {
+    if (typeof window === "undefined") {
+      return "schedule";
+    }
+    const params = new URLSearchParams(window.location.search);
+    return params.get("section") === "settings" ? "settings" : "schedule";
+  });
   const [scheduleView, setScheduleView] = useState<ScheduleView>("week");
   const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
-  const [currentTime, setCurrentTime] = useState<Date | null>(null);
+  const [currentTime, setCurrentTime] = useState(() => new Date());
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [lessonDialogOpen, setLessonDialogOpen] = useState(false);
   const [lessonFormKey, setLessonFormKey] = useState(0);
@@ -158,7 +161,7 @@ export default function Home() {
     }
   }, [isMobile]);
 
-  const students = snapshot?.students ?? [];
+  const students = useMemo(() => snapshot?.students ?? [], [snapshot?.students]);
   const lessonPackages = snapshot?.lessonPackages ?? [];
   const lessons = useMemo(() => {
     const seen = new Set<string>();
@@ -180,7 +183,7 @@ export default function Home() {
     [snapshot?.payments]
   );
   const currency = resolveCurrency(snapshot?.settings.currency);
-  const recurringSchedules = snapshot?.recurringSchedules ?? [];
+  const recurringSchedules = useMemo(() => snapshot?.recurringSchedules ?? [], [snapshot?.recurringSchedules]);
   const selectedLesson = useMemo(
     () => (selectedLessonId ? lessons.find((lesson) => lesson.id === selectedLessonId) ?? null : null),
     [lessons, selectedLessonId]
@@ -235,26 +238,12 @@ export default function Home() {
     [lessons, selectedDate]
   );
 
-  useEffect(() => {
-    if (selectedLessonId && !selectedLesson) {
-      setSelectedLessonId(null);
-    }
-  }, [selectedLessonId, selectedLesson]);
-
   const loadSnapshot = useCallback(async (options?: { silent?: boolean }) => {
-    if (!options?.silent) {
-      setLoading(true);
-    }
-
     try {
       setSnapshot(await api<Snapshot>("/api/snapshot"));
     } catch (error) {
       if (!options?.silent) {
         toast.error(error instanceof Error ? error.message : t("toast.loadFailed"));
-      }
-    } finally {
-      if (!options?.silent) {
-        setLoading(false);
       }
     }
   }, [t]);
@@ -263,16 +252,8 @@ export default function Home() {
     useSnapshotAutoRefresh({ loadSnapshot, pollMs: snapshotPollMs });
 
   useEffect(() => {
-    setCurrentTime(new Date());
     const interval = window.setInterval(() => setCurrentTime(new Date()), 60_000);
     return () => window.clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("section") === "settings") {
-      setActiveSection("settings");
-    }
   }, []);
 
   async function withRefresh(action: () => Promise<string | void>) {
@@ -305,18 +286,6 @@ export default function Home() {
 
   function getStudent(studentId: string) {
     return students.find((student) => student.id === studentId);
-  }
-
-  function getBalance(studentId: string): StudentBalance {
-    return (
-      snapshot?.balances.find((balance) => balance.studentId === studentId) ?? {
-        studentId,
-        paidLessons: 0,
-        chargedLessons: 0,
-        remainingLessons: 0,
-        debtLessons: 0
-      }
-    );
   }
 
   async function handleStudentCreate(payload: { fullName: string; avatarFile: File | null }) {

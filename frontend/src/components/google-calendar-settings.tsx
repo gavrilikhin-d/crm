@@ -32,7 +32,10 @@ export function GoogleCalendarSettings({ onChanged }: GoogleCalendarSettingsProp
   }, [t]);
 
   useEffect(() => {
-    void loadStatus();
+    const timer = window.setTimeout(() => {
+      void loadStatus();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [loadStatus]);
 
   useEffect(() => {
@@ -48,8 +51,10 @@ export function GoogleCalendarSettings({ onChanged }: GoogleCalendarSettingsProp
 
     if (calendarResult === "connected") {
       toast.success(t("toast.googleCalendarConnected"));
-      void loadStatus();
-      void onChanged?.();
+      window.setTimeout(() => {
+        void loadStatus();
+        void onChanged?.();
+      }, 0);
     } else if (calendarResult === "error") {
       toast.error(t("toast.googleCalendarConnectFailed"));
     }

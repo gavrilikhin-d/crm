@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { format } from "date-fns"
 import { ru } from "date-fns/locale"
 import { CalendarIcon, ClockIcon } from "lucide-react"
@@ -52,15 +52,7 @@ export function DateTimePicker({ id, name, defaultValue, required, className }: 
   const [date, setDate] = useState<Date | undefined>(initial.date)
   const [hour, setHour] = useState(initial.hour)
   const [minute, setMinute] = useState(initial.minute)
-  const [value, setValue] = useState(defaultValue ?? "")
-
-  useEffect(() => {
-    if (date) {
-      setValue(formatDateTimeLocalValue(date, hour, minute))
-      return
-    }
-    setValue("")
-  }, [date, hour, minute])
+  const value = date ? formatDateTimeLocalValue(date, hour, minute) : ""
 
   const label = date
     ? `${format(date, "d MMMM yyyy", { locale: ru })}, ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`

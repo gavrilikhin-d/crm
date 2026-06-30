@@ -462,7 +462,7 @@ async function updateReminder(request: IncomingMessage, response: ServerResponse
   jsonOk(response, await store.updateReminder(accountId, match[1], body));
 }
 
-async function readJson(request: IncomingMessage): Promise<Record<string, any>> {
+async function readJson(request: IncomingMessage): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = [];
 
   for await (const chunk of request) {
@@ -473,7 +473,7 @@ async function readJson(request: IncomingMessage): Promise<Record<string, any>> 
     return {};
   }
 
-  return JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, any>;
+  return JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
 }
 
 function jsonOk(response: ServerResponse, payload: unknown, status = 200) {

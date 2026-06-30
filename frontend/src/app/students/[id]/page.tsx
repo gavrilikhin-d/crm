@@ -46,6 +46,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
 
   const loadSnapshot = useCallback(async () => {
     const data = await api<Snapshot>("/api/snapshot");
@@ -53,12 +54,20 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
   }, []);
 
   useEffect(() => {
-    void loadSnapshot()
-      .catch((loadError) =>
-        setError(loadError instanceof Error ? loadError.message : t("toast.loadFailed"))
-      )
-      .finally(() => setLoading(false));
+    const timer = window.setTimeout(() => {
+      void loadSnapshot()
+        .catch((loadError) =>
+          setError(loadError instanceof Error ? loadError.message : t("toast.loadFailed"))
+        )
+        .finally(() => setLoading(false));
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [loadSnapshot, t]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const student = snapshot?.students.find((item) => item.id === id);
   const currency = resolveCurrency(snapshot?.settings.currency);
@@ -77,12 +86,12 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
     return [...items].sort((a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime());
   }, [id, snapshot?.lessons]);
   const upcomingLessons = useMemo(
-    () => lessons.filter((lesson) => new Date(lesson.startsAt).getTime() >= Date.now()),
-    [lessons]
+    () => lessons.filter((lesson) => new Date(lesson.startsAt).getTime() >= now),
+    [lessons, now]
   );
   const pastLessons = useMemo(
-    () => lessons.filter((lesson) => new Date(lesson.startsAt).getTime() < Date.now()),
-    [lessons]
+    () => lessons.filter((lesson) => new Date(lesson.startsAt).getTime() < now),
+    [lessons, now]
   );
   const recurringSchedules = useMemo(
     () => snapshot?.recurringSchedules.filter((schedule) => schedule.studentIds.includes(id)) ?? [],

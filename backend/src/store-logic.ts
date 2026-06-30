@@ -4,8 +4,6 @@ import type {
   Database,
   Lesson,
   LessonParticipant,
-  LessonStatus,
-  ParticipantStatus,
   RecurringSchedule,
   Student,
   StudentBalance

@@ -16,10 +16,12 @@ function useSnapshotAutoRefresh({ loadSnapshot, pollMs = 30_000 }: UseSnapshotAu
   const [showAutoRefreshed, setShowAutoRefreshed] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
   const loadSnapshotRef = useRef(loadSnapshot);
-  const autoHideTimerRef = useRef<number | null>(null);
   const runningRef = useRef(false);
+  const autoHideTimerRef = useRef<number | null>(null);
 
-  loadSnapshotRef.current = loadSnapshot;
+  useEffect(() => {
+    loadSnapshotRef.current = loadSnapshot;
+  }, [loadSnapshot]);
 
   const runRefresh = useCallback(
     async (source: RefreshSource) => {
