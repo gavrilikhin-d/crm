@@ -233,9 +233,9 @@ export default function Home() {
     () =>
       lessons.filter((lesson) => {
         const lessonDate = new Date(lesson.startsAt);
-        return lessonDate.getFullYear() === selectedDate.getFullYear() && lessonDate.getMonth() === selectedDate.getMonth();
+        return monthDays.some((day) => sameDate(day, lessonDate));
       }),
-    [lessons, selectedDate]
+    [lessons, monthDays]
   );
 
   const loadSnapshot = useCallback(async (options?: { silent?: boolean }) => {
