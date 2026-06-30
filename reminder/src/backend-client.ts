@@ -1,4 +1,5 @@
 import type { Database, Lesson, Reminder, StudentBalance } from "@crm/shared";
+import { log } from "./logger";
 
 const backendUrl = process.env.BACKEND_INTERNAL_URL ?? "http://localhost:4000";
 const internalToken = process.env.INTERNAL_API_TOKEN ?? "";
@@ -58,7 +59,14 @@ async function api<T>(path: string, options?: { method?: string; body?: unknown 
 
   if (!response.ok) {
     const payload = (await response.json().catch(() => ({}))) as { error?: string };
-    throw new Error(payload.error ?? `Backend request failed: ${response.status}`);
+    const message = payload.error ?? `Backend request failed: ${response.status}`;
+    log.warn("Backend request failed", {
+      path,
+      method: options?.method ?? "GET",
+      status: response.status,
+      error: message
+    });
+    throw new Error(message);
   }
 
   return response.json() as Promise<T>;

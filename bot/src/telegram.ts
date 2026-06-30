@@ -15,6 +15,8 @@ import {
   type AttendanceIntent
 } from "./attendance";
 import { formatHelpMessage, registerBotCommands } from "./commands";
+import { BotInteraction, answerCallback, replyToUser } from "./interaction-log";
+import { log } from "./logger";
 import { formatBalanceMessage, formatNotLinkedMessage, formatScheduleMessage, type BotReply } from "./messages";
 import {
   DEFAULT_SCHEDULE_DAYS,
@@ -38,133 +40,224 @@ export function getTelegramBot(): Telegraf | null {
   bot = new Telegraf(token);
 
   bot.start(async (ctx) => {
-    const payload = getStartPayload(ctx.message);
-    const isGroup = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
-
-    if (!payload || !ctx.chat || !ctx.from) {
-      await ctx.reply(
-        [
-          "Здравствуйте! Это бот CRM преподавателя.",
-          "Чтобы подключить напоминания, откройте персональную ссылку из CRM преподавателя.",
-          "",
-          formatHelpMessage(isGroup)
-        ].join("\n")
-      );
-      return;
-    }
+    const interaction = new BotInteraction("start", ctx, {
+      hasBindPayload: Boolean(getStartPayload(ctx.message))
+    });
 
     try {
-      const student = await bindTelegramChat({
-        token: payload,
-        chatId: ctx.chat.id,
-        userId: ctx.from.id,
-        username: ctx.from.username
-      });
-      const connectedLines = isGroup
-        ? [
-            `${student.fullName}, ваш Telegram подключен.`,
-            "Напоминания и команды будут работать в этом чате для вас лично.",
-            "",
-            "Расписание: /schedule (7 дней) или /schedule 14",
-            "Баланс: /balance"
-          ]
-        : [
-            `${student.fullName}, Telegram подключен. Теперь сюда будут приходить напоминания о занятиях.`,
-            "",
-            "Спросить расписание: /schedule (7 дней) или /schedule 14",
-            "Спросить баланс: /balance",
-            "Ответ по занятию: /attend 1 или /decline 1"
-          ];
+      const payload = getStartPayload(ctx.message);
+      const isGroup = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
+      interaction.meta.group = isGroup;
 
-      await ctx.reply(connectedLines.join("\n"));
-      console.log(
-        `Telegram linked: student=${student.id} user=${ctx.from.id} chat=${ctx.chat.id} group=${isGroup}`
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown Telegram binding error";
-      console.error("Telegram binding failed:", message);
-      await ctx.reply("Не удалось подключить Telegram. Попросите преподавателя прислать новую ссылку из CRM.");
+      if (!payload || !ctx.chat || !ctx.from) {
+        await replyToUser(
+          ctx,
+          interaction,
+          [
+            "Здравствуйте! Это бот CRM преподавателя.",
+            "Чтобы подключить напоминания, откройте персональную ссылку из CRM преподавателя.",
+            "",
+            formatHelpMessage(isGroup)
+          ].join("\n")
+        );
+        return;
+      }
+
+      try {
+        const student = await bindTelegramChat({
+          token: payload,
+          chatId: ctx.chat.id,
+          userId: ctx.from.id,
+          username: ctx.from.username
+        });
+        const connectedLines = isGroup
+          ? [
+              `${student.fullName}, ваш Telegram подключен.`,
+              "Напоминания и команды будут работать в этом чате для вас лично.",
+              "",
+              "Расписание: /schedule (7 дней) или /schedule 14",
+              "Баланс: /balance"
+            ]
+          : [
+              `${student.fullName}, Telegram подключен. Теперь сюда будут приходить напоминания о занятиях.`,
+              "",
+              "Спросить расписание: /schedule (7 дней) или /schedule 14",
+              "Спросить баланс: /balance",
+              "Ответ по занятию: /attend 1 или /decline 1"
+            ];
+
+        await replyToUser(ctx, interaction, connectedLines.join("\n"));
+        interaction.meta.linked = true;
+      } catch (error) {
+        interaction.outcome = "error";
+        log.error("Telegram binding failed", {
+          err: error,
+          handler: interaction.handler,
+          userId: interaction.userId,
+          chatId: interaction.chatId
+        });
+        await replyToUser(
+          ctx,
+          interaction,
+          "Не удалось подключить Telegram. Попросите преподавателя прислать новую ссылку из CRM."
+        );
+      }
+    } finally {
+      interaction.flush();
     }
   });
 
   bot.command([...SCHEDULE_COMMANDS], async (ctx) => {
-    const { days, error } = parseScheduleDaysFromPayload(ctx.payload);
-    if (error) {
-      await ctx.reply(error);
-      return;
-    }
+    const interaction = new BotInteraction("command:schedule", ctx);
 
-    await replyWithSchedule(ctx, days);
+    try {
+      const { days, error } = parseScheduleDaysFromPayload(ctx.payload);
+      if (error) {
+        interaction.outcome = "validation_error";
+        await replyToUser(ctx, interaction, error);
+        return;
+      }
+
+      interaction.meta.days = days;
+      await replyWithSchedule(ctx, interaction, days);
+    } finally {
+      interaction.flush();
+    }
   });
 
   bot.command(["balance", "баланс"], async (ctx) => {
-    await replyWithProfile(ctx, formatBalanceMessage);
+    const interaction = new BotInteraction("command:balance", ctx);
+
+    try {
+      await replyWithProfile(ctx, interaction, formatBalanceMessage);
+    } finally {
+      interaction.flush();
+    }
   });
 
   bot.command(["help", "помощь"], async (ctx) => {
-    const isGroup = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
-    await ctx.reply(formatHelpMessage(isGroup));
+    const interaction = new BotInteraction("command:help", ctx);
+
+    try {
+      const isGroup = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
+      interaction.meta.group = isGroup;
+      await replyToUser(ctx, interaction, formatHelpMessage(isGroup));
+    } finally {
+      interaction.flush();
+    }
   });
 
   bot.command([...ATTEND_COMMANDS], async (ctx) => {
-    await replyWithAttendance(ctx, "confirmed", ctx.payload);
+    const interaction = new BotInteraction("command:attend", ctx, { intent: "confirmed" });
+
+    try {
+      await replyWithAttendance(ctx, interaction, "confirmed", ctx.payload);
+    } finally {
+      interaction.flush();
+    }
   });
 
   bot.command([...DECLINE_COMMANDS], async (ctx) => {
-    await replyWithAttendance(ctx, "declined", ctx.payload);
+    const interaction = new BotInteraction("command:decline", ctx, { intent: "declined" });
+
+    try {
+      await replyWithAttendance(ctx, interaction, "declined", ctx.payload);
+    } finally {
+      interaction.flush();
+    }
   });
 
   bot.hears(/^буду\s+(\d+)$/i, async (ctx) => {
-    if (!isPrivateChat(ctx)) {
-      return;
-    }
+    const interaction = new BotInteraction("hears:attend", ctx, { intent: "confirmed" });
 
-    await replyWithAttendance(ctx, "confirmed", ctx.match[1]);
+    try {
+      if (!isPrivateChat(ctx)) {
+        interaction.outcome = "skipped";
+        return;
+      }
+
+      await replyWithAttendance(ctx, interaction, "confirmed", ctx.match[1]);
+    } finally {
+      interaction.flush();
+    }
   });
 
   bot.hears(/^не\s+буду\s+(\d+)$/i, async (ctx) => {
-    if (!isPrivateChat(ctx)) {
-      return;
-    }
+    const interaction = new BotInteraction("hears:decline", ctx, { intent: "declined" });
 
-    await replyWithAttendance(ctx, "declined", ctx.match[1]);
+    try {
+      if (!isPrivateChat(ctx)) {
+        interaction.outcome = "skipped";
+        return;
+      }
+
+      await replyWithAttendance(ctx, interaction, "declined", ctx.match[1]);
+    } finally {
+      interaction.flush();
+    }
   });
 
   bot.hears(/^расписание(?:\s+на)?\s+\d+\s*(?:дн(?:я|ей)?)?$/i, async (ctx) => {
-    if (!isPrivateChat(ctx)) {
-      return;
-    }
+    const interaction = new BotInteraction("hears:schedule", ctx);
 
-    if (!ctx.message || !("text" in ctx.message) || typeof ctx.message.text !== "string") {
-      await replyWithSchedule(ctx, DEFAULT_SCHEDULE_DAYS);
-      return;
-    }
+    try {
+      if (!isPrivateChat(ctx)) {
+        interaction.outcome = "skipped";
+        return;
+      }
 
-    const days = parseScheduleDaysFromPhrase(ctx.message.text) ?? DEFAULT_SCHEDULE_DAYS;
-    await replyWithSchedule(ctx, days);
+      if (!ctx.message || !("text" in ctx.message) || typeof ctx.message.text !== "string") {
+        interaction.meta.days = DEFAULT_SCHEDULE_DAYS;
+        await replyWithSchedule(ctx, interaction, DEFAULT_SCHEDULE_DAYS);
+        return;
+      }
+
+      const days = parseScheduleDaysFromPhrase(ctx.message.text) ?? DEFAULT_SCHEDULE_DAYS;
+      interaction.meta.days = days;
+      await replyWithSchedule(ctx, interaction, days);
+    } finally {
+      interaction.flush();
+    }
   });
 
   bot.hears(/^(расписание|занятия|когда занятие|следующ(?:ее|ие) занят(?:ие|ия))$/i, async (ctx) => {
-    if (!isPrivateChat(ctx)) {
-      return;
-    }
+    const interaction = new BotInteraction("hears:schedule", ctx, { days: DEFAULT_SCHEDULE_DAYS });
 
-    await replyWithSchedule(ctx, DEFAULT_SCHEDULE_DAYS);
+    try {
+      if (!isPrivateChat(ctx)) {
+        interaction.outcome = "skipped";
+        return;
+      }
+
+      await replyWithSchedule(ctx, interaction, DEFAULT_SCHEDULE_DAYS);
+    } finally {
+      interaction.flush();
+    }
   });
 
   bot.hears(/^(баланс|сколько осталось|остаток)$/i, async (ctx) => {
-    if (!isPrivateChat(ctx)) {
-      return;
-    }
+    const interaction = new BotInteraction("hears:balance", ctx);
 
-    await replyWithProfile(ctx, formatBalanceMessage);
+    try {
+      if (!isPrivateChat(ctx)) {
+        interaction.outcome = "skipped";
+        return;
+      }
+
+      await replyWithProfile(ctx, interaction, formatBalanceMessage);
+    } finally {
+      interaction.flush();
+    }
   });
 
   bot.action(/^(?:la|ld):[^:]+:[^:]+$|^lesson:.+:student:.+:(?:attend|decline)$/, async (ctx) => {
+    const interaction = new BotInteraction("callback:lesson_attendance", ctx);
+
     try {
       const userId = ctx.from?.id;
       if (!userId) {
-        await ctx.answerCbQuery("Не удалось определить пользователя.", { show_alert: true });
+        interaction.outcome = "validation_error";
+        await answerCallback(ctx, interaction, "Не удалось определить пользователя.", { show_alert: true });
         return;
       }
 
@@ -174,29 +267,43 @@ export function getTelegramBot(): Telegraf | null {
           : "";
       const parsed = parseLessonCallback(callbackData);
       if (!parsed) {
-        await ctx.answerCbQuery("Не удалось распознать кнопку.", { show_alert: true });
+        interaction.outcome = "validation_error";
+        await answerCallback(ctx, interaction, "Не удалось распознать кнопку.", { show_alert: true });
         return;
       }
       const { lessonId, studentId, action } = parsed;
+      interaction.meta.action = action;
 
       const profile = await getTelegramStudentProfile(userId);
       if (profile.student.id !== studentId) {
-        await ctx.answerCbQuery("Эта кнопка предназначена для другого ученика.", { show_alert: true });
+        interaction.outcome = "validation_error";
+        await answerCallback(ctx, interaction, "Эта кнопка предназначена для другого ученика.", { show_alert: true });
         return;
       }
 
       const status = action === "attend" ? "confirmed" : "declined";
+      interaction.meta.status = status;
       const lesson = await setParticipantStatus({ lessonId, studentId, status, action });
-      await ctx.answerCbQuery(action === "attend" ? "Отмечено: будете" : "Отмечено: не будете");
+      await answerCallback(ctx, interaction, action === "attend" ? "Отмечено: будете" : "Отмечено: не будете");
       await ctx.editMessageReplyMarkup(undefined).catch(() => undefined);
-      await ctx.reply(formatParticipantResult(lesson, studentId, action));
-      console.log(`Telegram callback processed: lesson=${lessonId} student=${studentId} action=${action}`);
+      interaction.noteMessageKind("markup_cleared");
+      await replyToUser(ctx, interaction, formatParticipantResult(lesson, studentId, action));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown Telegram callback error";
-      console.error("Telegram callback failed:", message);
-      await ctx.answerCbQuery("Не удалось обработать кнопку. Проверьте, что занятие еще существует.", {
-        show_alert: true
+      interaction.outcome = "error";
+      log.error("Telegram callback failed", {
+        err: error,
+        handler: interaction.handler,
+        userId: interaction.userId,
+        chatId: interaction.chatId
       });
+      await answerCallback(
+        ctx,
+        interaction,
+        "Не удалось обработать кнопку. Проверьте, что занятие еще существует.",
+        { show_alert: true }
+      );
+    } finally {
+      interaction.flush();
     }
   });
 
@@ -206,23 +313,21 @@ export function getTelegramBot(): Telegraf | null {
 export async function startTelegramBot(): Promise<void> {
   const instance = getTelegramBot();
   if (!instance) {
-    console.log("Telegram bot disabled: TELEGRAM_BOT_TOKEN is not set");
+    log.warn("Telegram bot disabled", { reason: "TELEGRAM_BOT_TOKEN is not set" });
     return;
   }
 
-  console.log("Telegram bot starting polling...");
+  log.info("Telegram bot starting polling");
 
   try {
     const botInfo = await withTimeout(instance.telegram.getMe(), 15_000, "Telegram getMe timeout");
     await registerBotCommands(instance.telegram);
     void instance.launch({ dropPendingUpdates: true }).catch((error) => {
-      const message = error instanceof Error ? error.message : "Unknown Telegram polling error";
-      console.error("Telegram polling stopped with error:", message);
+      log.error("Telegram polling stopped with error", { err: error });
     });
-    console.log(`Telegram bot polling started as @${botInfo.username}`);
+    log.info("Telegram bot polling started", { username: botInfo.username });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown Telegram launch error";
-    console.error("Telegram bot failed to start:", message);
+    log.error("Telegram bot failed to start", { err: error });
   }
 
   process.once("SIGINT", () => instance.stop("SIGINT"));
@@ -257,109 +362,149 @@ export async function sendPaymentReminder(student: Student, unpaidLessons: numbe
   );
 }
 
-async function replyWithSchedule(ctx: Context, days: number): Promise<void> {
+async function replyWithSchedule(ctx: Context, interaction: BotInteraction, days: number): Promise<void> {
   const userId = ctx.from?.id;
   if (!userId) {
+    interaction.outcome = "skipped";
     return;
   }
 
   try {
     const profile = await getTelegramStudentProfile(userId, { days });
     const reply = formatScheduleMessage(profile);
-    if (typeof reply === "string") {
-      await ctx.reply(reply);
-      return;
-    }
-    await ctx.reply(reply.text, { parse_mode: reply.parse_mode });
+    interaction.meta.lessonCount = profile.upcomingLessons.length;
+    await replyToUser(ctx, interaction, reply);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown profile error";
     if (message.includes("not found")) {
-      await ctx.reply(formatNotLinkedMessage());
+      interaction.outcome = "not_linked";
+      await replyToUser(ctx, interaction, formatNotLinkedMessage());
       return;
     }
-    console.error("Telegram schedule query failed:", message);
-    await ctx.reply("Не удалось получить расписание. Попробуйте позже.");
+    interaction.outcome = "error";
+    log.error("Telegram schedule query failed", {
+      err: error,
+      handler: interaction.handler,
+      userId: interaction.userId,
+      chatId: interaction.chatId
+    });
+    await replyToUser(ctx, interaction, "Не удалось получить расписание. Попробуйте позже.");
   }
 }
 
 async function replyWithProfile(
   ctx: Context,
+  interaction: BotInteraction,
   format: (profile: Awaited<ReturnType<typeof getTelegramStudentProfile>>) => BotReply
 ): Promise<void> {
   const userId = ctx.from?.id;
   if (!userId) {
+    interaction.outcome = "skipped";
     return;
   }
 
   try {
     const profile = await getTelegramStudentProfile(userId);
     const reply = format(profile);
-    if (typeof reply === "string") {
-      await ctx.reply(reply);
-      return;
-    }
-    await ctx.reply(reply.text, { parse_mode: reply.parse_mode });
+    await replyToUser(ctx, interaction, reply);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown profile error";
     if (message.includes("not found")) {
-      await ctx.reply(formatNotLinkedMessage());
+      interaction.outcome = "not_linked";
+      await replyToUser(ctx, interaction, formatNotLinkedMessage());
       return;
     }
-    console.error("Telegram profile query failed:", message);
-    await ctx.reply("Не удалось получить данные. Попробуйте позже.");
+    interaction.outcome = "error";
+    log.error("Telegram profile query failed", {
+      err: error,
+      handler: interaction.handler,
+      userId: interaction.userId,
+      chatId: interaction.chatId
+    });
+    await replyToUser(ctx, interaction, "Не удалось получить данные. Попробуйте позже.");
   }
 }
 
-async function replyWithAttendance(ctx: Context, intent: AttendanceIntent, payload?: string): Promise<void> {
+async function replyWithAttendance(
+  ctx: Context,
+  interaction: BotInteraction,
+  intent: AttendanceIntent,
+  payload?: string
+): Promise<void> {
   const userId = ctx.from?.id;
   if (!userId) {
+    interaction.outcome = "skipped";
     return;
   }
 
   const { index, error } = parseLessonIndex(payload);
   if (error) {
-    await ctx.reply(error);
+    interaction.outcome = "validation_error";
+    await replyToUser(ctx, interaction, error);
     return;
+  }
+
+  if (index) {
+    interaction.meta.lessonIndex = index;
   }
 
   try {
     const profile = await getTelegramStudentProfile(userId);
 
     if (!index) {
-      await ctx.reply(formatAttendancePrompt(profile, intent));
+      interaction.meta.mode = "prompt";
+      await replyToUser(ctx, interaction, formatAttendancePrompt(profile, intent));
       return;
     }
 
     const lesson = findLessonByScheduleIndex(profile, index);
     if (!lesson) {
-      await ctx.reply(`Занятие №${index} не найдено.\n\n${formatAttendancePrompt(profile, intent)}`);
+      interaction.outcome = "validation_error";
+      interaction.meta.mode = "not_found";
+      await replyToUser(
+        ctx,
+        interaction,
+        `Занятие №${index} не найдено.\n\n${formatAttendancePrompt(profile, intent)}`
+      );
       return;
     }
 
     if (!isActionableLesson(lesson, profile.student.id)) {
-      await ctx.reply(`Занятие №${index} недоступно для изменения.\n\n${formatAttendancePrompt(profile, intent)}`);
+      interaction.outcome = "validation_error";
+      interaction.meta.mode = "not_actionable";
+      await replyToUser(
+        ctx,
+        interaction,
+        `Занятие №${index} недоступно для изменения.\n\n${formatAttendancePrompt(profile, intent)}`
+      );
       return;
     }
 
     const status = intent === "confirmed" ? "confirmed" : "declined";
+    interaction.meta.status = status;
+    interaction.meta.mode = "update";
     const updated = await setParticipantStatus({
       lessonId: lesson.id,
       studentId: profile.student.id,
       status
     });
 
-    await ctx.reply(formatAttendanceResult(updated, profile.student.id, intent));
-    console.log(
-      `Telegram attendance command: lesson=${lesson.id} student=${profile.student.id} status=${status}`
-    );
+    await replyToUser(ctx, interaction, formatAttendanceResult(updated, profile.student.id, intent));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown attendance error";
     if (message.includes("not found")) {
-      await ctx.reply(formatNotLinkedMessage());
+      interaction.outcome = "not_linked";
+      await replyToUser(ctx, interaction, formatNotLinkedMessage());
       return;
     }
-    console.error("Telegram attendance command failed:", message);
-    await ctx.reply("Не удалось обновить ответ. Попробуйте позже.");
+    interaction.outcome = "error";
+    log.error("Telegram attendance command failed", {
+      err: error,
+      handler: interaction.handler,
+      userId: interaction.userId,
+      chatId: interaction.chatId
+    });
+    await replyToUser(ctx, interaction, "Не удалось обновить ответ. Попробуйте позже.");
   }
 }
 

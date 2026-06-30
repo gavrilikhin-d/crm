@@ -1,34 +1,61 @@
 import "dotenv/config";
 import { createServer } from "node:http";
 import { sendManualPaymentReminder, startReminderScheduler } from "./reminders";
+import { log } from "./logger";
 
 const port = Number(process.env.PORT ?? 4001);
 
 startReminderScheduler();
 
 createServer(async (request, response) => {
+  const startedAt = Date.now();
+  const method = request.method ?? "GET";
+  const path = request.url ?? "/";
+
   try {
-    const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+    const url = new URL(path, `http://${request.headers.host ?? "localhost"}`);
     const match = url.pathname.match(/^\/api\/payment-reminders\/([^/]+)$/);
 
-    if (request.method === "GET" && url.pathname === "/health") {
+    if (method === "GET" && url.pathname === "/health") {
       jsonOk(response, { ok: true });
+      logRequest(method, url.pathname, 200, startedAt);
       return;
     }
 
-    if (request.method !== "POST" || !match) {
+    if (method !== "POST" || !match) {
       jsonError(response, new Error("Route not found"), 404);
+      logRequest(method, url.pathname, 404, startedAt);
       return;
     }
 
     const result = await sendManualPaymentReminder(match[1]);
     jsonOk(response, { ok: true, ...result }, 202);
+    logRequest(method, url.pathname, 202, startedAt, { studentId: match[1], sent: result.sent });
   } catch (error) {
-    jsonError(response, error);
+    const message = error instanceof Error ? error.message : "Unexpected error";
+    const status = message.includes("not found") ? 404 : 400;
+    jsonError(response, error, status);
+    logRequest(method, path, status, startedAt, { err: error });
   }
 }).listen(port, () => {
-  console.log(`Reminder service listening on ${port}`);
+  log.info("Reminder service listening", { port });
 });
+
+function logRequest(
+  method: string,
+  path: string,
+  status: number,
+  startedAt: number,
+  context: Record<string, unknown> = {}
+): void {
+  log.info("HTTP request handled", {
+    method,
+    path,
+    status,
+    durationMs: Date.now() - startedAt,
+    ...context
+  });
+}
 
 function jsonOk(response: import("node:http").ServerResponse, payload: unknown, status = 200) {
   response.writeHead(status, { "content-type": "application/json" });

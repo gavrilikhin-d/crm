@@ -1,11 +1,12 @@
 import "dotenv/config";
 import { startTelegramBot } from "./telegram";
+import { log } from "./logger";
 
 void startTelegramBot()
   .then(() => {
-    console.log("Telegram bot service is running");
+    log.info("Telegram bot service is running");
   })
   .catch((error) => {
-    console.error("Telegram bot service failed to start:", error);
+    log.error("Telegram bot service failed to start", { err: error });
     process.exitCode = 1;
   });

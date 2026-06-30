@@ -33,7 +33,7 @@
     "start:reminders": "bun --filter @crm/reminder start",
     "build": "bun --filter '*' build",
     "typecheck": "bun --filter '*' typecheck",
-    "test": "bun --filter @crm/backend test",
+    "test": "bun --filter @crm/shared test && bun --filter @crm/bot test && bun --filter @crm/reminder test && bun --filter @crm/backend test",
     "seed": "cd backend && bun run seed",
     "db:push": "cd backend && bun run db:push",
     "migrate:multitenancy": "cd backend && bun run migrate:multitenancy",

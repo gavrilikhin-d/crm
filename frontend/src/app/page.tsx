@@ -1656,7 +1656,7 @@ function MonthCalendar({
   const maxVisibleLessons = isMobile ? 2 : 4;
 
   return (
-    <div className="grid grid-cols-[repeat(7,minmax(0,1fr))] overflow-hidden rounded-xl border border-stone-200">
+    <div className="grid grid-cols-7 overflow-hidden rounded-xl border border-stone-200">
       {weekDayLabels.map((day) => (
         <div
           className="border-b border-stone-200 bg-stone-50 px-1 py-1 text-center text-[0.625rem] font-bold uppercase text-stone-500 sm:px-2 sm:py-2 sm:text-xs"

@@ -8,13 +8,16 @@
     "./plans": "./src/plans.ts",
     "./currency": "./src/currency.ts",
     "./student-initials": "./src/student-initials.ts",
-    "./lesson-callback": "./src/lesson-callback.ts"
+    "./lesson-callback": "./src/lesson-callback.ts",
+    "./logger": "./src/logger.ts"
   },
   "types": "./src/types.ts",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test src"
   },
   "devDependencies": {
+    "@types/bun": "latest",
     "typescript": "^5.7.2"
   }
 }

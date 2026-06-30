@@ -17,7 +17,7 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test --preload ./src/test/preload.ts src",
     "test:unit": "bun test src/store-logic.test.ts",
-    "test:integration": "bun test --preload ./src/test/preload.ts src/lesson-lifecycle.integration.test.ts",
+    "test:integration": "bun test --preload ./src/test/preload.ts src/lesson-lifecycle.integration.test.ts"
   },
   "dependencies": {
     "@crm/shared": "0.1.0",
