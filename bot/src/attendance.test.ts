@@ -76,6 +76,15 @@ describe("isActionableLesson", () => {
     expect(isActionableLesson({ ...lesson, status: "completed" }, "s1")).toBe(false);
     expect(isActionableLesson({ ...lesson, status: "cancelled_by_teacher" }, "s1")).toBe(false);
   });
+
+  test("blocks past lessons even if status is still scheduled", () => {
+    const pastLesson = createLesson({
+      id: "l-past",
+      startsAt: new Date(Date.now() - 60_000).toISOString()
+    });
+
+    expect(isActionableLesson(pastLesson, "s1")).toBe(false);
+  });
 });
 
 describe("findLessonByScheduleIndex", () => {

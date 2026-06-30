@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { nanoid } from "nanoid";
+import type { Payment } from "@crm/shared";
 import {
   createEmptyDatabase,
   createLessonRecord,
@@ -8,12 +10,103 @@ import {
   futureDate
 } from "./test/fixtures";
 import {
+  getStudentBalance,
   hasRecurringLesson,
   isOccurrenceSkipped,
   materializeRecurringLessons,
+  now,
   recalculateLesson,
   skipRecurringOccurrence
 } from "./store-logic";
+
+function createPayment(studentId: string, lessonCount: number): Payment {
+  const timestamp = now();
+  return {
+    id: nanoid(),
+    studentId,
+    amount: lessonCount * 1000,
+    paidAt: timestamp,
+    method: "cash",
+    lessonCount,
+    createdAt: timestamp
+  };
+}
+
+describe("getStudentBalance", () => {
+  test("adds new payment to remaining balance when previous lessons are not used up", () => {
+    const alice = createStudentRecord("Alice");
+    const firstPayment = createPayment(alice.id, 4);
+    const db = createEmptyDatabase({
+      students: [alice],
+      payments: [firstPayment]
+    });
+
+    const completedLesson = createLessonRecord({ db, studentIds: [alice.id] });
+    completedLesson.status = "completed";
+    completedLesson.participants[0].status = "attended";
+    completedLesson.participants[0].balanceCharged = true;
+    db.lessons.push(completedLesson);
+
+    expect(getStudentBalance(db, alice.id)).toEqual({
+      studentId: alice.id,
+      paidLessons: 4,
+      chargedLessons: 1,
+      remainingLessons: 3,
+      debtLessons: 0
+    });
+
+    db.payments.push(createPayment(alice.id, 5));
+
+    expect(getStudentBalance(db, alice.id)).toEqual({
+      studentId: alice.id,
+      paidLessons: 9,
+      chargedLessons: 1,
+      remainingLessons: 8,
+      debtLessons: 0
+    });
+  });
+
+  test("covers debt from payment first and reduces debt by deducted lessons", () => {
+    const alice = createStudentRecord("Alice");
+    const db = createEmptyDatabase({ students: [alice] });
+
+    for (let index = 0; index < 3; index += 1) {
+      const lesson = createLessonRecord({ db, studentIds: [alice.id] });
+      lesson.status = "completed";
+      lesson.participants[0].status = "attended";
+      lesson.participants[0].balanceCharged = true;
+      db.lessons.push(lesson);
+    }
+
+    expect(getStudentBalance(db, alice.id)).toEqual({
+      studentId: alice.id,
+      paidLessons: 0,
+      chargedLessons: 3,
+      remainingLessons: 0,
+      debtLessons: 3
+    });
+
+    db.payments.push(createPayment(alice.id, 2));
+
+    expect(getStudentBalance(db, alice.id)).toEqual({
+      studentId: alice.id,
+      paidLessons: 2,
+      chargedLessons: 3,
+      remainingLessons: 0,
+      debtLessons: 1
+    });
+
+    db.payments.push(createPayment(alice.id, 4));
+
+    expect(getStudentBalance(db, alice.id)).toEqual({
+      studentId: alice.id,
+      paidLessons: 6,
+      chargedLessons: 3,
+      remainingLessons: 3,
+      debtLessons: 0
+    });
+  });
+});
 
 describe("recalculateLesson", () => {
   test("converts group lesson to individual when one active participant remains", () => {

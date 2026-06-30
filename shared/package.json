@@ -9,6 +9,7 @@
     "./currency": "./src/currency.ts",
     "./student-initials": "./src/student-initials.ts",
     "./lesson-callback": "./src/lesson-callback.ts",
+    "./lesson-attendance": "./src/lesson-attendance.ts",
     "./logger": "./src/logger.ts"
   },
   "types": "./src/types.ts",

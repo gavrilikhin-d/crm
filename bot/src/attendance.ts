@@ -1,3 +1,4 @@
+import { canStudentChangeParticipantStatus } from "@crm/shared/lesson-attendance";
 import type { Lesson, TelegramStudentProfile } from "@crm/shared";
 
 const ATTEND_COMMANDS = ["attend"] as const;
@@ -24,7 +25,7 @@ function actionableLessons(profile: TelegramStudentProfile): Lesson[] {
 }
 
 function isActionableLesson(lesson: Lesson, studentId: string): boolean {
-  if (lesson.status === "completed" || lesson.status === "cancelled_by_teacher") {
+  if (!canStudentChangeParticipantStatus(lesson)) {
     return false;
   }
 

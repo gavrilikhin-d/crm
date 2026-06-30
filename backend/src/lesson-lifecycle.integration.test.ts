@@ -212,4 +212,23 @@ describe.skipIf(!databaseAvailable)("lesson lifecycle integration", () => {
       await localCleanup();
     }
   });
+
+  test("student cannot change attendance on a past lesson", async () => {
+    const { ctx, cleanup: localCleanup } = await setupAccount();
+
+    try {
+      const alice = await store.createStudent(ctx, { fullName: "Alice Past Attendance" });
+      const lesson = await store.createLesson(ctx, {
+        startsAt: new Date(Date.now() - 60_000).toISOString(),
+        lessonType: "individual",
+        studentIds: [alice.id]
+      });
+
+      await expect(
+        store.setParticipantStatusForAccount(ctx.accountId, lesson.id, alice.id, "confirmed", "attend")
+      ).rejects.toThrow("Cannot change attendance for a past lesson");
+    } finally {
+      await localCleanup();
+    }
+  });
 });

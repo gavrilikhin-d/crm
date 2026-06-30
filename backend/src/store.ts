@@ -18,6 +18,7 @@ import type {
   TelegramInteraction,
   TelegramStudentProfile
 } from "@crm/shared";
+import { assertStudentCanChangeParticipantStatus } from "@crm/shared/lesson-attendance";
 import { getPlanLimits } from "@crm/shared/plans";
 import { isSupportedCurrency } from "@crm/shared/currency";
 import type { AuthContext } from "./auth";
@@ -448,6 +449,10 @@ export class Store {
     const participant = lesson.participants.find((item) => item.studentId === studentId);
     if (!participant) {
       throw new Error("Student is not a participant of this lesson");
+    }
+
+    if (action) {
+      assertStudentCanChangeParticipantStatus(lesson);
     }
 
     participant.status = status;

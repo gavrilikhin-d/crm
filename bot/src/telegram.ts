@@ -281,6 +281,13 @@ export function getTelegramBot(): Telegraf | null {
         return;
       }
 
+      const scheduledLesson = profile.upcomingLessons.find((item) => item.id === lessonId);
+      if (scheduledLesson && !isActionableLesson(scheduledLesson, studentId)) {
+        interaction.outcome = "validation_error";
+        await answerCallback(ctx, interaction, "Это занятие уже прошло, изменить ответ нельзя.", { show_alert: true });
+        return;
+      }
+
       const status = action === "attend" ? "confirmed" : "declined";
       interaction.meta.status = status;
       const lesson = await setParticipantStatus({ lessonId, studentId, status, action });
@@ -289,6 +296,12 @@ export function getTelegramBot(): Telegraf | null {
       interaction.noteMessageKind("markup_cleared");
       await replyToUser(ctx, interaction, formatParticipantResult(lesson, studentId, action));
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown attendance error";
+      if (message.includes("past lesson")) {
+        interaction.outcome = "validation_error";
+        await answerCallback(ctx, interaction, "Это занятие уже прошло, изменить ответ нельзя.", { show_alert: true });
+        return;
+      }
       interaction.outcome = "error";
       log.error("Telegram callback failed", {
         err: error,
@@ -495,6 +508,11 @@ async function replyWithAttendance(
     if (message.includes("not found")) {
       interaction.outcome = "not_linked";
       await replyToUser(ctx, interaction, formatNotLinkedMessage());
+      return;
+    }
+    if (message.includes("past lesson")) {
+      interaction.outcome = "validation_error";
+      await replyToUser(ctx, interaction, "Это занятие уже прошло, изменить ответ нельзя.");
       return;
     }
     interaction.outcome = "error";
