@@ -1,20 +1,26 @@
 import { sendLessonReminder, sendPaymentReminder } from "./telegram";
 import { getWorkerSnapshots, updateReminder, upsertReminder } from "./backend-client";
+import { isBackendUnreachableError } from "./fetch-retry";
 import { collectPendingLessonReminders, shouldSendManualPaymentReminder } from "./reminder-logic";
 import { log } from "./logger";
 import type { Lesson, Student } from "@crm/shared";
 
 const minuteMs = 60_000;
 
+function logTickFailure(error: unknown): void {
+  if (isBackendUnreachableError(error)) {
+    log.warn("Reminder scheduler tick skipped: backend unreachable", { err: error });
+    return;
+  }
+
+  log.error("Reminder scheduler tick failed", { err: error });
+}
+
 export function startReminderScheduler(): void {
   log.info("Reminder scheduler started");
-  void runReminderTick().catch((error) => {
-    log.error("Reminder scheduler tick failed", { err: error });
-  });
+  void runReminderTick().catch(logTickFailure);
   setInterval(() => {
-    void runReminderTick().catch((error) => {
-      log.error("Reminder scheduler tick failed", { err: error });
-    });
+    void runReminderTick().catch(logTickFailure);
   }, minuteMs);
 }
 
