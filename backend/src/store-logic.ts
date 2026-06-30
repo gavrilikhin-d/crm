@@ -95,14 +95,12 @@ export function recalculateLesson(
     lesson.originalType = "group";
   }
 
-  const shouldBeIndividual =
-    lesson.originalType === "group" &&
-    activeParticipants.length === 1 &&
-    confirmedParticipants.length === 1;
-
-  if (shouldBeIndividual) {
+  if (activeParticipants.length === 1) {
     lesson.effectiveType = "individual";
     lesson.durationMinutes = individualDurationMinutes;
+  } else if (activeParticipants.length >= 2) {
+    lesson.effectiveType = "group";
+    lesson.durationMinutes = groupDurationMinutes;
   } else {
     lesson.effectiveType = lesson.originalType;
     lesson.durationMinutes =
