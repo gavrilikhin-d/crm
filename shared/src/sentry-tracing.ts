@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import * as Sentry from "@sentry/node";
-import { parameterizePath, tracesSampler } from "./sentry-sampling";
+import { parameterizePath } from "./sentry-sampling";
 
 export { parameterizePath, tracesSampler } from "./sentry-sampling";
 

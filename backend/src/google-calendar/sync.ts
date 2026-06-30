@@ -110,7 +110,6 @@ export async function syncLessonsToGoogleCalendar(accountId: string, lessons: Le
       }
 
       const db = await loadAccountDatabase(accountId);
-      const studentMap = studentsById(db.students);
 
       for (const lesson of lessons) {
         try {
