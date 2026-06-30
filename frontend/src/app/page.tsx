@@ -22,6 +22,7 @@ import { LessonOverviewSheet } from "@/components/lesson-overview-sheet";
 import { LessonParticipantSummary } from "@/components/lesson-participant-summary";
 import { ParticipantCardAvatar, ParticipantCardLabel } from "@/components/participant-card-label";
 import { SnapshotRefreshControl } from "@/components/snapshot-refresh-control";
+import { GoogleCalendarSettings } from "@/components/google-calendar-settings";
 import { StudentCombobox } from "@/components/student-combobox";
 import { StudentMultiCombobox } from "@/components/student-multi-combobox";
 import { StudentForm } from "@/components/student-form";
@@ -265,6 +266,13 @@ export default function Home() {
     setCurrentTime(new Date());
     const interval = window.setInterval(() => setCurrentTime(new Date()), 60_000);
     return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("section") === "settings") {
+      setActiveSection("settings");
+    }
   }, []);
 
   async function withRefresh(action: () => Promise<string | void>) {
@@ -772,6 +780,7 @@ export default function Home() {
             accountInfo={snapshot?.account ?? null}
             currency={currency}
             onCurrencyChange={handleCurrencyChange}
+            onRefresh={() => refreshNow()}
           />
         ) : null}
 
@@ -1258,11 +1267,13 @@ function SidebarAccount() {
 function SettingsView({
   accountInfo,
   currency,
-  onCurrencyChange
+  onCurrencyChange,
+  onRefresh
 }: {
   accountInfo: AccountInfo | null;
   currency: CurrencyCode;
   onCurrencyChange: (currency: CurrencyCode) => void;
+  onRefresh: () => Promise<void>;
 }) {
   const { t } = useI18n();
   const plan = accountInfo?.account.plan ?? "free";
@@ -1336,6 +1347,8 @@ function SettingsView({
             </FieldGroup>
           </CardContent>
         </Card>
+
+        <GoogleCalendarSettings onChanged={onRefresh} />
       </div>
     </section>
   );

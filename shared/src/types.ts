@@ -91,9 +91,16 @@ export interface Lesson {
   status: LessonStatus;
   participants: LessonParticipant[];
   recurringScheduleId?: string;
+  googleCalendarEventId?: string;
   createdAt: string;
   updatedAt: string;
 }
+
+export type GoogleCalendarStatus = {
+  connected: boolean;
+  syncEnabled: boolean;
+  calendarId: string;
+};
 
 export interface RecurringSchedule {
   id: string;

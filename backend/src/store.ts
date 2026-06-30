@@ -5,6 +5,7 @@ import type {
   AppSettings,
   BalanceAdjustment,
   Database,
+  GoogleCalendarStatus,
   Lesson,
   LessonPackage,
   ParticipantStatus,
@@ -60,6 +61,19 @@ import {
   PlanLimitError
 } from "./plan-limits";
 import {
+  createGoogleCalendarConnectUrl,
+  disconnectGoogleCalendar,
+  exchangeGoogleCalendarCode,
+  getGoogleCalendarStatus as readGoogleCalendarStatus,
+  saveGoogleCalendarTokens
+} from "./google-calendar/client";
+import {
+  removeLessonFromGoogleCalendar,
+  scheduleGoogleCalendarSync,
+  setGoogleCalendarSyncEnabled,
+  syncAllLessonsToGoogleCalendar
+} from "./google-calendar/sync";
+import {
   buildLesson,
   buildRecurringSchedule,
   createTelegramBindToken,
@@ -109,6 +123,7 @@ export class Store {
     const created = materializeRecurringLessons(db);
     if (created.length) {
       await insertLessons(ctx.accountId, created);
+      scheduleGoogleCalendarSync(ctx.accountId, created);
     }
 
     const seenLessonIds = new Set<string>();
@@ -281,14 +296,15 @@ export class Store {
     await Promise.all([
       deleteStudentAvatar(id),
       deleteStudentRecords(id),
-      ...emptyLessons.map((lesson) => this.purgeLesson(db, lesson)),
+      ...emptyLessons.map((lesson) => this.purgeLesson(ctx.accountId, db, lesson)),
       ...db.lessons
         .filter((lesson) => lesson.participants.length > 0)
         .map((lesson) => replaceLesson(lesson))
     ]);
   }
 
-  private async purgeLesson(db: Database, lesson: Lesson): Promise<void> {
+  private async purgeLesson(accountId: string, db: Database, lesson: Lesson): Promise<void> {
+    await removeLessonFromGoogleCalendar(accountId, lesson);
     const schedule = skipRecurringOccurrence(db, lesson);
     if (schedule) {
       await updateRecurringScheduleRecord(schedule);
@@ -321,18 +337,46 @@ export class Store {
     await deleteLessonPackageRecord(id);
   }
 
-  async updateSettings(ctx: AuthContext, input: Partial<Pick<AppSettings, "currency">>): Promise<AppSettings> {
+  async updateSettings(
+    ctx: AuthContext,
+    input: Partial<Pick<AppSettings, "currency">> & { googleCalendarSyncEnabled?: boolean }
+  ): Promise<AppSettings> {
     const db = await loadAccountDatabase(ctx.accountId);
     if (input.currency !== undefined && !isSupportedCurrency(input.currency)) {
       throw new Error("Unsupported currency");
     }
 
+    if (input.googleCalendarSyncEnabled !== undefined) {
+      await setGoogleCalendarSyncEnabled(ctx.accountId, input.googleCalendarSyncEnabled);
+    }
+
     const settings: AppSettings = {
       ...db.settings,
-      ...input
+      ...(input.currency !== undefined ? { currency: input.currency } : {})
     };
     await updateAppSettings(ctx.accountId, settings);
     return settings;
+  }
+
+  async getGoogleCalendarStatus(ctx: AuthContext): Promise<GoogleCalendarStatus> {
+    return readGoogleCalendarStatus(ctx.accountId);
+  }
+
+  async getGoogleCalendarConnectUrl(ctx: AuthContext): Promise<string> {
+    return createGoogleCalendarConnectUrl(ctx.accountId);
+  }
+
+  async completeGoogleCalendarConnect(accountId: string, code: string): Promise<void> {
+    const tokens = await exchangeGoogleCalendarCode(code);
+    await saveGoogleCalendarTokens(accountId, tokens);
+  }
+
+  async disconnectGoogleCalendar(ctx: AuthContext): Promise<void> {
+    await disconnectGoogleCalendar(ctx.accountId);
+  }
+
+  async syncGoogleCalendar(ctx: AuthContext): Promise<{ synced: number; failed: number }> {
+    return syncAllLessonsToGoogleCalendar(ctx);
   }
 
   async createLesson(
@@ -388,6 +432,7 @@ export class Store {
 
     await assertCanCreateLesson(ctx.accountId, ctx.plan, { additionalLessons: toInsert.length });
     await insertLessons(ctx.accountId, toInsert);
+    scheduleGoogleCalendarSync(ctx.accountId, toInsert);
     return lesson;
   }
 
@@ -421,6 +466,7 @@ export class Store {
 
     recalculateLesson(lesson, db.settings.individualDurationMinutes, db.settings.groupDurationMinutes);
     await replaceLesson(lesson);
+    scheduleGoogleCalendarSync(ctx.accountId, [lesson]);
     return lesson;
   }
 
@@ -485,6 +531,7 @@ export class Store {
 
     recalculateLesson(lesson, db.settings.individualDurationMinutes, db.settings.groupDurationMinutes);
     await replaceLesson(lesson);
+    scheduleGoogleCalendarSync(ctx.accountId, [lesson]);
     return lesson;
   }
 
@@ -507,13 +554,14 @@ export class Store {
     lesson.participants = lesson.participants.filter((participant) => participant.studentId !== studentId);
 
     if (!lesson.participants.length) {
-      await this.purgeLesson(db, lesson);
+      await this.purgeLesson(ctx.accountId, db, lesson);
       return null;
     }
 
     lesson.updatedAt = now();
     recalculateLesson(lesson, db.settings.individualDurationMinutes, db.settings.groupDurationMinutes);
     await replaceLesson(lesson);
+    scheduleGoogleCalendarSync(ctx.accountId, [lesson]);
     return lesson;
   }
 
@@ -542,6 +590,7 @@ export class Store {
     lesson.updatedAt = now();
     recalculateLesson(lesson, db.settings.individualDurationMinutes, db.settings.groupDurationMinutes);
     await replaceLesson(lesson);
+    scheduleGoogleCalendarSync(ctx.accountId, [lesson]);
     return lesson;
   }
 
@@ -556,6 +605,7 @@ export class Store {
     });
     lesson.updatedAt = now();
     await replaceLesson(lesson);
+    scheduleGoogleCalendarSync(ctx.accountId, [lesson]);
     return lesson;
   }
 
@@ -564,6 +614,7 @@ export class Store {
     const lesson = mustFind(db.lessons, lessonId, "Lesson");
 
     if (!lesson.recurringScheduleId) {
+      await removeLessonFromGoogleCalendar(ctx.accountId, lesson);
       await deleteLessonsByIds([lessonId]);
       return;
     }
@@ -572,7 +623,7 @@ export class Store {
     const lessonTime = new Date(lesson.startsAt).getTime();
 
     if (scope === "single") {
-      await this.purgeLesson(db, lesson);
+      await this.purgeLesson(ctx.accountId, db, lesson);
       return;
     }
 
@@ -583,20 +634,21 @@ export class Store {
       schedule.updatedAt = now();
       await updateRecurringScheduleRecord(schedule);
 
-      const lessonIds = db.lessons
-        .filter(
-          (item) =>
-            item.recurringScheduleId === schedule.id && new Date(item.startsAt).getTime() >= lessonTime
-        )
-        .map((item) => item.id);
-      await deleteLessonsByIds(lessonIds);
+      const lessonsToRemove = db.lessons.filter(
+        (item) => item.recurringScheduleId === schedule.id && new Date(item.startsAt).getTime() >= lessonTime
+      );
+      for (const item of lessonsToRemove) {
+        await removeLessonFromGoogleCalendar(ctx.accountId, item);
+      }
+      await deleteLessonsByIds(lessonsToRemove.map((item) => item.id));
       return;
     }
 
-    const lessonIds = db.lessons
-      .filter((item) => item.recurringScheduleId === schedule.id)
-      .map((item) => item.id);
-    await deleteLessonsByIds(lessonIds);
+    const lessonsToRemove = db.lessons.filter((item) => item.recurringScheduleId === schedule.id);
+    for (const item of lessonsToRemove) {
+      await removeLessonFromGoogleCalendar(ctx.accountId, item);
+    }
+    await deleteLessonsByIds(lessonsToRemove.map((item) => item.id));
     await deleteRecurringScheduleRecord(schedule.id);
   }
 

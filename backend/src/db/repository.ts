@@ -115,6 +115,101 @@ export async function getAccountByGoogleSub(googleSub: string): Promise<Account 
   return rows[0] ? mapAccount(rows[0]) : null;
 }
 
+export type GoogleCalendarCredentials = {
+  refreshToken: string | null;
+  accessToken: string | null;
+  tokenExpiresAt: string | null;
+  calendarId: string;
+  syncEnabled: boolean;
+};
+
+export async function getAccountGoogleCalendar(accountId: string): Promise<GoogleCalendarCredentials | null> {
+  const rows = await db
+    .select({
+      refreshToken: accounts.googleCalendarRefreshToken,
+      accessToken: accounts.googleCalendarAccessToken,
+      tokenExpiresAt: accounts.googleCalendarTokenExpiresAt,
+      calendarId: accounts.googleCalendarId,
+      syncEnabled: accounts.googleCalendarSyncEnabled
+    })
+    .from(accounts)
+    .where(eq(accounts.id, accountId))
+    .limit(1);
+
+  const row = rows[0];
+  if (!row) {
+    return null;
+  }
+
+  return {
+    refreshToken: row.refreshToken,
+    accessToken: row.accessToken,
+    tokenExpiresAt: row.tokenExpiresAt,
+    calendarId: row.calendarId,
+    syncEnabled: row.syncEnabled
+  };
+}
+
+export async function updateAccountGoogleCalendarTokens(
+  accountId: string,
+  input: {
+    accessToken?: string | null;
+    refreshToken?: string | null;
+    tokenExpiresAt?: string | null;
+    calendarId?: string;
+    syncEnabled?: boolean;
+  }
+): Promise<void> {
+  const patch: Record<string, unknown> = {
+    updatedAt: new Date().toISOString()
+  };
+
+  if ("accessToken" in input) {
+    patch.googleCalendarAccessToken = input.accessToken ?? null;
+  }
+  if ("refreshToken" in input) {
+    patch.googleCalendarRefreshToken = input.refreshToken ?? null;
+  }
+  if ("tokenExpiresAt" in input) {
+    patch.googleCalendarTokenExpiresAt = input.tokenExpiresAt ?? null;
+  }
+  if (input.calendarId !== undefined) {
+    patch.googleCalendarId = input.calendarId;
+  }
+  if (input.syncEnabled !== undefined) {
+    patch.googleCalendarSyncEnabled = input.syncEnabled;
+  }
+
+  await db.update(accounts).set(patch).where(eq(accounts.id, accountId));
+}
+
+export async function setAccountGoogleCalendarSyncEnabled(accountId: string, enabled: boolean): Promise<void> {
+  await db
+    .update(accounts)
+    .set({
+      googleCalendarSyncEnabled: enabled,
+      updatedAt: new Date().toISOString()
+    })
+    .where(eq(accounts.id, accountId));
+}
+
+export async function clearAccountGoogleCalendar(accountId: string): Promise<void> {
+  await db
+    .update(accounts)
+    .set({
+      googleCalendarRefreshToken: null,
+      googleCalendarAccessToken: null,
+      googleCalendarTokenExpiresAt: null,
+      googleCalendarSyncEnabled: false,
+      updatedAt: new Date().toISOString()
+    })
+    .where(eq(accounts.id, accountId));
+}
+
+export async function updateLessonGoogleEventId(lessonId: string, eventId: string | null): Promise<void> {
+  await db.update(lessons).set({ googleCalendarEventId: eventId }).where(eq(lessons.id, lessonId));
+}
+
 export async function loadAccountDatabase(accountId: string): Promise<Database> {
   const [
     studentRows,
@@ -434,6 +529,7 @@ export async function replaceLesson(lesson: Lesson): Promise<void> {
       effectiveType: lesson.effectiveType,
       status: lesson.status,
       recurringScheduleId: lesson.recurringScheduleId ?? null,
+      googleCalendarEventId: lesson.googleCalendarEventId ?? null,
       updatedAt: lesson.updatedAt
     })
     .where(eq(lessons.id, lesson.id));
@@ -620,6 +716,7 @@ function mapLesson(row: typeof lessons.$inferSelect, participants: LessonPartici
     status: row.status as Lesson["status"],
     participants,
     recurringScheduleId: row.recurringScheduleId ?? undefined,
+    googleCalendarEventId: row.googleCalendarEventId ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt
   };
@@ -714,6 +811,7 @@ function mapLessonInsert(accountId: string, lesson: Lesson) {
     effectiveType: lesson.effectiveType,
     status: lesson.status,
     recurringScheduleId: lesson.recurringScheduleId ?? null,
+    googleCalendarEventId: lesson.googleCalendarEventId ?? null,
     createdAt: lesson.createdAt,
     updatedAt: lesson.updatedAt
   };

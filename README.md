@@ -101,6 +101,16 @@ docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
 
 Telegram-бот опционален. Если `TELEGRAM_BOT_TOKEN` не задан, web app работает, а Telegram service не запускает polling.
 
+## Google Calendar
+
+Односторонняя синхронизация CRM → Google Calendar: запланированные занятия создаются и обновляются в календаре, отменённые и завершённые — удаляются.
+
+1. В [Google Cloud Console](https://console.cloud.google.com/) включите **Google Calendar API** для того же OAuth-клиента, что используется для входа (`AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`).
+2. Добавьте redirect URI: `{APP_BASE_URL}/api/google-calendar/callback` (для локальной разработки: `http://localhost:3000/api/google-calendar/callback`).
+3. В настройках CRM нажмите **Подключить Google Calendar**, затем включите синхронизацию.
+
+Опционально задайте часовой пояс событий: `APP_TIMEZONE=Europe/Minsk`.
+
 ## Telegram
 
 1. Создайте бота через BotFather.

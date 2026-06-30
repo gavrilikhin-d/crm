@@ -7,6 +7,14 @@ export const accounts = pgTable("accounts", {
   image: text("image"),
   googleSub: text("google_sub").notNull().unique(),
   plan: text("plan").notNull().default("free"),
+  googleCalendarRefreshToken: text("google_calendar_refresh_token"),
+  googleCalendarAccessToken: text("google_calendar_access_token"),
+  googleCalendarTokenExpiresAt: timestamp("google_calendar_token_expires_at", {
+    withTimezone: true,
+    mode: "string"
+  }),
+  googleCalendarId: text("google_calendar_id").notNull().default("primary"),
+  googleCalendarSyncEnabled: boolean("google_calendar_sync_enabled").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" }).notNull()
 });
@@ -112,6 +120,7 @@ export const lessons = pgTable("lessons", {
   recurringScheduleId: text("recurring_schedule_id").references(() => recurringSchedules.id, {
     onDelete: "set null"
   }),
+  googleCalendarEventId: text("google_calendar_event_id"),
   createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" }).notNull()
 });

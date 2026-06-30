@@ -9,6 +9,7 @@ import {
 } from "./auth";
 import { getAccountById, getLessonAccountId, getReminderAccountId, listAccountIds } from "./db/repository";
 import { PlanLimitError, store } from "./store";
+import { verifyGoogleCalendarOAuthState } from "./google-calendar/oauth-state";
 
 type Handler = (
   request: IncomingMessage,
@@ -21,7 +22,8 @@ const port = Number(process.env.PORT ?? 4000);
 
 const publicRoutes: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
   route("GET", /^\/api\/health$/, async (_request, response) => jsonOk(response, { ok: true })),
-  route("POST", /^\/api\/auth\/sync$/, syncAccount)
+  route("POST", /^\/api\/auth\/sync$/, syncAccount),
+  route("GET", /^\/api\/google-calendar\/callback$/, googleCalendarCallback)
 ];
 
 const protectedRoutes: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
@@ -35,6 +37,11 @@ const protectedRoutes: Array<{ method: string; pattern: RegExp; handler: Handler
   ),
 
   route("PATCH", /^\/api\/settings$/, updateSettings),
+
+  route("GET", /^\/api\/google-calendar\/status$/, getGoogleCalendarStatus),
+  route("GET", /^\/api\/google-calendar\/connect$/, getGoogleCalendarConnect),
+  route("POST", /^\/api\/google-calendar\/sync$/, syncGoogleCalendar),
+  route("DELETE", /^\/api\/google-calendar\/disconnect$/, disconnectGoogleCalendar),
 
   route("GET", /^\/api\/students\/([^/]+)\/avatar$/, getStudentAvatar),
   route("POST", /^\/api\/students$/, createStudent),
@@ -178,6 +185,46 @@ async function getStudentAvatar(_request: IncomingMessage, response: ServerRespo
 
 async function updateSettings(request: IncomingMessage, response: ServerResponse, _match: RegExpMatchArray, ctx?: AuthContext) {
   jsonOk(response, await store.updateSettings(ctx!, await readJson(request)));
+}
+
+async function getGoogleCalendarStatus(_request: IncomingMessage, response: ServerResponse, _match: RegExpMatchArray, ctx?: AuthContext) {
+  jsonOk(response, await store.getGoogleCalendarStatus(ctx!));
+}
+
+async function getGoogleCalendarConnect(_request: IncomingMessage, response: ServerResponse, _match: RegExpMatchArray, ctx?: AuthContext) {
+  jsonOk(response, { url: await store.getGoogleCalendarConnectUrl(ctx!) });
+}
+
+async function syncGoogleCalendar(_request: IncomingMessage, response: ServerResponse, _match: RegExpMatchArray, ctx?: AuthContext) {
+  jsonOk(response, await store.syncGoogleCalendar(ctx!));
+}
+
+async function disconnectGoogleCalendar(_request: IncomingMessage, response: ServerResponse, _match: RegExpMatchArray, ctx?: AuthContext) {
+  await store.disconnectGoogleCalendar(ctx!);
+  jsonOk(response, { ok: true });
+}
+
+async function googleCalendarCallback(request: IncomingMessage, response: ServerResponse) {
+  const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+  const code = url.searchParams.get("code");
+  const state = url.searchParams.get("state");
+  const error = url.searchParams.get("error");
+  const appBaseUrl = process.env.APP_BASE_URL?.trim() || "http://localhost:3000";
+  const settingsUrl = `${appBaseUrl.replace(/\/$/, "")}/?section=settings`;
+
+  if (error || !code || !state) {
+    redirect(response, `${settingsUrl}&calendar=error`);
+    return;
+  }
+
+  try {
+    const accountId = await verifyGoogleCalendarOAuthState(state);
+    await store.completeGoogleCalendarConnect(accountId, code);
+    redirect(response, `${settingsUrl}&calendar=connected`);
+  } catch (callbackError) {
+    console.error("[google-calendar] OAuth callback failed", callbackError);
+    redirect(response, `${settingsUrl}&calendar=error`);
+  }
 }
 
 async function createStudent(request: IncomingMessage, response: ServerResponse, _match: RegExpMatchArray, ctx?: AuthContext) {
@@ -417,6 +464,11 @@ async function readJson(request: IncomingMessage): Promise<Record<string, any>> 
 function jsonOk(response: ServerResponse, payload: unknown, status = 200) {
   response.writeHead(status, { "content-type": "application/json" });
   response.end(JSON.stringify(payload));
+}
+
+function redirect(response: ServerResponse, location: string) {
+  response.writeHead(302, { location });
+  response.end();
 }
 
 function jsonError(response: ServerResponse, error: unknown, status?: number, extra?: Record<string, unknown>) {

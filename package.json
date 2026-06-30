@@ -40,5 +40,8 @@
     "observability:down": "docker compose -f docker-compose.observability.yml down",
     "migrate:multitenancy": "cd backend && bun run migrate:multitenancy",
     "migrate:json": "cd backend && bun run migrate:json"
+  },
+  "dependencies": {
+    "googleapis": "^173.0.0"
   }
 }

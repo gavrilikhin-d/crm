@@ -175,7 +175,19 @@ const ru = {
     currency: "Валюта",
     selectCurrency: "Выберите валюту",
     currencyHint:
-      "Суммы в оплатах и пакетах отображаются в выбранной валюте. По умолчанию — белорусский рубль."
+      "Суммы в оплатах и пакетах отображаются в выбранной валюте. По умолчанию — белорусский рубль.",
+    googleCalendar: {
+      title: "Google Calendar",
+      description: "Синхронизация занятий с вашим Google-календарём.",
+      connect: "Подключить Google Calendar",
+      connectHint:
+        "Разрешите доступ к календарю, чтобы новые занятия автоматически появлялись в Google Calendar.",
+      syncEnabled: "Синхронизировать занятия",
+      syncEnabledHint: "Запланированные занятия из CRM будут добавляться и обновляться в календаре.",
+      syncNow: "Синхронизировать сейчас",
+      disconnect: "Отключить",
+      disconnectConfirm: "Отключить Google Calendar? Существующие события в календаре не будут удалены."
+    }
   },
   toast: {
     loadFailed: "Не удалось загрузить данные.",
@@ -189,6 +201,12 @@ const ru = {
     paymentAdded: "Оплата добавлена.",
     packageAdded: "Пакет добавлен.",
     currencyUpdated: "Валюта обновлена.",
+    googleCalendarConnected: "Google Calendar подключён.",
+    googleCalendarConnectFailed: "Не удалось подключить Google Calendar.",
+    googleCalendarDisconnected: "Google Calendar отключён.",
+    googleCalendarSyncEnabled: "Синхронизация с Google Calendar включена.",
+    googleCalendarSyncDisabled: "Синхронизация с Google Calendar выключена.",
+    googleCalendarSynced: "Синхронизировано занятий: {synced}. Ошибок: {failed}.",
     studentDeleted: "Ученик удален.",
     participantRemoved: "{name} убран(а) с занятия.",
     participantAdded: "{name} добавлен(а) на занятие.",
