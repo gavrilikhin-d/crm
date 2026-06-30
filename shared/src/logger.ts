@@ -108,7 +108,10 @@ function createLogger(service: string, options: Partial<LoggerOptions> = {}): Lo
     }
 
     write(JSON.stringify(entry), level);
-    captureSentryLog(service, level, message, context);
+
+    if (level === "info" || level === "warn" || level === "error") {
+      captureSentryLog(service, level, message, context);
+    }
   }
 
   return {

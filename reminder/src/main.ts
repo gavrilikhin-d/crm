@@ -67,7 +67,7 @@ function logRequest(
   startedAt: number,
   context: Record<string, unknown> = {}
 ): void {
-  log.info("HTTP request handled", {
+  log.debug("HTTP request handled", {
     method,
     path,
     status,

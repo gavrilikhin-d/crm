@@ -48,8 +48,7 @@ export async function runReminderTick(): Promise<void> {
         });
       }
     },
-    undefined,
-    { forceTransaction: true }
+    undefined
   );
 }
 
