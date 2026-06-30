@@ -79,6 +79,7 @@ import {
   formatWeekday
 } from "@/i18n/format";
 import { getPaymentMethodLabel, getWeekdayShortLabels } from "@/i18n/labels";
+import { dedupeLessonsByOccurrence } from "@crm/shared/lesson-dedupe";
 import type {
   AccountInfo,
   AppSettings,
@@ -164,16 +165,9 @@ export default function Home() {
   const students = useMemo(() => snapshot?.students ?? [], [snapshot?.students]);
   const lessonPackages = snapshot?.lessonPackages ?? [];
   const lessons = useMemo(() => {
-    const seen = new Set<string>();
-    return [...(snapshot?.lessons ?? [])]
-      .filter((lesson) => {
-        if (seen.has(lesson.id)) {
-          return false;
-        }
-        seen.add(lesson.id);
-        return true;
-      })
-      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+    return dedupeLessonsByOccurrence([...(snapshot?.lessons ?? [])]).sort(
+      (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()
+    );
   }, [snapshot?.lessons]);
   const payments = useMemo(
     () =>

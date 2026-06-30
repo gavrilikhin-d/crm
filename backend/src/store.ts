@@ -19,6 +19,7 @@ import type {
   TelegramStudentProfile
 } from "@crm/shared";
 import { assertStudentCanChangeParticipantStatus } from "@crm/shared/lesson-attendance";
+import { dedupeLessonsByOccurrence } from "@crm/shared/lesson-dedupe";
 import { getPlanLimits } from "@crm/shared/plans";
 import { isSupportedCurrency } from "@crm/shared/currency";
 import type { AuthContext } from "./auth";
@@ -127,14 +128,7 @@ export class Store {
       scheduleGoogleCalendarSync(ctx.accountId, created);
     }
 
-    const seenLessonIds = new Set<string>();
-    db.lessons = db.lessons.filter((lesson) => {
-      if (seenLessonIds.has(lesson.id)) {
-        return false;
-      }
-      seenLessonIds.add(lesson.id);
-      return true;
-    });
+    db.lessons = dedupeLessonsByOccurrence(db.lessons);
 
     return structuredClone(db);
   }

@@ -10,6 +10,7 @@
     "./student-initials": "./src/student-initials.ts",
     "./lesson-callback": "./src/lesson-callback.ts",
     "./lesson-attendance": "./src/lesson-attendance.ts",
+    "./lesson-dedupe": "./src/lesson-dedupe.ts",
     "./logger": "./src/logger.ts",
     "./sentry-node": "./src/sentry-node.ts",
     "./sentry-sampling": "./src/sentry-sampling.ts",
