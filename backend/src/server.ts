@@ -49,6 +49,7 @@ const protectedRoutes: Array<{ method: string; pattern: RegExp; handler: Handler
   route("POST", /^\/api\/lessons\/([^/]+)\/cancel$/, cancelLesson),
   route("POST", /^\/api\/lessons\/([^/]+)\/complete$/, completeLesson),
   route("DELETE", /^\/api\/lessons\/([^/]+)\/participants\/([^/]+)$/, removeLessonParticipant),
+  route("POST", /^\/api\/lessons\/([^/]+)\/participants$/, addLessonParticipant),
   route("POST", /^\/api\/lessons\/([^/]+)\/participants\/([^/]+)\/status$/, setParticipantStatus),
 
   route("POST", /^\/api\/payments$/, createPayment),
@@ -260,6 +261,22 @@ async function completeLesson(_request: IncomingMessage, response: ServerRespons
 async function removeLessonParticipant(_request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray, ctx?: AuthContext) {
   const lesson = await store.removeLessonParticipant(ctx!, match[1], match[2]);
   jsonOk(response, lesson ?? { ok: true });
+}
+
+async function addLessonParticipant(request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray, ctx?: AuthContext) {
+  const body = await readJson(request) as { studentId?: string; studentIds?: string[] };
+  const studentIds = body.studentIds?.length
+    ? body.studentIds
+    : body.studentId
+      ? [body.studentId]
+      : [];
+
+  if (!studentIds.length) {
+    jsonError(response, new Error("studentId or studentIds is required"), 400);
+    return;
+  }
+
+  jsonOk(response, await store.addLessonParticipants(ctx!, match[1], studentIds), 201);
 }
 
 async function setParticipantStatus(request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray, ctx?: AuthContext) {

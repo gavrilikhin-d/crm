@@ -187,6 +187,10 @@ const ru = {
     currencyUpdated: "Валюта обновлена.",
     studentDeleted: "Ученик удален.",
     participantRemoved: "{name} убран(а) с занятия.",
+    participantAdded: "{name} добавлен(а) на занятие.",
+    participantAddedGroup: "{name} добавлен(а). Занятие стало групповым.",
+    participantsAdded: "Добавлено учеников: {count}.",
+    participantsAddedGroup: "Добавлено учеников: {count}. Занятие стало групповым.",
     lessonDeletedSingle: "Занятие удалено.",
     lessonDeletedFollowing: "Это и последующие занятия удалены.",
     lessonDeletedAll: "Вся серия занятий удалена.",
@@ -199,6 +203,7 @@ const ru = {
     deleteStudent:
       "Удалить ученика {name}? Его оплаты и участия в занятиях тоже будут удалены.",
     removeParticipant: "Убрать {name} с этого занятия?",
+    removeLastParticipant: "Убрать {name}? Занятие будет удалено.",
     deleteLesson: "Удалить занятие {date}?",
     deletePackage:
       'Удалить пакет "{name}"? Уже внесенные оплаты сохранят количество занятий.'
@@ -247,6 +252,13 @@ const ru = {
     wasGroup: "Было групповым",
     oneOff: "Разовое занятие",
     participants: "Участники",
+    deletedStudent: "Удалённый ученик",
+    addParticipant: "Добавить учеников",
+    selectStudent: "Выберите ученика",
+    selectStudents: "Выберите одного или нескольких учеников",
+    addParticipantsButton: "Добавить на занятие",
+    noStudentsToAdd: "Все активные ученики уже на этом занятии.",
+    addParticipantAria: "Добавить ученика на занятие",
     removeParticipantAria: "Убрать {name} с занятия",
     recurring: "Каждую неделю, {weekday} в {time}",
     delete: {

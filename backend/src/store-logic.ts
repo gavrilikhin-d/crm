@@ -91,6 +91,10 @@ export function recalculateLesson(
   );
   const confirmedParticipants = lesson.participants.filter((participant) => participant.status === "confirmed");
 
+  if (activeParticipants.length >= 2 && lesson.originalType === "individual") {
+    lesson.originalType = "group";
+  }
+
   const shouldBeIndividual =
     lesson.originalType === "group" &&
     activeParticipants.length === 1 &&
@@ -214,6 +218,38 @@ export function formatScheduleTime(value: Date): string {
   return `${pad(value.getHours())}:${pad(value.getMinutes())}`;
 }
 
+export function normalizeInstant(value: string): string {
+  return new Date(value).toISOString();
+}
+
+export function isSameInstant(a: string, b: string): boolean {
+  return new Date(a).getTime() === new Date(b).getTime();
+}
+
+export function isOccurrenceSkipped(schedule: RecurringSchedule, startsAt: string): boolean {
+  return (schedule.skippedOccurrences ?? []).some((item) => isSameInstant(item, startsAt));
+}
+
+export function skipRecurringOccurrence(db: Database, lesson: Lesson): RecurringSchedule | null {
+  if (!lesson.recurringScheduleId) {
+    return null;
+  }
+
+  const schedule = db.recurringSchedules.find((item) => item.id === lesson.recurringScheduleId);
+  if (!schedule) {
+    return null;
+  }
+
+  const normalizedStartsAt = normalizeInstant(lesson.startsAt);
+  if (isOccurrenceSkipped(schedule, normalizedStartsAt)) {
+    return schedule;
+  }
+
+  schedule.skippedOccurrences = [...(schedule.skippedOccurrences ?? []), normalizedStartsAt];
+  schedule.updatedAt = now();
+  return schedule;
+}
+
 export function materializeRecurringLessons(db: Database): Lesson[] {
   const created: Lesson[] = [];
   const horizonEnd = new Date();
@@ -221,7 +257,7 @@ export function materializeRecurringLessons(db: Database): Lesson[] {
 
   for (const schedule of db.recurringSchedules) {
     const activeToTime = schedule.activeTo ? new Date(schedule.activeTo).getTime() : undefined;
-    const skipped = new Set(schedule.skippedOccurrences ?? []);
+    const skipped = new Set((schedule.skippedOccurrences ?? []).map((item) => new Date(item).getTime()));
     let occurrence = new Date(schedule.activeFrom);
 
     while (occurrence.getTime() <= horizonEnd.getTime()) {
@@ -229,9 +265,9 @@ export function materializeRecurringLessons(db: Database): Lesson[] {
         break;
       }
 
-      const startsAt = occurrence.toISOString();
+      const startsAt = normalizeInstant(occurrence.toISOString());
 
-      if (!skipped.has(startsAt) && !hasRecurringLesson(db, schedule.id, startsAt)) {
+      if (!skipped.has(new Date(startsAt).getTime()) && !hasRecurringLesson(db, schedule.id, startsAt)) {
         const lesson = buildLesson(db, {
           startsAt,
           durationMinutes: schedule.durationMinutes,

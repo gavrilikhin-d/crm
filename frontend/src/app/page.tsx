@@ -156,13 +156,18 @@ export default function Home() {
 
   const students = snapshot?.students ?? [];
   const lessonPackages = snapshot?.lessonPackages ?? [];
-  const lessons = useMemo(
-    () =>
-      [...(snapshot?.lessons ?? [])].sort(
-        (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()
-      ),
-    [snapshot?.lessons]
-  );
+  const lessons = useMemo(() => {
+    const seen = new Set<string>();
+    return [...(snapshot?.lessons ?? [])]
+      .filter((lesson) => {
+        if (seen.has(lesson.id)) {
+          return false;
+        }
+        seen.add(lesson.id);
+        return true;
+      })
+      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+  }, [snapshot?.lessons]);
   const payments = useMemo(
     () =>
       [...(snapshot?.payments ?? [])].sort(
@@ -183,6 +188,14 @@ export default function Home() {
         : undefined,
     [recurringSchedules, selectedLesson]
   );
+  const availableStudentsForSelectedLesson = useMemo(() => {
+    if (!selectedLesson) {
+      return [];
+    }
+
+    const participantIds = new Set(selectedLesson.participants.map((participant) => participant.studentId));
+    return students.filter((student) => student.status === "active" && !participantIds.has(student.id));
+  }, [selectedLesson, students]);
   const weekDays = useMemo(() => getWeekDays(selectedDate), [selectedDate]);
   const monthDays = useMemo(() => getMonthGridDays(selectedDate), [selectedDate]);
   const weekLessons = useMemo(
@@ -422,13 +435,50 @@ export default function Home() {
   }
 
   async function handleRemoveParticipant(lessonId: string, studentId: string, studentName: string) {
-    if (!window.confirm(t("confirm.removeParticipant", { name: studentName }))) {
+    const isLastParticipant = selectedLesson?.participants.length === 1;
+    const confirmKey = isLastParticipant ? "confirm.removeLastParticipant" : "confirm.removeParticipant";
+
+    if (!window.confirm(t(confirmKey, { name: studentName }))) {
       return;
     }
 
     await withRefresh(async () => {
-      await api(`/api/lessons/${lessonId}/participants/${studentId}`, { method: "DELETE" });
+      const result = await api<Lesson | { ok: true }>(`/api/lessons/${lessonId}/participants/${studentId}`, {
+        method: "DELETE"
+      });
+
+      if (!("participants" in result)) {
+        setSelectedLessonId(null);
+        return t("toast.lessonDeletedSingle");
+      }
+
       return t("toast.participantRemoved", { name: studentName });
+    });
+  }
+
+  async function handleAddParticipant(lessonId: string, studentIds: string[]) {
+    const wasIndividual = selectedLesson?.originalType === "individual";
+
+    await withRefresh(async () => {
+      const lesson = await api<Lesson>(`/api/lessons/${lessonId}/participants`, {
+        method: "POST",
+        body: { studentIds }
+      });
+
+      if (studentIds.length > 1) {
+        if (wasIndividual || lesson.effectiveType === "group") {
+          return t("toast.participantsAddedGroup", { count: studentIds.length });
+        }
+        return t("toast.participantsAdded", { count: studentIds.length });
+      }
+
+      const student = students.find((item) => item.id === studentIds[0]);
+      const name = student?.fullName ?? "Ученик";
+
+      if (wasIndividual) {
+        return t("toast.participantAddedGroup", { name });
+      }
+      return t("toast.participantAdded", { name });
     });
   }
 
@@ -752,7 +802,9 @@ export default function Home() {
         open={!!selectedLesson}
         recurringSchedule={selectedRecurringSchedule}
         getStudent={getStudent}
+        availableStudents={availableStudentsForSelectedLesson}
         onOpenChange={(open) => !open && setSelectedLessonId(null)}
+        onAddParticipant={handleAddParticipant}
         onRemoveParticipant={handleRemoveParticipant}
         onDeleteLesson={handleDeleteLessonFromSheet}
       />

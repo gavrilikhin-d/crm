@@ -70,7 +70,8 @@ import {
   optional,
   parseReminderMinutes,
   recalculateLesson,
-  refreshParticipantDebtFlags
+  refreshParticipantDebtFlags,
+  skipRecurringOccurrence
 } from "./store-logic";
 
 export { parseReminderMinutes, PlanLimitError };
@@ -108,8 +109,17 @@ export class Store {
     const created = materializeRecurringLessons(db);
     if (created.length) {
       await insertLessons(ctx.accountId, created);
-      db.lessons.push(...created);
     }
+
+    const seenLessonIds = new Set<string>();
+    db.lessons = db.lessons.filter((lesson) => {
+      if (seenLessonIds.has(lesson.id)) {
+        return false;
+      }
+      seenLessonIds.add(lesson.id);
+      return true;
+    });
+
     return structuredClone(db);
   }
 
@@ -266,15 +276,24 @@ export class Store {
       recalculateLesson(lesson, db.settings.individualDurationMinutes, db.settings.groupDurationMinutes);
     }
 
-    const emptyLessons = db.lessons.filter((lesson) => lesson.participants.length === 0).map((lesson) => lesson.id);
-    const updatedLessons = db.lessons.filter((lesson) => lesson.participants.length > 0);
+    const emptyLessons = db.lessons.filter((lesson) => lesson.participants.length === 0);
 
     await Promise.all([
       deleteStudentAvatar(id),
       deleteStudentRecords(id),
-      deleteLessonsByIds(emptyLessons),
-      ...updatedLessons.map((lesson) => replaceLesson(lesson))
+      ...emptyLessons.map((lesson) => this.purgeLesson(db, lesson)),
+      ...db.lessons
+        .filter((lesson) => lesson.participants.length > 0)
+        .map((lesson) => replaceLesson(lesson))
     ]);
+  }
+
+  private async purgeLesson(db: Database, lesson: Lesson): Promise<void> {
+    const schedule = skipRecurringOccurrence(db, lesson);
+    if (schedule) {
+      await updateRecurringScheduleRecord(schedule);
+    }
+    await deleteLessonsByIds([lesson.id]);
   }
 
   async createLessonPackage(
@@ -425,6 +444,54 @@ export class Store {
     );
   }
 
+  async addLessonParticipants(ctx: AuthContext, lessonId: string, studentIds: string[]): Promise<Lesson> {
+    const db = await loadAccountDatabase(ctx.accountId);
+    const lesson = mustFind(db.lessons, lessonId, "Lesson");
+
+    if (lesson.status === "completed") {
+      throw new Error("Cannot add participant to completed lesson");
+    }
+
+    if (lesson.status === "cancelled_by_teacher") {
+      throw new Error("Cannot add participant to cancelled lesson");
+    }
+
+    const uniqueStudentIds = [...new Set(studentIds.map((id) => id.trim()).filter(Boolean))];
+    if (!uniqueStudentIds.length) {
+      throw new Error("At least one student is required");
+    }
+
+    for (const studentId of uniqueStudentIds) {
+      mustFind(db.students, studentId, "Student");
+
+      if (lesson.participants.some((participant) => participant.studentId === studentId)) {
+        throw new Error("Student is already a participant of this lesson");
+      }
+
+      lesson.participants.push({
+        id: nanoid(),
+        studentId,
+        status: "awaiting",
+        balanceCharged: false,
+        hasDebt: getStudentBalance(db, studentId).remainingLessons < 1
+      });
+    }
+
+    lesson.updatedAt = now();
+
+    if (lesson.originalType === "individual" && lesson.participants.length >= 2) {
+      lesson.originalType = "group";
+    }
+
+    recalculateLesson(lesson, db.settings.individualDurationMinutes, db.settings.groupDurationMinutes);
+    await replaceLesson(lesson);
+    return lesson;
+  }
+
+  async addLessonParticipant(ctx: AuthContext, lessonId: string, studentId: string): Promise<Lesson> {
+    return this.addLessonParticipants(ctx, lessonId, [studentId]);
+  }
+
   async removeLessonParticipant(ctx: AuthContext, lessonId: string, studentId: string): Promise<Lesson | null> {
     const db = await loadAccountDatabase(ctx.accountId);
     const lesson = mustFind(db.lessons, lessonId, "Lesson");
@@ -437,12 +504,13 @@ export class Store {
       throw new Error("Student is not a participant of this lesson");
     }
 
-    if (lesson.participants.length <= 1) {
-      await deleteLessonsByIds([lessonId]);
+    lesson.participants = lesson.participants.filter((participant) => participant.studentId !== studentId);
+
+    if (!lesson.participants.length) {
+      await this.purgeLesson(db, lesson);
       return null;
     }
 
-    lesson.participants = lesson.participants.filter((participant) => participant.studentId !== studentId);
     lesson.updatedAt = now();
     recalculateLesson(lesson, db.settings.individualDurationMinutes, db.settings.groupDurationMinutes);
     await replaceLesson(lesson);
@@ -504,10 +572,7 @@ export class Store {
     const lessonTime = new Date(lesson.startsAt).getTime();
 
     if (scope === "single") {
-      schedule.skippedOccurrences = [...(schedule.skippedOccurrences ?? []), lesson.startsAt];
-      schedule.updatedAt = now();
-      await updateRecurringScheduleRecord(schedule);
-      await deleteLessonsByIds([lessonId]);
+      await this.purgeLesson(db, lesson);
       return;
     }
 

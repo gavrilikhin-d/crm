@@ -1,7 +1,9 @@
 "use client";
 
-import type { Lesson, LessonType, RecurringDeleteScope, RecurringSchedule, Student } from "@crm/shared";
+import { useState } from "react";
+import type { Lesson, RecurringDeleteScope, RecurringSchedule, Student } from "@crm/shared";
 import { RefreshCw, Trash2 } from "lucide-react";
+import { StudentMultiCombobox } from "@/components/student-multi-combobox";
 import { StudentLink } from "@/components/student-link";
 import { StudentAvatar } from "@/components/student-avatar";
 import { ParticipantStatusBadge } from "@/components/participant-status-badge";
@@ -30,7 +32,9 @@ function LessonOverviewSheet({
   open,
   recurringSchedule,
   getStudent,
+  availableStudents,
   onOpenChange,
+  onAddParticipant,
   onRemoveParticipant,
   onDeleteLesson
 }: {
@@ -38,11 +42,15 @@ function LessonOverviewSheet({
   open: boolean;
   recurringSchedule?: RecurringSchedule;
   getStudent: (studentId: string) => Student | undefined;
+  availableStudents: Student[];
   onOpenChange: (open: boolean) => void;
+  onAddParticipant: (lessonId: string, studentIds: string[]) => Promise<void>;
   onRemoveParticipant: (lessonId: string, studentId: string, studentName: string) => Promise<void>;
   onDeleteLesson: (lesson: Lesson, scope: RecurringDeleteScope) => Promise<void>;
 }) {
   const { t } = useI18n();
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [adding, setAdding] = useState(false);
   const weekdayLabels = getWeekdayShortLabels("sun");
 
   function formatRecurringSchedule(schedule: RecurringSchedule): string {
@@ -55,8 +63,23 @@ function LessonOverviewSheet({
   }
 
   const startsAt = new Date(lesson.startsAt);
+  const lessonId = lesson.id;
   const converted = lesson.originalType === "group" && lesson.effectiveType === "individual";
   const canEditParticipants = lesson.status !== "completed" && lesson.status !== "cancelled_by_teacher";
+
+  async function handleAddParticipants() {
+    if (!selectedStudentIds.length) {
+      return;
+    }
+
+    setAdding(true);
+    try {
+      await onAddParticipant(lessonId, selectedStudentIds);
+      setSelectedStudentIds([]);
+    } finally {
+      setAdding(false);
+    }
+  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -94,18 +117,30 @@ function LessonOverviewSheet({
             <h3 className="text-sm font-medium">{t("lessonOverview.participants")}</h3>
             {lesson.participants.map((participant) => {
               const student = getStudent(participant.studentId);
-              if (!student) {
-                return null;
-              }
 
               return (
                 <div key={participant.id} className="flex items-center gap-3 rounded-lg border p-3">
-                  <StudentLink studentId={student.id}>
-                    <StudentAvatar student={student} size="default" />
-                  </StudentLink>
+                  {student ? (
+                    <StudentLink studentId={student.id}>
+                      <StudentAvatar student={student} size="default" />
+                    </StudentLink>
+                  ) : (
+                    <StudentAvatar
+                      student={{
+                        id: participant.studentId,
+                        fullName: t("lessonOverview.deletedStudent"),
+                        updatedAt: ""
+                      }}
+                      size="default"
+                    />
+                  )}
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">
-                      <StudentLink studentId={student.id}>{student.fullName}</StudentLink>
+                      {student ? (
+                        <StudentLink studentId={student.id}>{student.fullName}</StudentLink>
+                      ) : (
+                        t("lessonOverview.deletedStudent")
+                      )}
                     </p>
                     <div className="mt-1 flex flex-wrap gap-1">
                       <ParticipantStatusBadge status={participant.status} className="text-[0.65rem]" />
@@ -121,8 +156,16 @@ function LessonOverviewSheet({
                       variant="ghost"
                       size="icon"
                       type="button"
-                      aria-label={t("lessonOverview.removeParticipantAria", { name: student.fullName })}
-                      onClick={() => void onRemoveParticipant(lesson.id, student.id, student.fullName)}
+                      aria-label={t("lessonOverview.removeParticipantAria", {
+                        name: student?.fullName ?? t("lessonOverview.deletedStudent")
+                      })}
+                      onClick={() =>
+                        void onRemoveParticipant(
+                          lesson.id,
+                          participant.studentId,
+                          student?.fullName ?? t("lessonOverview.deletedStudent")
+                        )
+                      }
                     >
                       <Trash2 className="size-4" />
                     </Button>
@@ -130,6 +173,32 @@ function LessonOverviewSheet({
                 </div>
               );
             })}
+            {canEditParticipants ? (
+              <div className="flex flex-col gap-3 rounded-lg border border-dashed p-3">
+                <p className="text-sm font-medium">{t("lessonOverview.addParticipant")}</p>
+                {availableStudents.length ? (
+                  <>
+                    <StudentMultiCombobox
+                      id="lesson-add-participants"
+                      students={availableStudents}
+                      value={selectedStudentIds}
+                      onValueChange={setSelectedStudentIds}
+                      placeholder={t("lessonOverview.selectStudents")}
+                      disabled={adding}
+                    />
+                    <Button
+                      type="button"
+                      disabled={!selectedStudentIds.length || adding}
+                      onClick={() => void handleAddParticipants()}
+                    >
+                      {t("lessonOverview.addParticipantsButton")}
+                    </Button>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">{t("lessonOverview.noStudentsToAdd")}</p>
+                )}
+              </div>
+            ) : null}
           </div>
         </div>
 
