@@ -112,6 +112,9 @@ type ActiveModal = "student" | "payment" | "package" | null;
 const defaultCalendarStartHour = 9;
 const defaultCalendarEndHour = 22;
 const hourHeight = 76;
+const calendarHeaderHeight = 58;
+const calendarStickyHeaderClass =
+  "sticky top-0 z-30 border-b border-stone-300 bg-white pt-2 dark:bg-background";
 const pageHeaderClass =
   "flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 px-4 py-4 sm:px-6 sm:py-5 lg:px-10";
 const pageSectionClass = "px-3 py-3 pb-24 sm:p-6 sm:pb-10 lg:px-10";
@@ -212,16 +215,26 @@ export default function Home() {
     [lessons, selectedDate]
   );
   const dayCalendarRange = useMemo(
-    () => getCalendarRange(dayLessons, currentTime && sameDate(selectedDate, currentTime) ? currentTime : undefined),
+    () => getCalendarRangeWithCurrentTime(dayLessons, selectedDate, currentTime),
     [currentTime, dayLessons, selectedDate]
   );
+  const dayScrollAnchor = useMemo(
+    () => getCalendarScrollAnchor(dayCalendarRange, dayLessons, selectedDate, currentTime),
+    [currentTime, selectedDate, dayCalendarRange, dayLessons]
+  );
   const weekCalendarRange = useMemo(
+    () => getCalendarRangeWithCurrentTime(weekLessons, weekDays[0] ?? selectedDate, currentTime),
+    [currentTime, weekDays, weekLessons, selectedDate]
+  );
+  const weekScrollAnchor = useMemo(
     () =>
-      getCalendarRange(
+      getCalendarScrollAnchor(
+        weekCalendarRange,
         weekLessons,
-        currentTime && weekDays.some((day) => sameDate(day, currentTime)) ? currentTime : undefined
+        weekDays.find((day) => currentTime && sameDate(day, currentTime)) ?? weekDays[0] ?? selectedDate,
+        currentTime
       ),
-    [currentTime, weekDays, weekLessons]
+    [currentTime, weekCalendarRange, weekDays, weekLessons, selectedDate]
   );
   const monthLessons = useMemo(
     () =>
@@ -666,7 +679,10 @@ export default function Home() {
             </div>
 
             {scheduleView === "day" ? (
-              <CalendarScrollArea>
+              <CalendarScrollArea
+                scrollAnchorOffset={dayScrollAnchor}
+                scrollKey={`day-${selectedDate.toISOString()}`}
+              >
                 <DayCalendar
                   day={selectedDate}
                   calendarRange={dayCalendarRange}
@@ -679,7 +695,12 @@ export default function Home() {
             ) : null}
 
             {scheduleView === "week" ? (
-              <CalendarScrollArea minWidth={664}>
+              <CalendarScrollArea
+                minWidth={664}
+                stickyHeader
+                scrollAnchorOffset={weekScrollAnchor}
+                scrollKey={`week-${selectedDate.toISOString()}`}
+              >
                 <WeekCalendar
                   weekDays={weekDays}
                   calendarRange={weekCalendarRange}
@@ -1452,9 +1473,57 @@ function PackageForm({
   );
 }
 
-function CalendarScrollArea({ children, minWidth }: { children: ReactNode; minWidth?: number }) {
+function CalendarScrollArea({
+  children,
+  minWidth,
+  scrollAnchorOffset,
+  scrollKey,
+  stickyHeader
+}: {
+  children: ReactNode;
+  minWidth?: number;
+  scrollAnchorOffset?: number;
+  scrollKey?: string;
+  stickyHeader?: boolean;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const didScrollRef = useRef<string | null>(null);
+  const enableVerticalScroll = scrollAnchorOffset !== undefined || stickyHeader;
+
+  useEffect(() => {
+    didScrollRef.current = null;
+  }, [scrollKey]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || scrollAnchorOffset === undefined || !scrollKey) {
+      return;
+    }
+
+    if (didScrollRef.current === scrollKey) {
+      return;
+    }
+
+    const headerHeight = calendarHeaderHeight;
+    const targetTop = headerHeight + scrollAnchorOffset;
+    const frame = window.requestAnimationFrame(() => {
+      container.scrollTop = Math.max(0, targetTop - container.clientHeight / 3);
+      didScrollRef.current = scrollKey;
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [scrollAnchorOffset, scrollKey]);
+
   return (
-    <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:overflow-visible sm:px-0">
+    <div
+      ref={enableVerticalScroll ? containerRef : undefined}
+      className={cn(
+        "-mx-4 px-4 sm:mx-0 sm:px-0",
+        enableVerticalScroll
+          ? "max-h-[calc(100dvh-13rem)] overflow-x-auto overflow-y-auto overscroll-contain"
+          : "overflow-x-auto sm:overflow-visible"
+      )}
+    >
       <div style={minWidth ? { minWidth } : undefined}>{children}</div>
     </div>
   );
@@ -1479,8 +1548,14 @@ function DayCalendar({
 
   return (
     <div className="grid min-h-[680px] grid-cols-[62px_minmax(240px,1fr)] grid-rows-[58px_auto]">
-      <div className="border-b border-stone-300" />
-      <div className={cn("grid justify-items-center border-b border-stone-300 pt-2", isToday && "bg-primary/5 dark:bg-primary/10")}>
+      <div className={calendarStickyHeaderClass} />
+      <div
+        className={cn(
+          calendarStickyHeaderClass,
+          "grid justify-items-center",
+          isToday && "bg-stone-50 dark:bg-stone-900"
+        )}
+      >
         <strong className="text-xs uppercase text-stone-900">{formatWeekday(day)}</strong>
         <span
           className={cn(
@@ -1523,14 +1598,15 @@ function WeekCalendar({
 
   return (
     <div className="grid min-h-[680px] grid-cols-[62px_repeat(7,minmax(86px,1fr))] grid-rows-[58px_auto]">
-      <div className="border-b border-stone-300" />
+      <div className={calendarStickyHeaderClass} />
       {weekDays.map((day, index) => {
         const isToday = currentTime ? sameDate(day, currentTime) : false;
         return (
           <div
             className={cn(
-              "grid justify-items-center border-b border-stone-300 pt-2",
-              isToday && "bg-primary/5 dark:bg-primary/10"
+              calendarStickyHeaderClass,
+              "grid justify-items-center",
+              isToday && "bg-stone-50 dark:bg-stone-900"
             )}
             key={day.toISOString()}
           >
@@ -1919,6 +1995,48 @@ function getDefaultLessonStartsAt(date: Date): string {
 function formatDateTimeLocal(value: Date): string {
   const pad = (part: number) => String(part).padStart(2, "0");
   return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`;
+}
+
+function getCalendarRangeWithCurrentTime(
+  lessons: Lesson[],
+  referenceDate: Date,
+  currentTime: Date | null
+): CalendarRange {
+  const timeAnchor = currentTime
+    ? new Date(
+        referenceDate.getFullYear(),
+        referenceDate.getMonth(),
+        referenceDate.getDate(),
+        currentTime.getHours(),
+        currentTime.getMinutes()
+      )
+    : undefined;
+
+  return getCalendarRange(lessons, timeAnchor);
+}
+
+function getCalendarScrollAnchor(
+  calendarRange: CalendarRange,
+  lessons: Lesson[],
+  anchorDate: Date,
+  currentTime: Date | null
+): number {
+  const now = currentTime ?? new Date();
+  const anchor = new Date(anchorDate);
+  anchor.setHours(now.getHours(), now.getMinutes(), 0, 0);
+  const currentOffset = getCurrentTimeOffset(anchor, calendarRange);
+  if (currentOffset !== null) {
+    return currentOffset;
+  }
+
+  if (lessons.length > 0) {
+    const firstLesson = lessons.reduce((earliest, lesson) =>
+      new Date(lesson.startsAt).getTime() < new Date(earliest.startsAt).getTime() ? lesson : earliest
+    );
+    return getLessonPosition(firstLesson, calendarRange).top;
+  }
+
+  return 0;
 }
 
 function getCalendarRange(lessons: Lesson[], currentTime?: Date): CalendarRange {
