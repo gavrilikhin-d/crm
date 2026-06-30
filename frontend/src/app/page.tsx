@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
   ChevronLeft,
@@ -21,6 +21,7 @@ import { CurrencyInput } from "@/components/examples/input/special/currency-inpu
 import { LessonOverviewSheet } from "@/components/lesson-overview-sheet";
 import { LessonParticipantSummary } from "@/components/lesson-participant-summary";
 import { ParticipantCardAvatar, ParticipantCardLabel } from "@/components/participant-card-label";
+import { SnapshotRefreshControl } from "@/components/snapshot-refresh-control";
 import { StudentCombobox } from "@/components/student-combobox";
 import { StudentMultiCombobox } from "@/components/student-multi-combobox";
 import { StudentForm } from "@/components/student-form";
@@ -66,6 +67,7 @@ import { api } from "@/lib/api";
 import { readFileAsDataUrl } from "@/lib/files";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useSnapshotAutoRefresh } from "@/hooks/use-snapshot-auto-refresh";
 import { useI18n } from "@/i18n/context";
 import {
   formatDateTime,
@@ -117,6 +119,7 @@ const lessonDurationByType = {
   group: 90,
   individual: 60
 } as const;
+const snapshotPollMs = 30_000;
 
 type CalendarRange = {
   startHour: number;
@@ -237,9 +240,26 @@ export default function Home() {
     }
   }, [selectedLessonId, selectedLesson]);
 
-  useEffect(() => {
-    void loadSnapshot();
-  }, []);
+  const loadSnapshot = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setLoading(true);
+    }
+
+    try {
+      setSnapshot(await api<Snapshot>("/api/snapshot"));
+    } catch (error) {
+      if (!options?.silent) {
+        toast.error(error instanceof Error ? error.message : t("toast.loadFailed"));
+      }
+    } finally {
+      if (!options?.silent) {
+        setLoading(false);
+      }
+    }
+  }, [t]);
+
+  const { secondsUntilRefresh, refreshing, showAutoRefreshed, lastRefreshedAt, refreshNow } =
+    useSnapshotAutoRefresh({ loadSnapshot, pollMs: snapshotPollMs });
 
   useEffect(() => {
     setCurrentTime(new Date());
@@ -247,24 +267,13 @@ export default function Home() {
     return () => window.clearInterval(interval);
   }, []);
 
-  async function loadSnapshot() {
-    setLoading(true);
-    try {
-      setSnapshot(await api<Snapshot>("/api/snapshot"));
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("toast.loadFailed"));
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function withRefresh(action: () => Promise<string | void>) {
     try {
       const result = await action();
       if (result) {
         toast.success(result);
       }
-      await loadSnapshot();
+      await refreshNow();
     } catch (error) {
       const apiError = error as Error & { code?: string };
       switch (apiError.code) {
@@ -647,6 +656,13 @@ export default function Home() {
               </div>
               
               <div className="flex items-center justify-center gap-2 sm:justify-end">
+                <SnapshotRefreshControl
+                  secondsUntilRefresh={secondsUntilRefresh}
+                  refreshing={refreshing}
+                  showAutoRefreshed={showAutoRefreshed}
+                  lastRefreshedAt={lastRefreshedAt}
+                  onRefresh={() => void refreshNow()}
+                />
                 <Button variant="secondary" size="icon" type="button" onClick={() => shiftCalendar(-1)} aria-label={t("calendar.prevPeriod")}>
                   <ChevronLeft className="size-4" />
                 </Button>

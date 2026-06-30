@@ -58,7 +58,11 @@ const ru = {
     createLesson: "Создать занятие",
     createLessonTitle: "Создать занятие",
     moreLessons: "+{count} еще",
-    lessonFallback: "Занятие"
+    lessonFallback: "Занятие",
+    refresh: "Обновить",
+    refreshIn: "Автообновление через {seconds} с",
+    autoRefreshed: "Обновлено автоматически",
+    lastRefreshed: "Последнее обновление: {time}"
   },
   weekday: {
     short: {
