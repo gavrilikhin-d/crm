@@ -1,6 +1,9 @@
 import "dotenv/config";
+import { initSentryNode } from "@crm/shared/sentry-node";
 import { startTelegramBot } from "./telegram";
 import { log } from "./logger";
+
+initSentryNode("bot");
 
 void startTelegramBot()
   .then(() => {

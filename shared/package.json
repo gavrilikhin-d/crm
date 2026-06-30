@@ -10,7 +10,8 @@
     "./student-initials": "./src/student-initials.ts",
     "./lesson-callback": "./src/lesson-callback.ts",
     "./lesson-attendance": "./src/lesson-attendance.ts",
-    "./logger": "./src/logger.ts"
+    "./logger": "./src/logger.ts",
+    "./sentry-node": "./src/sentry-node.ts"
   },
   "types": "./src/types.ts",
   "scripts": {
@@ -20,5 +21,8 @@
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "@sentry/node": "^10.62.0"
   }
 }

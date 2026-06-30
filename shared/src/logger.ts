@@ -1,3 +1,5 @@
+import { captureSentryLog } from "./sentry-node";
+
 type LogLevel = "debug" | "info" | "warn" | "error";
 
 const LEVEL_ORDER: Record<LogLevel, number> = {
@@ -106,6 +108,10 @@ function createLogger(service: string, options: Partial<LoggerOptions> = {}): Lo
     }
 
     write(JSON.stringify(entry), level);
+
+    if (level === "warn" || level === "error") {
+      captureSentryLog(level, message, context);
+    }
   }
 
   return {

@@ -99,6 +99,21 @@ docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
 
 Логи `bot` и `reminder` — JSON. `backend` при local dev пока только в терминале (plain text).
 
+### Sentry (ошибки и логи)
+
+Дополнительно к Loki/Grafana можно отправлять ошибки и warn/error-логи в [Sentry](https://sentry.io):
+
+```bash
+NEXT_PUBLIC_SENTRY_DSN=https://...@....ingest.sentry.io/...
+SENTRY_DSN=https://...@....ingest.sentry.io/...
+SENTRY_AUTH_TOKEN=...   # для upload source maps при next build
+```
+
+- **Next.js** — client/server/edge через `@sentry/nextjs` (ошибки, tracing, session replay, logs)
+- **backend / bot / reminder** — через `@sentry/node` + shared logger (warn/error)
+
+Tunnel route `/monitoring` обходит ad-blockers в браузере.
+
 Telegram-бот опционален. Если `TELEGRAM_BOT_TOKEN` не задан, web app работает, а Telegram service не запускает polling.
 
 ## Google Calendar

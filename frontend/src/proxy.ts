@@ -5,8 +5,9 @@ export const proxy = auth((request) => {
   const isLoggedIn = !!request.auth;
   const isLoginPage = request.nextUrl.pathname === "/login";
   const isAuthRoute = request.nextUrl.pathname.startsWith("/api/auth");
+  const isSentryTunnel = request.nextUrl.pathname === "/monitoring";
 
-  if (isAuthRoute) {
+  if (isAuthRoute || isSentryTunnel) {
     return NextResponse.next();
   }
 
@@ -23,5 +24,5 @@ export const proxy = auth((request) => {
 
 export const config = {
   // Pages only — /api/* uses Bearer tokens and Next.js rewrites to the backend
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"]
+  matcher: ["/((?!api|monitoring|_next/static|_next/image|favicon.ico).*)"]
 };

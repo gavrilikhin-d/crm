@@ -1,4 +1,5 @@
 import "./load-env.js";
+import { initSentryNode } from "@crm/shared/sentry-node";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { LessonType, PaymentMethod, RecurringDeleteScope, Reminder } from "@crm/shared";
 import {
@@ -19,6 +20,8 @@ type Handler = (
 ) => Promise<void> | void;
 
 const port = Number(process.env.PORT ?? 4000);
+
+initSentryNode("backend");
 
 const publicRoutes: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
   route("GET", /^\/api\/health$/, async (_request, response) => jsonOk(response, { ok: true })),

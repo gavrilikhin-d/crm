@@ -1,8 +1,11 @@
 import "dotenv/config";
+import { initSentryNode } from "@crm/shared/sentry-node";
 import { createServer } from "node:http";
 import { sendManualPaymentReminder, startReminderScheduler } from "./reminders";
 import { waitForBackend } from "./backend-client";
 import { log } from "./logger";
+
+initSentryNode("reminder");
 
 const port = Number(process.env.PORT ?? 4001);
 
