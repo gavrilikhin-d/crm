@@ -1,3 +1,5 @@
+import { toSentryLogAttributes } from "./sentry-logging";
+
 type LogLevel = "debug" | "info" | "warn" | "error";
 
 type SentryModule = typeof import("@sentry/node");
@@ -15,6 +17,7 @@ export function isSentryEnabled(): boolean {
 }
 
 export function captureSentryLog(
+  service: string,
   level: LogLevel,
   message: string,
   context: Record<string, unknown> = {}
@@ -24,29 +27,27 @@ export function captureSentryLog(
   }
 
   const Sentry = sentryModule;
-  const { err, ...rest } = context;
-  const extra = rest as Record<string, unknown>;
+  const attributes = toSentryLogAttributes(service, context);
 
-  if (level === "error") {
-    if (err instanceof Error) {
-      Sentry.captureException(err, {
-        extra: { ...extra, msg: message }
-      });
+  switch (level) {
+    case "debug":
+      Sentry.logger.debug(message, attributes);
       return;
+    case "info":
+      Sentry.logger.info(message, attributes);
+      return;
+    case "warn":
+      Sentry.logger.warn(message, attributes);
+      return;
+    case "error": {
+      Sentry.logger.error(message, attributes);
+      const { err } = context;
+      if (err instanceof Error) {
+        Sentry.captureException(err, {
+          extra: { ...attributes, msg: message }
+        });
+      }
     }
-
-    Sentry.captureMessage(message, {
-      level: "error",
-      extra
-    });
-    return;
-  }
-
-  if (level === "warn") {
-    Sentry.captureMessage(message, {
-      level: "warning",
-      extra
-    });
   }
 }
 

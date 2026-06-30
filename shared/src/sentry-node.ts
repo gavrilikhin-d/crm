@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/node";
+import { SENTRY_CONSOLE_LOG_LEVELS } from "./sentry-logging";
 import { tracesSampler } from "./sentry-sampling";
 import { bindSentryNode, captureSentryLog, isSentryEnabled, suppressSentryTracing } from "./sentry-log";
 
@@ -46,6 +47,7 @@ export async function initSentryNode(service: string, dsnOverride?: string): Pro
     environment: process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? "development",
     integrations: [
       ...Sentry.getDefaultIntegrations({ dsn }),
+      Sentry.consoleLoggingIntegration({ levels: [...SENTRY_CONSOLE_LOG_LEVELS] }),
       nodeProfilingIntegration(),
       Sentry.nodeRuntimeMetricsIntegration(),
       ...(service === "backend" ? [Sentry.postgresJsIntegration()] : [])

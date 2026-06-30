@@ -14,6 +14,7 @@
     "./vacation": "./src/vacation.ts",
     "./logger": "./src/logger.ts",
     "./sentry-node": "./src/sentry-node.ts",
+    "./sentry-logging": "./src/sentry-logging.ts",
     "./sentry-sampling": "./src/sentry-sampling.ts",
     "./sentry-tracing": "./src/sentry-tracing.ts"
   },
