@@ -37,7 +37,7 @@ export async function runReminderTick(): Promise<void> {
         }
 
         for (const participant of lesson.participants) {
-          if (participant.status === "declined") {
+          if (participant.status === "declined" || participant.status === "confirmed") {
             continue;
           }
 

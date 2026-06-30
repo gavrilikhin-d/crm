@@ -5,6 +5,8 @@ const botCommands: BotCommand[] = [
   { command: "start", description: "Подключить Telegram и открыть меню" },
   { command: "schedule", description: "Занятия на 7 дней (/schedule 14)" },
   { command: "balance", description: "Сколько занятий осталось" },
+  { command: "attend", description: "Подтвердить занятие (/attend 1)" },
+  { command: "decline", description: "Отказаться от занятия (/decline 1)" },
   { command: "help", description: "Список команд" }
 ];
 
@@ -14,13 +16,14 @@ function formatHelpMessage(isGroup = false): string {
     ...botCommands.map((item) => `/${item.command} — ${item.description}`),
     "",
     "Расписание: /schedule или /schedule 14 — на 14 дней.",
-    "Работает и /shedule (с опечаткой)."
+    "Работает и /shedule (с опечаткой).",
+    "Ответ по занятию: /attend 1 или /decline 1 — без нового напоминания."
   ];
 
   if (isGroup) {
     lines.push("", "В группе используйте команды с упоминанием бота, например /schedule@имя_бота.");
   } else {
-    lines.push("", "Можно также написать: «расписание», «баланс», «сколько осталось».");
+    lines.push("", "Можно также написать: «расписание», «баланс», «сколько осталось», «буду 1», «не буду 1».");
   }
 
   return lines.join("\n");

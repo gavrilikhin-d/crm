@@ -41,7 +41,9 @@ function formatScheduleMessage(profile: TelegramStudentProfile): BotReply {
   }
 
   const now = new Date();
-  const blocks = profile.upcomingLessons.map((lesson) => formatLessonBlock(profile.student.id, lesson, now));
+  const blocks = profile.upcomingLessons.map((lesson, index) =>
+    formatLessonBlock(index + 1, profile.student.id, lesson, now)
+  );
 
   return {
     text: [
@@ -50,7 +52,8 @@ function formatScheduleMessage(profile: TelegramStudentProfile): BotReply {
       "",
       ...blocks,
       "",
-      `<i>Другой период: /schedule 14</i>`
+      `<i>Другой период: /schedule 14</i>`,
+      `<i>Ответ по занятию: /attend N или /decline N</i>`
     ].join("\n\n"),
     parse_mode: "HTML"
   };
@@ -63,13 +66,13 @@ function formatNotLinkedMessage(): string {
   ].join("\n");
 }
 
-function formatLessonBlock(studentId: string, lesson: Lesson, now: Date): string {
+function formatLessonBlock(index: number, studentId: string, lesson: Lesson, now: Date): string {
   const participant = lesson.participants.find((item) => item.studentId === studentId);
   const when = formatLessonWhen(new Date(lesson.startsAt), now);
   const kind = lesson.effectiveType === "group" ? "Групповое" : "Индивидуальное";
   const tags = formatLessonTags(participant, lesson.status);
 
-  return [`<b>${escapeHtml(when)}</b>`, `${kind}${tags.length ? `\n${tags.join(" · ")}` : ""}`].join("\n");
+  return [`<b>${index}. ${escapeHtml(when)}</b>`, `${kind}${tags.length ? `\n${tags.join(" · ")}` : ""}`].join("\n");
 }
 
 function formatLessonWhen(startsAt: Date, now: Date): string {

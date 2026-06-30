@@ -4,6 +4,16 @@ import type { Context } from "telegraf";
 import type { Lesson, Student } from "@crm/shared";
 import { lessonReminderKeyboard, parseLessonCallback } from "@crm/shared/lesson-callback";
 import { bindTelegramChat, getTelegramStudentProfile, setParticipantStatus } from "./backend-client";
+import {
+  ATTEND_COMMANDS,
+  DECLINE_COMMANDS,
+  findLessonByScheduleIndex,
+  formatAttendancePrompt,
+  formatAttendanceResult,
+  isActionableLesson,
+  parseLessonIndex,
+  type AttendanceIntent
+} from "./attendance";
 import { formatHelpMessage, registerBotCommands } from "./commands";
 import { formatBalanceMessage, formatNotLinkedMessage, formatScheduleMessage, type BotReply } from "./messages";
 import {
@@ -62,7 +72,8 @@ export function getTelegramBot(): Telegraf | null {
             `${student.fullName}, Telegram подключен. Теперь сюда будут приходить напоминания о занятиях.`,
             "",
             "Спросить расписание: /schedule (7 дней) или /schedule 14",
-            "Спросить баланс: /balance"
+            "Спросить баланс: /balance",
+            "Ответ по занятию: /attend 1 или /decline 1"
           ];
 
       await ctx.reply(connectedLines.join("\n"));
@@ -93,6 +104,30 @@ export function getTelegramBot(): Telegraf | null {
   bot.command(["help", "помощь"], async (ctx) => {
     const isGroup = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
     await ctx.reply(formatHelpMessage(isGroup));
+  });
+
+  bot.command([...ATTEND_COMMANDS], async (ctx) => {
+    await replyWithAttendance(ctx, "confirmed", ctx.payload);
+  });
+
+  bot.command([...DECLINE_COMMANDS], async (ctx) => {
+    await replyWithAttendance(ctx, "declined", ctx.payload);
+  });
+
+  bot.hears(/^буду\s+(\d+)$/i, async (ctx) => {
+    if (!isPrivateChat(ctx)) {
+      return;
+    }
+
+    await replyWithAttendance(ctx, "confirmed", ctx.match[1]);
+  });
+
+  bot.hears(/^не\s+буду\s+(\d+)$/i, async (ctx) => {
+    if (!isPrivateChat(ctx)) {
+      return;
+    }
+
+    await replyWithAttendance(ctx, "declined", ctx.match[1]);
   });
 
   bot.hears(/^расписание(?:\s+на)?\s+\d+\s*(?:дн(?:я|ей)?)?$/i, async (ctx) => {
@@ -272,6 +307,59 @@ async function replyWithProfile(
     }
     console.error("Telegram profile query failed:", message);
     await ctx.reply("Не удалось получить данные. Попробуйте позже.");
+  }
+}
+
+async function replyWithAttendance(ctx: Context, intent: AttendanceIntent, payload?: string): Promise<void> {
+  const userId = ctx.from?.id;
+  if (!userId) {
+    return;
+  }
+
+  const { index, error } = parseLessonIndex(payload);
+  if (error) {
+    await ctx.reply(error);
+    return;
+  }
+
+  try {
+    const profile = await getTelegramStudentProfile(userId);
+
+    if (!index) {
+      await ctx.reply(formatAttendancePrompt(profile, intent));
+      return;
+    }
+
+    const lesson = findLessonByScheduleIndex(profile, index);
+    if (!lesson) {
+      await ctx.reply(`Занятие №${index} не найдено.\n\n${formatAttendancePrompt(profile, intent)}`);
+      return;
+    }
+
+    if (!isActionableLesson(lesson, profile.student.id)) {
+      await ctx.reply(`Занятие №${index} недоступно для изменения.\n\n${formatAttendancePrompt(profile, intent)}`);
+      return;
+    }
+
+    const status = intent === "confirmed" ? "confirmed" : "declined";
+    const updated = await setParticipantStatus({
+      lessonId: lesson.id,
+      studentId: profile.student.id,
+      status
+    });
+
+    await ctx.reply(formatAttendanceResult(updated, profile.student.id, intent));
+    console.log(
+      `Telegram attendance command: lesson=${lesson.id} student=${profile.student.id} status=${status}`
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown attendance error";
+    if (message.includes("not found")) {
+      await ctx.reply(formatNotLinkedMessage());
+      return;
+    }
+    console.error("Telegram attendance command failed:", message);
+    await ctx.reply("Не удалось обновить ответ. Попробуйте позже.");
   }
 }
 

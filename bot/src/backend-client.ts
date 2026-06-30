@@ -41,14 +41,16 @@ export async function setParticipantStatus(input: {
   lessonId: string;
   studentId: string;
   status: string;
-  action: "attend" | "decline";
+  action?: "attend" | "decline";
 }): Promise<Lesson> {
+  const body: { status: string; action?: "attend" | "decline" } = { status: input.status };
+  if (input.action) {
+    body.action = input.action;
+  }
+
   return api<Lesson>(`/internal/lessons/${input.lessonId}/participants/${input.studentId}/status`, {
     method: "POST",
-    body: {
-      status: input.status,
-      action: input.action
-    }
+    body
   });
 }
 
