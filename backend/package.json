@@ -14,7 +14,10 @@
     "migrate:json": "tsx src/migrate-json.ts",
     "migrate:legacy-account": "tsx src/migrate-legacy-account.ts",
     "migrate:multitenancy": "tsx src/migrate-multitenancy.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test --preload ./src/test/preload.ts src",
+    "test:unit": "bun test src/store-logic.test.ts",
+    "test:integration": "bun test --preload ./src/test/preload.ts src/lesson-lifecycle.integration.test.ts",
   },
   "dependencies": {
     "@crm/shared": "0.1.0",
@@ -25,6 +28,7 @@
     "postgres": "^3.4.9"
   },
   "devDependencies": {
+    "@types/bun": "^1.3.14",
     "@types/node": "^22.10.5",
     "drizzle-kit": "^0.31.10",
     "esbuild": "^0.27.0",
