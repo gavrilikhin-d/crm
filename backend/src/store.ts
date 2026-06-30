@@ -467,14 +467,14 @@ export class Store {
 
     uniqueStudentIds.forEach((studentId) => mustFind(db.students, studentId, "Student"));
 
+    const durationMinutes =
+      input.durationMinutes ??
+      (input.lessonType === "group" ? db.settings.groupDurationMinutes : db.settings.individualDurationMinutes);
+
     const startsAt = new Date(input.startsAt).toISOString();
     if (lessonOverlapsVacation(startsAt, durationMinutes, db.vacationPeriods)) {
       throw new Error("Cannot schedule a lesson during vacation");
     }
-
-    const durationMinutes =
-      input.durationMinutes ??
-      (input.lessonType === "group" ? db.settings.groupDurationMinutes : db.settings.individualDurationMinutes);
 
     let recurringScheduleId: string | undefined;
     const toInsert: Lesson[] = [];

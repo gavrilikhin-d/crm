@@ -6,11 +6,9 @@ import { sendManualPaymentReminder, startReminderScheduler } from "./reminders";
 import { waitForBackend } from "./backend-client";
 import { log } from "./logger";
 
-initSentryNode("reminder", process.env.REMINDER_SENTRY_DSN);
-
 const port = Number(process.env.PORT ?? 4001);
 
-void bootstrap();
+void initSentryNode("reminder", process.env.REMINDER_SENTRY_DSN).then(() => bootstrap());
 
 async function bootstrap(): Promise<void> {
   await waitForBackend();

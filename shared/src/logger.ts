@@ -1,4 +1,4 @@
-import { captureSentryLog } from "./sentry-node";
+import { captureSentryLog } from "./sentry-log";
 
 type LogLevel = "debug" | "info" | "warn" | "error";
 

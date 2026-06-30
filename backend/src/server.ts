@@ -22,7 +22,7 @@ type Handler = (
 
 const port = Number(process.env.PORT ?? 4000);
 
-initSentryNode("backend", process.env.BACKEND_SENTRY_DSN);
+await initSentryNode("backend", process.env.BACKEND_SENTRY_DSN);
 
 const publicRoutes: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
   route("GET", /^\/api\/health$/, async (_request, response) => jsonOk(response, { ok: true })),

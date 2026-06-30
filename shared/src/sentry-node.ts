@@ -1,7 +1,8 @@
 import * as Sentry from "@sentry/node";
-import { nodeProfilingIntegration } from "@sentry/profiling-node";
-import type { LogLevel } from "./logger";
 import { tracesSampler } from "./sentry-sampling";
+import { bindSentryNode, captureSentryLog, isSentryEnabled, suppressSentryTracing } from "./sentry-log";
+
+export { captureSentryLog, isSentryEnabled, suppressSentryTracing };
 
 let enabled = false;
 
@@ -31,13 +32,14 @@ function registerProfilerShutdown(): void {
   process.once("SIGINT", stop);
 }
 
-export function initSentryNode(service: string, dsnOverride?: string): void {
+export async function initSentryNode(service: string, dsnOverride?: string): Promise<void> {
   const dsn = (dsnOverride ?? process.env.SENTRY_DSN)?.trim();
   if (!dsn || enabled) {
     return;
   }
 
   const rate = sampleRate();
+  const { nodeProfilingIntegration } = await import("@sentry/profiling-node");
 
   const options: Sentry.NodeOptions = {
     dsn,
@@ -61,52 +63,6 @@ export function initSentryNode(service: string, dsnOverride?: string): void {
 
   Sentry.getCurrentScope().setTag("service", service);
   registerProfilerShutdown();
+  bindSentryNode(Sentry, true);
   enabled = true;
-}
-
-export function captureSentryLog(
-  level: LogLevel,
-  message: string,
-  context: Record<string, unknown> = {}
-): void {
-  if (!enabled) {
-    return;
-  }
-
-  const { err, ...rest } = context;
-  const extra = rest as Record<string, unknown>;
-
-  if (level === "error") {
-    if (err instanceof Error) {
-      Sentry.captureException(err, {
-        extra: { ...extra, msg: message }
-      });
-      return;
-    }
-
-    Sentry.captureMessage(message, {
-      level: "error",
-      extra
-    });
-    return;
-  }
-
-  if (level === "warn") {
-    Sentry.captureMessage(message, {
-      level: "warning",
-      extra
-    });
-  }
-}
-
-export function isSentryEnabled(): boolean {
-  return enabled;
-}
-
-export function suppressSentryTracing<T>(fn: () => T | Promise<T>): T | Promise<T> {
-  if (!enabled) {
-    return fn();
-  }
-
-  return Sentry.suppressTracing(fn);
 }
