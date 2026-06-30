@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import type { GoogleCalendarStatus } from "@crm/shared";
+import { withSentrySpan } from "@crm/shared/sentry-tracing";
 import {
   clearAccountGoogleCalendar,
   getAccountGoogleCalendar,
@@ -135,18 +136,26 @@ async function refreshCredentialsIfNeeded(accountId: string, credentials: Google
 
 export async function withGoogleCalendarClient<T>(
   accountId: string,
-  run: (calendar: ReturnType<typeof google.calendar>, calendarId: string) => Promise<T>
+  run: (calendar: ReturnType<typeof google.calendar>, calendarId: string) => Promise<T>,
+  operation = "google.calendar.api"
 ): Promise<T> {
-  const credentials = await getAccountGoogleCalendar(accountId);
-  if (!credentials?.refreshToken) {
-    throw new Error("Google Calendar is not connected");
-  }
+  return withSentrySpan(
+    operation,
+    "google.calendar",
+    async () => {
+      const credentials = await getAccountGoogleCalendar(accountId);
+      if (!credentials?.refreshToken) {
+        throw new Error("Google Calendar is not connected");
+      }
 
-  const active = await refreshCredentialsIfNeeded(accountId, credentials);
-  const auth = createOAuthClient({
-    accessToken: active.accessToken,
-    refreshToken: active.refreshToken
-  });
-  const calendar = google.calendar({ version: "v3", auth });
-  return run(calendar, active.calendarId);
+      const active = await refreshCredentialsIfNeeded(accountId, credentials);
+      const auth = createOAuthClient({
+        accessToken: active.accessToken,
+        refreshToken: active.refreshToken
+      });
+      const calendar = google.calendar({ version: "v3", auth });
+      return run(calendar, active.calendarId);
+    },
+    { "account.id": accountId }
+  );
 }

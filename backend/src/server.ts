@@ -1,5 +1,6 @@
 import "./load-env.js";
-import { initSentryNode } from "@crm/shared/sentry-node";
+import { initSentryNode, suppressSentryTracing } from "@crm/shared/sentry-node";
+import { parameterizePath, withIncomingHttpSpan } from "@crm/shared/sentry-tracing";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { LessonType, PaymentMethod, RecurringDeleteScope, Reminder } from "@crm/shared";
 import {
@@ -84,59 +85,70 @@ async function startServer() {
   await store.initialize();
 
   createServer(async (request, response) => {
-    try {
-      setCorsHeaders(request, response);
+    const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+    const routeName = `${request.method ?? "GET"} ${parameterizePath(url.pathname)}`;
+    const untraced = request.method === "OPTIONS" || url.pathname === "/api/health";
 
-      if (request.method === "OPTIONS") {
-        response.writeHead(204);
-        response.end();
-        return;
-      }
+    const handle = async () => {
+      try {
+        setCorsHeaders(request, response);
 
-      const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+        if (request.method === "OPTIONS") {
+          response.writeHead(204);
+          response.end();
+          return;
+        }
 
-      const publicRoute = publicRoutes.find(
-        (candidate) => candidate.method === request.method && url.pathname.match(candidate.pattern)
-      );
-      if (publicRoute) {
-        const match = url.pathname.match(publicRoute.pattern);
-        await publicRoute.handler(request, response, match as RegExpMatchArray);
-        return;
-      }
+        const publicRoute = publicRoutes.find(
+          (candidate) => candidate.method === request.method && url.pathname.match(candidate.pattern)
+        );
+        if (publicRoute) {
+          const match = url.pathname.match(publicRoute.pattern);
+          await publicRoute.handler(request, response, match as RegExpMatchArray);
+          return;
+        }
 
-      const internalRoute = internalRoutes.find(
-        (candidate) => candidate.method === request.method && url.pathname.match(candidate.pattern)
-      );
-      if (internalRoute) {
-        assertInternalToken(request);
-        const match = url.pathname.match(internalRoute.pattern);
-        await internalRoute.handler(request, response, match as RegExpMatchArray);
-        return;
-      }
+        const internalRoute = internalRoutes.find(
+          (candidate) => candidate.method === request.method && url.pathname.match(candidate.pattern)
+        );
+        if (internalRoute) {
+          assertInternalToken(request);
+          const match = url.pathname.match(internalRoute.pattern);
+          await internalRoute.handler(request, response, match as RegExpMatchArray);
+          return;
+        }
 
-      const protectedRoute = protectedRoutes.find(
-        (candidate) => candidate.method === request.method && url.pathname.match(candidate.pattern)
-      );
-      if (!protectedRoute) {
-        jsonError(response, new Error("Route not found"), 404);
-        return;
-      }
+        const protectedRoute = protectedRoutes.find(
+          (candidate) => candidate.method === request.method && url.pathname.match(candidate.pattern)
+        );
+        if (!protectedRoute) {
+          jsonError(response, new Error("Route not found"), 404);
+          return;
+        }
 
-      const ctx = await authenticateRequest(request);
-      const match = url.pathname.match(protectedRoute.pattern);
-      await protectedRoute.handler(request, response, match as RegExpMatchArray, ctx);
-    } catch (error) {
-      if (error instanceof PlanLimitError) {
-        jsonError(response, error, 403, { code: error.code });
-        return;
+        const ctx = await authenticateRequest(request);
+        const match = url.pathname.match(protectedRoute.pattern);
+        await protectedRoute.handler(request, response, match as RegExpMatchArray, ctx);
+      } catch (error) {
+        if (error instanceof PlanLimitError) {
+          jsonError(response, error, 403, { code: error.code });
+          return;
+        }
+        const message = error instanceof Error ? error.message : "Unexpected error";
+        if (message === "Unauthorized" || message === "Invalid token payload") {
+          jsonError(response, error, 401);
+          return;
+        }
+        jsonError(response, error);
       }
-      const message = error instanceof Error ? error.message : "Unexpected error";
-      if (message === "Unauthorized" || message === "Invalid token payload") {
-        jsonError(response, error, 401);
-        return;
-      }
-      jsonError(response, error);
+    };
+
+    if (untraced) {
+      await suppressSentryTracing(handle);
+      return;
     }
+
+    await withIncomingHttpSpan(request, response, routeName, handle);
   }).listen(port, () => {
     console.log(`Backend API listening on ${port}`);
   });
@@ -493,7 +505,7 @@ function setCorsHeaders(request: IncomingMessage, response: ServerResponse) {
   const allowedOrigin = process.env.APP_BASE_URL ?? "http://localhost:3000";
   response.setHeader("access-control-allow-origin", origin === allowedOrigin ? origin : allowedOrigin);
   response.setHeader("access-control-allow-methods", "GET,POST,PATCH,DELETE,OPTIONS");
-  response.setHeader("access-control-allow-headers", "content-type,authorization");
+  response.setHeader("access-control-allow-headers", "content-type,authorization,sentry-trace,baggage");
 }
 
 function stringValue(value: unknown): string | undefined {

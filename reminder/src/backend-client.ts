@@ -1,4 +1,5 @@
 import type { Database, Lesson, Reminder, StudentBalance } from "@crm/shared";
+import { fetchWithSentryTrace } from "@crm/shared/sentry-tracing";
 import { fetchWithRetry, isBackendUnreachableError, sleep } from "./fetch-retry";
 import { log } from "./logger";
 
@@ -79,11 +80,16 @@ async function api<T>(path: string, options?: { method?: string; body?: unknown 
   let response: Response;
 
   try {
-    response = await fetchWithRetry(`${backendUrl}${path}`, {
-      method: options?.method ?? "GET",
-      headers: internalHeaders(options?.body),
-      body: options?.body ? JSON.stringify(options.body) : undefined
-    });
+    response = await fetchWithRetry(
+      `${backendUrl}${path}`,
+      {
+        method: options?.method ?? "GET",
+        headers: internalHeaders(options?.body),
+        body: options?.body ? JSON.stringify(options.body) : undefined
+      },
+      3,
+      fetchWithSentryTrace
+    );
   } catch (error) {
     if (isBackendUnreachableError(error)) {
       log.warn("Backend unreachable", {

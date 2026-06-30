@@ -20,12 +20,17 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchWithRetry(url: string, init: RequestInit, attempts = 3): Promise<Response> {
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  attempts = 3,
+  fetchImpl: (url: string, init: RequestInit) => Promise<Response> = fetch
+): Promise<Response> {
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
-      return await fetch(url, {
+      return await fetchImpl(url, {
         ...init,
         signal: AbortSignal.timeout(15_000)
       });

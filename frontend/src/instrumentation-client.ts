@@ -1,15 +1,31 @@
 import * as Sentry from "@sentry/nextjs";
+import { parameterizeSpanName, tracesSampler } from "@crm/shared/sentry-sampling";
 
 const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
+const sampleRate = process.env.NODE_ENV === "production" ? 0.1 : 1.0;
 
 if (dsn) {
   Sentry.init({
     dsn,
-    tracesSampleRate: process.env.NODE_ENV === "development" ? 1.0 : 0.1,
+    integrations: [
+      Sentry.replayIntegration(),
+      Sentry.browserTracingIntegration({
+        shouldCreateSpanForRequest: (url) => !url.includes("/health") && !url.includes("/monitoring"),
+        beforeStartSpan: (context) => ({
+          ...context,
+          name: parameterizeSpanName(context.name)
+        })
+      }),
+      Sentry.browserProfilingIntegration()
+    ],
+    tracesSampler,
+    tracePropagationTargets: ["localhost", /^\//],
+    ignoreSpans: [/health/i, /monitoring/i],
+    profileSessionSampleRate: sampleRate,
+    profileLifecycle: "trace",
     replaysSessionSampleRate: 0.1,
     replaysOnErrorSampleRate: 1.0,
-    enableLogs: true,
-    integrations: [Sentry.replayIntegration()]
+    enableLogs: true
   });
 }
 

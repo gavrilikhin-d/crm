@@ -1,11 +1,18 @@
 import * as Sentry from "@sentry/nextjs";
+import { nodeProfilingIntegration } from "@sentry/profiling-node";
+import { tracesSampler } from "@crm/shared/sentry-sampling";
 
 const dsn = process.env.SENTRY_DSN ?? process.env.NEXT_PUBLIC_SENTRY_DSN;
+const sampleRate = process.env.NODE_ENV === "production" ? 0.1 : 1.0;
 
 if (dsn) {
   Sentry.init({
     dsn,
-    tracesSampleRate: process.env.NODE_ENV === "development" ? 1.0 : 0.1,
+    integrations: [nodeProfilingIntegration(), Sentry.nodeRuntimeMetricsIntegration()],
+    tracesSampler,
+    ignoreSpans: [/health/i, /monitoring/i],
+    profileSessionSampleRate: sampleRate,
+    profileLifecycle: "trace",
     includeLocalVariables: true,
     enableLogs: true
   });

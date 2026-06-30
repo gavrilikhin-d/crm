@@ -1,5 +1,6 @@
 import "dotenv/config";
-import { initSentryNode } from "@crm/shared/sentry-node";
+import { initSentryNode, suppressSentryTracing } from "@crm/shared/sentry-node";
+import { parameterizePath, withIncomingHttpSpan } from "@crm/shared/sentry-tracing";
 import { createServer } from "node:http";
 import { sendManualPaymentReminder, startReminderScheduler } from "./reminders";
 import { waitForBackend } from "./backend-client";
@@ -19,32 +20,43 @@ async function bootstrap(): Promise<void> {
     const startedAt = Date.now();
     const method = request.method ?? "GET";
     const path = request.url ?? "/";
+    const url = new URL(path, `http://${request.headers.host ?? "localhost"}`);
+    const routeName = `${method} ${parameterizePath(url.pathname)}`;
+    const untraced = method === "GET" && url.pathname === "/health";
 
-    try {
-      const url = new URL(path, `http://${request.headers.host ?? "localhost"}`);
-      const match = url.pathname.match(/^\/api\/payment-reminders\/([^/]+)$/);
+    const handle = async () => {
+      try {
+        const match = url.pathname.match(/^\/api\/payment-reminders\/([^/]+)$/);
 
-      if (method === "GET" && url.pathname === "/health") {
-        jsonOk(response, { ok: true });
-        logRequest(method, url.pathname, 200, startedAt);
-        return;
+        if (method === "GET" && url.pathname === "/health") {
+          jsonOk(response, { ok: true });
+          logRequest(method, url.pathname, 200, startedAt);
+          return;
+        }
+
+        if (method !== "POST" || !match) {
+          jsonError(response, new Error("Route not found"), 404);
+          logRequest(method, url.pathname, 404, startedAt);
+          return;
+        }
+
+        const result = await sendManualPaymentReminder(match[1]);
+        jsonOk(response, { ok: true, ...result }, 202);
+        logRequest(method, url.pathname, 202, startedAt, { studentId: match[1], sent: result.sent });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unexpected error";
+        const status = message.includes("not found") ? 404 : 400;
+        jsonError(response, error, status);
+        logRequest(method, path, status, startedAt, { err: error });
       }
+    };
 
-      if (method !== "POST" || !match) {
-        jsonError(response, new Error("Route not found"), 404);
-        logRequest(method, url.pathname, 404, startedAt);
-        return;
-      }
-
-      const result = await sendManualPaymentReminder(match[1]);
-      jsonOk(response, { ok: true, ...result }, 202);
-      logRequest(method, url.pathname, 202, startedAt, { studentId: match[1], sent: result.sent });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unexpected error";
-      const status = message.includes("not found") ? 404 : 400;
-      jsonError(response, error, status);
-      logRequest(method, path, status, startedAt, { err: error });
+    if (untraced) {
+      await suppressSentryTracing(handle);
+      return;
     }
+
+    await withIncomingHttpSpan(request, response, routeName, handle);
   }).listen(port, () => {
     log.info("Reminder service listening", { port });
   });

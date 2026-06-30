@@ -112,10 +112,10 @@ REMINDER_SENTRY_DSN=https://...@....ingest.de.sentry.io/...      # reminder serv
 SENTRY_AUTH_TOKEN=...   # для upload source maps при next build
 ```
 
-- **Next.js** — client/server/edge через `@sentry/nextjs` (ошибки, tracing, session replay, logs)
-- **backend** — `BACKEND_SENTRY_DSN`
-- **bot** — `BOT_SENTRY_DSN`
-- **reminder** — `REMINDER_SENTRY_DSN`
+- **Next.js** — errors, tracing, session replay, logs, browser profiling (Chromium), runtime metrics + Node profiling on server
+- **backend** — `BACKEND_SENTRY_DSN` (errors, tracing, logs, runtime metrics, profiling, Postgres spans)
+- **bot** — `BOT_SENTRY_DSN` (errors, tracing, logs, runtime metrics, profiling)
+- **reminder** — `REMINDER_SENTRY_DSN` (errors, tracing, logs, runtime metrics, profiling)
 
 Tunnel route `/monitoring` обходит ad-blockers в браузере.
 

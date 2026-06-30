@@ -2,6 +2,7 @@ import { Telegraf } from "telegraf";
 import type { InlineKeyboardMarkup } from "@telegraf/types";
 import type { Context } from "telegraf";
 import type { Lesson, Student } from "@crm/shared";
+import { withSentrySpan } from "@crm/shared/sentry-tracing";
 import { lessonReminderKeyboard, parseLessonCallback } from "@crm/shared/lesson-callback";
 import { bindTelegramChat, getTelegramStudentProfile, setParticipantStatus } from "./backend-client";
 import {
@@ -38,6 +39,20 @@ export function getTelegramBot(): Telegraf | null {
   }
 
   bot = new Telegraf(token);
+
+  bot.use(async (ctx, next) => {
+    const updateType = ctx.updateType;
+    await withSentrySpan(
+      `telegram.${updateType}`,
+      "bot.request",
+      () => next(),
+      {
+        "telegram.update_type": updateType,
+        ...(ctx.from?.id ? { "telegram.user_id": ctx.from.id } : {}),
+        ...(ctx.chat?.id ? { "telegram.chat_id": ctx.chat.id } : {})
+      }
+    );
+  });
 
   bot.start(async (ctx) => {
     const interaction = new BotInteraction("start", ctx, {

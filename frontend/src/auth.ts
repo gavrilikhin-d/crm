@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import type { AccountPlan } from "@crm/shared";
+import * as Sentry from "@sentry/nextjs";
 
 declare module "next-auth" {
   interface Session {
@@ -54,19 +55,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         let response: Response;
         try {
-          response = await fetch(`${backendUrl}/api/auth/sync`, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              authorization: `Bearer ${authSyncSecret()}`
-            },
-            body: JSON.stringify({
-              googleSub: profile.sub,
-              email: profile.email,
-              name: profile.name ?? profile.email,
-              image: profile.picture
-            })
-          });
+          response = await Sentry.startSpan(
+            { name: "POST /api/auth/sync", op: "http.client" },
+            async () => {
+              const traceData = Sentry.getTraceData();
+              return fetch(`${backendUrl}/api/auth/sync`, {
+                method: "POST",
+                headers: {
+                  "content-type": "application/json",
+                  authorization: `Bearer ${authSyncSecret()}`,
+                  ...(traceData["sentry-trace"] ? { "sentry-trace": traceData["sentry-trace"] } : {}),
+                  ...(traceData.baggage ? { baggage: traceData.baggage } : {})
+                },
+                body: JSON.stringify({
+                  googleSub: profile.sub,
+                  email: profile.email,
+                  name: profile.name ?? profile.email,
+                  image: profile.picture
+                })
+              });
+            }
+          );
         } catch (error) {
           console.error("[auth] Account sync request failed. Is the backend running on", backendUrl, error);
           throw error;

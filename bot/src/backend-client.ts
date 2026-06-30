@@ -1,4 +1,5 @@
 import type { Lesson, Student, TelegramStudentProfile } from "@crm/shared";
+import { fetchWithSentryTrace } from "@crm/shared/sentry-tracing";
 import { log } from "./logger";
 
 const backendUrl = process.env.BACKEND_INTERNAL_URL ?? "http://localhost:4000";
@@ -56,7 +57,7 @@ export async function setParticipantStatus(input: {
 }
 
 async function api<T>(path: string, options?: { method?: string; body?: unknown }): Promise<T> {
-  const response = await fetch(`${backendUrl}${path}`, {
+  const response = await fetchWithSentryTrace(`${backendUrl}${path}`, {
     method: options?.method ?? "GET",
     headers: internalHeaders(options?.body),
     body: options?.body ? JSON.stringify(options.body) : undefined
