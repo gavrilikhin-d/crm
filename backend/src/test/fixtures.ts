@@ -18,6 +18,7 @@ function createEmptyDatabase(overrides?: Partial<Database>): Database {
     reminders: [],
     telegramInteractions: [],
     balanceAdjustments: [],
+    vacationPeriods: [],
     settings: createDefaultSettings(),
     ...overrides
   };

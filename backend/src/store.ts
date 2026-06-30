@@ -13,13 +13,16 @@ import type {
   PaymentMethod,
   RecurringDeleteScope,
   Reminder,
+  RecurringSchedule,
   Student,
   StudentBalance,
   TelegramInteraction,
-  TelegramStudentProfile
+  TelegramStudentProfile,
+  VacationPeriod
 } from "@crm/shared";
 import { assertStudentCanChangeParticipantStatus } from "@crm/shared/lesson-attendance";
 import { dedupeLessonsByOccurrence } from "@crm/shared/lesson-dedupe";
+import { lessonOverlapsVacation, normalizeVacationPeriod } from "@crm/shared/vacation";
 import { getPlanLimits } from "@crm/shared/plans";
 import { isSupportedCurrency } from "@crm/shared/currency";
 import type { AuthContext } from "./auth";
@@ -35,6 +38,7 @@ import {
   deleteLessonPackageRecord,
   deleteRecurringScheduleRecord,
   deleteStudentRecords,
+  deleteVacationPeriodById,
   findStudentByBindToken,
   findStudentByTelegramUser,
   getAccountById,
@@ -46,6 +50,7 @@ import {
   insertReminder,
   insertStudent,
   insertTelegramInteraction,
+  insertVacationPeriod,
   loadAccountDatabase,
   replaceLesson,
   replaceParticipantDebtFlags,
@@ -307,6 +312,48 @@ export class Store {
     await deleteLessonsByIds([lesson.id]);
   }
 
+  private async applyVacationCancellations(
+    accountId: string,
+    db: Database,
+    period: VacationPeriod
+  ): Promise<number> {
+    const cancelledLessons: Lesson[] = [];
+    const schedulesToUpdate = new Map<string, RecurringSchedule>();
+
+    for (const lesson of db.lessons) {
+      if (lesson.status !== "scheduled" && lesson.status !== "confirmed") {
+        continue;
+      }
+
+      if (!lessonOverlapsVacation(lesson.startsAt, lesson.durationMinutes, [period])) {
+        continue;
+      }
+
+      lesson.status = "cancelled_by_teacher";
+      lesson.participants.forEach((participant) => {
+        if (participant.status === "awaiting" || participant.status === "confirmed") {
+          participant.status = "declined";
+        }
+      });
+      lesson.updatedAt = now();
+      await replaceLesson(lesson);
+      cancelledLessons.push(lesson);
+
+      const schedule = skipRecurringOccurrence(db, lesson);
+      if (schedule) {
+        schedulesToUpdate.set(schedule.id, schedule);
+      }
+    }
+
+    await Promise.all([...schedulesToUpdate.values()].map((schedule) => updateRecurringScheduleRecord(schedule)));
+
+    if (cancelledLessons.length) {
+      scheduleGoogleCalendarSync(accountId, cancelledLessons);
+    }
+
+    return cancelledLessons.length;
+  }
+
   async createLessonPackage(
     ctx: AuthContext,
     input: { name: string; lessonCount: number; price: number }
@@ -353,6 +400,34 @@ export class Store {
     return settings;
   }
 
+  async createVacationPeriod(
+    ctx: AuthContext,
+    input: { startsOn: string; endsOn: string; startsAtTime?: string; endsAtTime?: string; label?: string }
+  ): Promise<{ period: VacationPeriod; cancelledLessons: number }> {
+    const normalized = normalizeVacationPeriod(input);
+    const db = await loadAccountDatabase(ctx.accountId);
+    const timestamp = now();
+    const period: VacationPeriod = {
+      id: nanoid(),
+      ...normalized,
+      label: optional(input.label),
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+
+    await insertVacationPeriod(ctx.accountId, period);
+    db.vacationPeriods.push(period);
+    const cancelledLessons = await this.applyVacationCancellations(ctx.accountId, db, period);
+
+    return { period, cancelledLessons };
+  }
+
+  async deleteVacationPeriod(ctx: AuthContext, id: string): Promise<void> {
+    const db = await loadAccountDatabase(ctx.accountId);
+    mustFind(db.vacationPeriods, id, "VacationPeriod");
+    await deleteVacationPeriodById(id);
+  }
+
   async getGoogleCalendarStatus(ctx: AuthContext): Promise<GoogleCalendarStatus> {
     return readGoogleCalendarStatus(ctx.accountId);
   }
@@ -393,6 +468,10 @@ export class Store {
     uniqueStudentIds.forEach((studentId) => mustFind(db.students, studentId, "Student"));
 
     const startsAt = new Date(input.startsAt).toISOString();
+    if (lessonOverlapsVacation(startsAt, durationMinutes, db.vacationPeriods)) {
+      throw new Error("Cannot schedule a lesson during vacation");
+    }
+
     const durationMinutes =
       input.durationMinutes ??
       (input.lessonType === "group" ? db.settings.groupDurationMinutes : db.settings.individualDurationMinutes);

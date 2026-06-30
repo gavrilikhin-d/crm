@@ -55,6 +55,7 @@ const getWorkerSnapshots = mock(() =>
         reminders: [],
         telegramInteractions: [],
         balanceAdjustments: [],
+        vacationPeriods: [],
         settings
       },
       balances: [balance],
@@ -95,6 +96,7 @@ describe("sendManualPaymentReminder", () => {
             reminders: [],
             telegramInteractions: [],
             balanceAdjustments: [],
+        vacationPeriods: [],
             settings
           },
           balances: [balance],
@@ -129,6 +131,7 @@ describe("sendManualPaymentReminder", () => {
             reminders: [],
             telegramInteractions: [],
             balanceAdjustments: [],
+        vacationPeriods: [],
             settings
           },
           balances: [{ ...balance, remainingLessons: 3, debtLessons: 0 }],

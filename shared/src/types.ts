@@ -156,6 +156,17 @@ export interface BalanceAdjustment {
   createdAt: string;
 }
 
+export interface VacationPeriod {
+  id: string;
+  startsOn: string;
+  endsOn: string;
+  startsAtTime?: string;
+  endsAtTime?: string;
+  label?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AppSettings {
   lessonReminderMinutes: number[];
   individualDurationMinutes: number;
@@ -174,6 +185,7 @@ export interface Database {
   reminders: Reminder[];
   telegramInteractions: TelegramInteraction[];
   balanceAdjustments: BalanceAdjustment[];
+  vacationPeriods: VacationPeriod[];
   settings: AppSettings;
 }
 

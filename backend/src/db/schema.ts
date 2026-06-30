@@ -1,4 +1,4 @@
-import { boolean, foreignKey, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, date, foreignKey, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const accounts = pgTable("accounts", {
   id: text("id").primaryKey(),
@@ -208,4 +208,18 @@ export const appSettings = pgTable("app_settings", {
   defaultSingleLessonPrice: integer("default_single_lesson_price").notNull(),
   currency: text("currency").notNull(),
   cancellationPolicy: text("cancellation_policy").notNull()
+});
+
+export const vacationPeriods = pgTable("vacation_periods", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id")
+    .notNull()
+    .references(() => accounts.id, { onDelete: "cascade" }),
+  startsOn: date("starts_on").notNull(),
+  endsOn: date("ends_on").notNull(),
+  startsAtTime: text("starts_at_time"),
+  endsAtTime: text("ends_at_time"),
+  label: text("label"),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" }).notNull()
 });

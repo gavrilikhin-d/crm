@@ -76,6 +76,7 @@ function createSnapshot(input: {
         reminders: [],
         telegramInteractions: [],
         balanceAdjustments: [],
+        vacationPeriods: [],
         settings
       },
       settings

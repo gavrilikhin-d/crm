@@ -23,6 +23,7 @@ import { LessonParticipantSummary } from "@/components/lesson-participant-summar
 import { ParticipantCardAvatar, ParticipantCardLabel } from "@/components/participant-card-label";
 import { SnapshotRefreshControl } from "@/components/snapshot-refresh-control";
 import { GoogleCalendarSettings } from "@/components/google-calendar-settings";
+import { VacationDialog } from "@/components/vacation-dialog";
 import { StudentCombobox } from "@/components/student-combobox";
 import { StudentMultiCombobox } from "@/components/student-multi-combobox";
 import { StudentForm } from "@/components/student-form";
@@ -80,6 +81,7 @@ import {
 } from "@/i18n/format";
 import { getPaymentMethodLabel, getWeekdayShortLabels } from "@/i18n/labels";
 import { dedupeLessonsByOccurrence } from "@crm/shared/lesson-dedupe";
+import { getVacationDayOverlay, getVacationPeriodForDate } from "@crm/shared/vacation";
 import type {
   AccountInfo,
   AppSettings,
@@ -88,7 +90,8 @@ import type {
   LessonPackage,
   RecurringDeleteScope,
   Student,
-  StudentBalance
+  StudentBalance,
+  VacationPeriod
 } from "@crm/shared";
 import { CURRENCIES, formatMoney, resolveCurrency, type CurrencyCode } from "@crm/shared/currency";
 import { PLAN_META } from "@crm/shared/plans";
@@ -172,6 +175,13 @@ export default function Home() {
       (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()
     );
   }, [snapshot?.lessons]);
+  const scheduleLessons = useMemo(
+    () =>
+      lessons.filter(
+        (lesson) => lesson.status !== "cancelled_by_teacher" && lesson.status !== "cancelled_by_student"
+      ),
+    [lessons]
+  );
   const payments = useMemo(
     () =>
       [...(snapshot?.payments ?? [])].sort(
@@ -181,6 +191,7 @@ export default function Home() {
   );
   const currency = resolveCurrency(snapshot?.settings.currency);
   const recurringSchedules = useMemo(() => snapshot?.recurringSchedules ?? [], [snapshot?.recurringSchedules]);
+  const vacationPeriods = useMemo(() => snapshot?.vacationPeriods ?? [], [snapshot?.vacationPeriods]);
   const selectedLesson = useMemo(
     () => (selectedLessonId ? lessons.find((lesson) => lesson.id === selectedLessonId) ?? null : null),
     [lessons, selectedLessonId]
@@ -204,15 +215,15 @@ export default function Home() {
   const monthDays = useMemo(() => getMonthGridDays(selectedDate), [selectedDate]);
   const weekLessons = useMemo(
     () =>
-      lessons.filter((lesson) => {
+      scheduleLessons.filter((lesson) => {
         const lessonDate = new Date(lesson.startsAt);
         return weekDays.some((day) => sameDate(day, lessonDate));
       }),
-    [lessons, weekDays]
+    [scheduleLessons, weekDays]
   );
   const dayLessons = useMemo(
-    () => lessons.filter((lesson) => sameDate(new Date(lesson.startsAt), selectedDate)),
-    [lessons, selectedDate]
+    () => scheduleLessons.filter((lesson) => sameDate(new Date(lesson.startsAt), selectedDate)),
+    [scheduleLessons, selectedDate]
   );
   const dayCalendarRange = useMemo(
     () => getCalendarRangeWithCurrentTime(dayLessons, selectedDate, currentTime),
@@ -238,11 +249,11 @@ export default function Home() {
   );
   const monthLessons = useMemo(
     () =>
-      lessons.filter((lesson) => {
+      scheduleLessons.filter((lesson) => {
         const lessonDate = new Date(lesson.startsAt);
         return monthDays.some((day) => sameDate(day, lessonDate));
       }),
-    [lessons, monthDays]
+    [scheduleLessons, monthDays]
   );
 
   const loadSnapshot = useCallback(async (options?: { silent?: boolean }) => {
@@ -656,6 +667,11 @@ export default function Home() {
                 <Button variant="secondary" size="icon" type="button" onClick={() => shiftCalendar(1)} aria-label={t("calendar.nextPeriod")}>
                   <ChevronRight className="size-4" />
                 </Button>
+                <VacationDialog
+                  vacationPeriods={vacationPeriods}
+                  defaultDate={selectedDate}
+                  onChanged={() => refreshNow()}
+                />
                 <Dialog open={lessonDialogOpen} onOpenChange={setLessonDialogOpen}>
                   <DialogTrigger asChild>
                     <Button size="icon" type="button" className="hidden sm:inline-flex" aria-label={t("calendar.createLesson")}>
@@ -688,6 +704,7 @@ export default function Home() {
                   calendarRange={dayCalendarRange}
                   currentTime={currentTime}
                   lessons={dayLessons}
+                  vacationPeriods={vacationPeriods}
                   getStudent={getStudent}
                   onSelectLesson={openLessonOverview}
                 />
@@ -706,6 +723,7 @@ export default function Home() {
                   calendarRange={weekCalendarRange}
                   currentTime={currentTime}
                   lessons={weekLessons}
+                  vacationPeriods={vacationPeriods}
                   getStudent={getStudent}
                   onSelectLesson={openLessonOverview}
                 />
@@ -718,6 +736,7 @@ export default function Home() {
                   monthDays={monthDays}
                   currentTime={currentTime}
                   lessons={monthLessons}
+                  vacationPeriods={vacationPeriods}
                   getStudent={getStudent}
                   onSelectLesson={openLessonOverview}
                 />
@@ -1534,6 +1553,7 @@ function DayCalendar({
   calendarRange,
   currentTime,
   lessons,
+  vacationPeriods,
   getStudent,
   onSelectLesson
 }: {
@@ -1541,10 +1561,12 @@ function DayCalendar({
   calendarRange: CalendarRange;
   currentTime: Date | null;
   lessons: Lesson[];
+  vacationPeriods: VacationPeriod[];
   getStudent: (studentId: string) => Student | undefined;
   onSelectLesson: (lesson: Lesson) => void;
 }) {
   const isToday = currentTime ? sameDate(day, currentTime) : false;
+  const vacationPeriod = getVacationPeriodForDate(day, vacationPeriods);
 
   return (
     <div className="grid min-h-[680px] grid-cols-[62px_minmax(240px,1fr)] grid-rows-[58px_auto]">
@@ -1553,7 +1575,8 @@ function DayCalendar({
         className={cn(
           calendarStickyHeaderClass,
           "grid justify-items-center",
-          isToday && "bg-stone-50 dark:bg-stone-900"
+          isToday && "bg-stone-50 dark:bg-stone-900",
+          vacationPeriod && "bg-sky-50 dark:bg-sky-950"
         )}
       >
         <strong className="text-xs uppercase text-stone-900">{formatWeekday(day)}</strong>
@@ -1572,6 +1595,7 @@ function DayCalendar({
         calendarRange={calendarRange}
         currentTime={currentTime}
         lessons={lessons}
+        vacationPeriod={vacationPeriod}
         getStudent={getStudent}
         onSelectLesson={onSelectLesson}
       />
@@ -1584,6 +1608,7 @@ function WeekCalendar({
   calendarRange,
   currentTime,
   lessons,
+  vacationPeriods,
   getStudent,
   onSelectLesson
 }: {
@@ -1591,6 +1616,7 @@ function WeekCalendar({
   calendarRange: CalendarRange;
   currentTime: Date | null;
   lessons: Lesson[];
+  vacationPeriods: VacationPeriod[];
   getStudent: (studentId: string) => Student | undefined;
   onSelectLesson: (lesson: Lesson) => void;
 }) {
@@ -1601,12 +1627,14 @@ function WeekCalendar({
       <div className={calendarStickyHeaderClass} />
       {weekDays.map((day, index) => {
         const isToday = currentTime ? sameDate(day, currentTime) : false;
+        const vacationPeriod = getVacationPeriodForDate(day, vacationPeriods);
         return (
           <div
             className={cn(
               calendarStickyHeaderClass,
               "grid justify-items-center",
-              isToday && "bg-stone-50 dark:bg-stone-900"
+              isToday && "bg-stone-50 dark:bg-stone-900",
+              vacationPeriod && "bg-sky-50 dark:bg-sky-950"
             )}
             key={day.toISOString()}
           >
@@ -1630,6 +1658,7 @@ function WeekCalendar({
           calendarRange={calendarRange}
           currentTime={currentTime}
           lessons={lessons.filter((lesson) => sameDate(new Date(lesson.startsAt), day))}
+          vacationPeriod={getVacationPeriodForDate(day, vacationPeriods)}
           getStudent={getStudent}
           onSelectLesson={onSelectLesson}
         />
@@ -1655,6 +1684,7 @@ function DayColumn({
   calendarRange,
   currentTime,
   lessons,
+  vacationPeriod,
   getStudent,
   onSelectLesson
 }: {
@@ -1662,24 +1692,69 @@ function DayColumn({
   calendarRange: CalendarRange;
   currentTime: Date | null;
   lessons: Lesson[];
+  vacationPeriod?: VacationPeriod;
   getStudent: (studentId: string) => Student | undefined;
   onSelectLesson: (lesson: Lesson) => void;
 }) {
+  const { t } = useI18n();
   const isToday = currentTime ? sameDate(day, currentTime) : false;
   const currentTimeOffset = currentTime && isToday ? getCurrentTimeOffset(currentTime, calendarRange) : null;
   const columnHeight = calendarRange.hours.length * hourHeight;
+  const vacationOverlay = vacationPeriod ? getVacationDayOverlay(day, vacationPeriod) : null;
+  const vacationTop =
+    vacationOverlay !== null
+      ? ((Math.max(vacationOverlay.topMinutes, calendarRange.startHour * 60) - calendarRange.startHour * 60) /
+          60) *
+        hourHeight
+      : 0;
+  const vacationHeight =
+    vacationOverlay !== null
+      ? ((Math.min(
+          vacationOverlay.topMinutes + vacationOverlay.heightMinutes,
+          calendarRange.endHour * 60
+        ) -
+          Math.max(vacationOverlay.topMinutes, calendarRange.startHour * 60)) /
+          60) *
+        hourHeight
+      : 0;
 
   return (
     <div
       className={cn(
         "relative border-l border-stone-100",
-        isToday && "bg-primary/5 dark:bg-primary/10"
+        isToday && "bg-primary/5 dark:bg-primary/10",
+        vacationOverlay?.isFullDay && "bg-sky-50/70 dark:bg-sky-950/30"
       )}
       style={{
         minHeight: columnHeight,
-        backgroundImage: "repeating-linear-gradient(to bottom, transparent 0, transparent 75px, #ebe8e5 75px, #ebe8e5 76px)"
+        backgroundImage:
+          vacationOverlay && !vacationOverlay.isFullDay
+            ? "repeating-linear-gradient(to bottom, transparent 0, transparent 75px, #ebe8e5 75px, #ebe8e5 76px)"
+            : vacationOverlay
+              ? undefined
+              : "repeating-linear-gradient(to bottom, transparent 0, transparent 75px, #ebe8e5 75px, #ebe8e5 76px)"
       }}
     >
+      {vacationOverlay ? (
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-x-1 z-[5] flex justify-center bg-[repeating-linear-gradient(-45deg,rgba(14,165,233,0.08),rgba(14,165,233,0.08)_8px,transparent_8px,transparent_16px)]",
+            vacationOverlay.isFullDay ? "inset-0 items-start pt-3" : "items-center rounded-md border border-sky-200/80"
+          )}
+          style={
+            vacationOverlay.isFullDay
+              ? undefined
+              : {
+                  top: vacationTop,
+                  height: Math.max(vacationHeight, 28)
+                }
+          }
+        >
+          <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-sky-700 dark:bg-sky-900 dark:text-sky-200">
+            {vacationPeriod?.label ?? t("calendar.vacation.label")}
+          </span>
+        </div>
+      ) : null}
       {currentTimeOffset !== null ? <CurrentTimeMarker top={currentTimeOffset} /> : null}
       {lessons.map((lesson) => (
         <CalendarLesson
@@ -1708,6 +1783,7 @@ function MonthCalendar({
   monthDays,
   currentTime,
   lessons,
+  vacationPeriods,
   getStudent,
   onSelectLesson
 }: {
@@ -1715,6 +1791,7 @@ function MonthCalendar({
   monthDays: Date[];
   currentTime: Date | null;
   lessons: Lesson[];
+  vacationPeriods: VacationPeriod[];
   getStudent: (studentId: string) => Student | undefined;
   onSelectLesson: (lesson: Lesson) => void;
 }) {
@@ -1737,23 +1814,31 @@ function MonthCalendar({
         const dayLessons = lessons.filter((lesson) => sameDate(new Date(lesson.startsAt), day));
         const isOutsideMonth = day.getMonth() !== selectedDate.getMonth();
         const isToday = currentTime ? sameDate(day, currentTime) : false;
+        const vacationPeriod = getVacationPeriodForDate(day, vacationPeriods);
         return (
           <div
             className={cn(
               "min-h-16 min-w-0 overflow-hidden border-b border-r border-stone-100 p-1 sm:min-h-28 sm:p-1.5 md:min-h-32 md:p-2",
-              isToday && "ring-1 ring-inset ring-stone-200"
+              isToday && "ring-1 ring-inset ring-stone-200",
+              vacationPeriod && "bg-sky-50/80 dark:bg-sky-950/30"
             )}
             key={day.toISOString()}
           >
             <div
               className={cn(
                 "mb-1 inline-flex size-5 items-center justify-center rounded-full text-[0.625rem] font-bold sm:mb-2 sm:size-6 sm:text-xs",
-                isToday ? "bg-stone-900 text-white" : isOutsideMonth ? "text-stone-300" : "text-stone-700"
+                isToday ? "bg-stone-900 text-white" : isOutsideMonth ? "text-stone-300" : "text-stone-700",
+                vacationPeriod && !isToday && "bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-200"
               )}
             >
               {day.getDate()}
             </div>
             <div className="grid min-w-0 gap-0.5 sm:gap-1">
+              {vacationPeriod ? (
+                <div className="truncate rounded border border-sky-200 bg-sky-100 px-1 py-0.5 text-[0.625rem] font-medium text-sky-800 sm:text-[0.68rem] dark:border-sky-800 dark:bg-sky-900 dark:text-sky-100">
+                  {vacationPeriod.label ?? t("calendar.vacation.label")}
+                </div>
+              ) : null}
               {dayLessons.slice(0, maxVisibleLessons).map((lesson) => (
                 <MonthLessonChip
                   key={lesson.id}

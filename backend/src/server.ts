@@ -42,6 +42,9 @@ const protectedRoutes: Array<{ method: string; pattern: RegExp; handler: Handler
 
   route("PATCH", /^\/api\/settings$/, updateSettings),
 
+  route("POST", /^\/api\/vacation-periods$/, createVacationPeriod),
+  route("DELETE", /^\/api\/vacation-periods\/([^/]+)$/, deleteVacationPeriod),
+
   route("GET", /^\/api\/google-calendar\/status$/, getGoogleCalendarStatus),
   route("GET", /^\/api\/google-calendar\/connect$/, getGoogleCalendarConnect),
   route("POST", /^\/api\/google-calendar\/sync$/, syncGoogleCalendar),
@@ -372,6 +375,27 @@ async function createAdjustment(request: IncomingMessage, response: ServerRespon
     await store.createAdjustment(ctx!, body as { studentId: string; lessonDelta: number; reason: string }),
     201
   );
+}
+
+async function createVacationPeriod(request: IncomingMessage, response: ServerResponse, _match: RegExpMatchArray, ctx?: AuthContext) {
+  const body = await readJson(request);
+  requireFields(body, ["startsOn", "endsOn"]);
+  jsonOk(
+    response,
+    await store.createVacationPeriod(ctx!, body as {
+      startsOn: string;
+      endsOn: string;
+      startsAtTime?: string;
+      endsAtTime?: string;
+      label?: string;
+    }),
+    201
+  );
+}
+
+async function deleteVacationPeriod(_request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray, ctx?: AuthContext) {
+  await store.deleteVacationPeriod(ctx!, match[1]);
+  jsonOk(response, { ok: true });
 }
 
 async function getWorkerSnapshots(_request: IncomingMessage, response: ServerResponse) {

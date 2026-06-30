@@ -213,6 +213,91 @@ describe("materializeRecurringLessons", () => {
     expect(created.length).toBeGreaterThan(0);
   });
 
+  test("does not materialize lessons during vacation periods", () => {
+    const startsAt = futureDate(7, 18, 0);
+    const alice = createStudentRecord("Alice");
+    const schedule = createRecurringSchedule({
+      startsAt,
+      studentIds: [alice.id],
+      lessonType: "individual"
+    });
+    const vacationDate = new Date(startsAt);
+    const pad = (value: number) => String(value).padStart(2, "0");
+    const startsOn = `${vacationDate.getFullYear()}-${pad(vacationDate.getMonth() + 1)}-${pad(vacationDate.getDate())}`;
+    const db = createEmptyDatabase({
+      students: [alice],
+      recurringSchedules: [schedule],
+      vacationPeriods: [
+        {
+          id: "vacation-1",
+          startsOn,
+          endsOn: startsOn,
+          createdAt: now(),
+          updatedAt: now()
+        }
+      ]
+    });
+
+    const created = materializeRecurringLessons(db);
+    const skippedInstant = new Date(startsAt).getTime();
+
+    expect(created.some((lesson) => new Date(lesson.startsAt).getTime() === skippedInstant)).toBe(false);
+    expect(created.length).toBeGreaterThan(0);
+  });
+
+  test("materializes lessons outside timed vacation window on start and end dates", () => {
+    const morningOnStartDate = futureDate(7, 10, 0);
+    const afternoonOnStartDate = futureDate(7, 15, 0);
+    const afternoonOnEndDate = futureDate(8, 14, 0);
+    const alice = createStudentRecord("Alice");
+    const pad = (value: number) => String(value).padStart(2, "0");
+    const startDate = new Date(morningOnStartDate);
+    const startsOn = `${startDate.getFullYear()}-${pad(startDate.getMonth() + 1)}-${pad(startDate.getDate())}`;
+    const endDate = new Date(afternoonOnEndDate);
+    const endsOn = `${endDate.getFullYear()}-${pad(endDate.getMonth() + 1)}-${pad(endDate.getDate())}`;
+
+    const db = createEmptyDatabase({
+      students: [alice],
+      recurringSchedules: [
+        createRecurringSchedule({
+          startsAt: morningOnStartDate,
+          studentIds: [alice.id],
+          lessonType: "individual"
+        }),
+        createRecurringSchedule({
+          startsAt: afternoonOnStartDate,
+          studentIds: [alice.id],
+          lessonType: "individual"
+        }),
+        createRecurringSchedule({
+          startsAt: afternoonOnEndDate,
+          studentIds: [alice.id],
+          lessonType: "individual"
+        })
+      ],
+      vacationPeriods: [
+        {
+          id: "vacation-1",
+          startsOn,
+          endsOn,
+          startsAtTime: "14:00",
+          endsAtTime: "12:00",
+          createdAt: now(),
+          updatedAt: now()
+        }
+      ]
+    });
+
+    const created = materializeRecurringLessons(db);
+    const morningInstant = new Date(morningOnStartDate).getTime();
+    const afternoonOnStartInstant = new Date(afternoonOnStartDate).getTime();
+    const afternoonOnEndInstant = new Date(afternoonOnEndDate).getTime();
+
+    expect(created.some((lesson) => new Date(lesson.startsAt).getTime() === morningInstant)).toBe(true);
+    expect(created.some((lesson) => new Date(lesson.startsAt).getTime() === afternoonOnStartInstant)).toBe(false);
+    expect(created.some((lesson) => new Date(lesson.startsAt).getTime() === afternoonOnEndInstant)).toBe(true);
+  });
+
   test("does not duplicate existing recurring lessons", () => {
     const startsAt = futureDate(7, 18, 0);
     const alice = createStudentRecord("Alice");

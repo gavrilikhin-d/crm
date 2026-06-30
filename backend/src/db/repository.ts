@@ -13,7 +13,8 @@ import type {
   RecurringSchedule,
   Reminder,
   Student,
-  TelegramInteraction
+  TelegramInteraction,
+  VacationPeriod
 } from "@crm/shared";
 import { db } from "./client";
 import {
@@ -29,7 +30,8 @@ import {
   recurringSkippedOccurrences,
   reminders,
   students,
-  telegramInteractions
+  telegramInteractions,
+  vacationPeriods
 } from "./schema";
 import { createDefaultSettings } from "../store-logic";
 
@@ -220,7 +222,8 @@ export async function loadAccountDatabase(accountId: string): Promise<Database> 
     reminderRows,
     interactionRows,
     adjustmentRows,
-    settingsRows
+    settingsRows,
+    vacationRows
   ] = await Promise.all([
     db.select().from(students).where(eq(students.accountId, accountId)),
     db.select().from(lessonPackages).where(eq(lessonPackages.accountId, accountId)),
@@ -230,7 +233,8 @@ export async function loadAccountDatabase(accountId: string): Promise<Database> 
     db.select().from(reminders).where(eq(reminders.accountId, accountId)),
     db.select().from(telegramInteractions).where(eq(telegramInteractions.accountId, accountId)),
     db.select().from(balanceAdjustments).where(eq(balanceAdjustments.accountId, accountId)),
-    db.select().from(appSettings).where(eq(appSettings.accountId, accountId))
+    db.select().from(appSettings).where(eq(appSettings.accountId, accountId)),
+    db.select().from(vacationPeriods).where(eq(vacationPeriods.accountId, accountId))
   ]);
 
   const lessonIds = lessonRows.map((row) => row.id);
@@ -296,6 +300,7 @@ export async function loadAccountDatabase(accountId: string): Promise<Database> 
     reminders: reminderRows.map(mapReminder),
     telegramInteractions: interactionRows.map(mapTelegramInteraction),
     balanceAdjustments: adjustmentRows.map(mapBalanceAdjustment),
+    vacationPeriods: vacationRows.map(mapVacationPeriod).sort((a, b) => a.startsOn.localeCompare(b.startsOn)),
     settings: settingsRows[0] ? mapSettings(settingsRows[0]) : createDefaultSettings()
   };
 }
@@ -777,6 +782,37 @@ function mapTelegramInteraction(row: typeof telegramInteractions.$inferSelect): 
     studentId: row.studentId,
     action: row.action as TelegramInteraction["action"],
     createdAt: row.createdAt
+  };
+}
+
+export async function insertVacationPeriod(accountId: string, period: VacationPeriod): Promise<void> {
+  await db.insert(vacationPeriods).values({
+    id: period.id,
+    accountId,
+    startsOn: period.startsOn,
+    endsOn: period.endsOn,
+    startsAtTime: period.startsAtTime ?? null,
+    endsAtTime: period.endsAtTime ?? null,
+    label: period.label ?? null,
+    createdAt: period.createdAt,
+    updatedAt: period.updatedAt
+  });
+}
+
+export async function deleteVacationPeriodById(id: string): Promise<void> {
+  await db.delete(vacationPeriods).where(eq(vacationPeriods.id, id));
+}
+
+function mapVacationPeriod(row: typeof vacationPeriods.$inferSelect): VacationPeriod {
+  return {
+    id: row.id,
+    startsOn: row.startsOn,
+    endsOn: row.endsOn,
+    startsAtTime: row.startsAtTime ?? undefined,
+    endsAtTime: row.endsAtTime ?? undefined,
+    label: row.label ?? undefined,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt
   };
 }
 

@@ -8,6 +8,7 @@ import type {
   Student,
   StudentBalance
 } from "@crm/shared";
+import { lessonOverlapsVacation } from "@crm/shared/vacation";
 
 export const RECURRING_HORIZON_WEEKS = 52;
 
@@ -263,7 +264,11 @@ export function materializeRecurringLessons(db: Database): Lesson[] {
 
       const startsAt = normalizeInstant(occurrence.toISOString());
 
-      if (!skipped.has(new Date(startsAt).getTime()) && !hasRecurringLesson(db, schedule.id, startsAt)) {
+      if (
+        !lessonOverlapsVacation(startsAt, schedule.durationMinutes, db.vacationPeriods) &&
+        !skipped.has(new Date(startsAt).getTime()) &&
+        !hasRecurringLesson(db, schedule.id, startsAt)
+      ) {
         const lesson = buildLesson(db, {
           startsAt,
           durationMinutes: schedule.durationMinutes,
