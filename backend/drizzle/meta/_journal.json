@@ -10,10 +10,24 @@
       "breakpoints": true
     },
     {
+      "idx": 1,
+      "version": "7",
+      "when": 1782755922743,
+      "tag": "0001_vacation_periods",
+      "breakpoints": true
+    },
+    {
       "idx": 2,
       "version": "7",
       "when": 1782755922744,
       "tag": "0002_vacation_times",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1782918154126,
+      "tag": "0003_unique_marvex",
       "breakpoints": true
     }
   ]

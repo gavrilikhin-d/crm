@@ -11,6 +11,7 @@
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:baseline": "tsx src/db/baseline-migrations.ts",
     "migrate:json": "tsx src/migrate-json.ts",
     "migrate:legacy-account": "tsx src/migrate-legacy-account.ts",
     "migrate:multitenancy": "tsx src/migrate-multitenancy.ts",
