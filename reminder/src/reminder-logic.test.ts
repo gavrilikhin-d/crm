@@ -149,6 +149,27 @@ describe("collectPendingLessonReminders", () => {
     expect(collectPendingLessonReminders(snapshots, nowMs)).toHaveLength(0);
   });
 
+  test("does not send reminders for completed past lessons added retroactively", () => {
+    const student = createStudent("s1");
+    const pastStartsAt = "2020-06-01T10:00:00.000Z";
+    const nowMs = Date.parse("2026-06-30T17:10:00.000Z");
+    const snapshots = createSnapshot({
+      students: [student],
+      lessons: [
+        createLesson({
+          id: "past-completed",
+          startsAt: pastStartsAt,
+          status: "completed",
+          studentIds: ["s1"],
+          participantStatuses: ["attended"]
+        })
+      ],
+      leadMinutes: [1440, 120, 60]
+    });
+
+    expect(collectPendingLessonReminders(snapshots, nowMs)).toHaveLength(0);
+  });
+
   test("emits one reminder per configured lead time", () => {
     const student = createStudent("s1");
     const startsAt = "2026-06-30T18:00:00.000Z";

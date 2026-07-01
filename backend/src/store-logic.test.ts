@@ -12,6 +12,7 @@ import {
 import {
   applyLessonCompletionCharges,
   applyTeacherParticipantStatusUpdate,
+  buildLesson,
   getStudentBalance,
   hasRecurringLesson,
   isOccurrenceSkipped,
@@ -212,6 +213,81 @@ describe("teacher participant status and balance", () => {
       chargedLessons: 1,
       remainingLessons: 3,
       debtLessons: 0
+    });
+  });
+});
+
+describe("past lesson creation", () => {
+  const pastStartsAt = "2020-06-01T10:00:00.000Z";
+  const futureStartsAt = futureDate(14, 18, 0);
+
+  test("marks participants attended, completes lesson, and charges balance", () => {
+    const alice = createStudentRecord("Alice");
+    const db = createEmptyDatabase({
+      students: [alice],
+      payments: [createPayment(alice.id, 4)]
+    });
+
+    const lesson = buildLesson(db, {
+      startsAt: pastStartsAt,
+      lessonType: "individual",
+      studentIds: [alice.id]
+    });
+    db.lessons.push(lesson);
+
+    expect(lesson.status).toBe("completed");
+    expect(lesson.participants[0]?.status).toBe("attended");
+    expect(lesson.participants[0]?.balanceCharged).toBe(true);
+    expect(getStudentBalance(db, alice.id)).toEqual({
+      studentId: alice.id,
+      paidLessons: 4,
+      chargedLessons: 1,
+      remainingLessons: 3,
+      debtLessons: 0
+    });
+  });
+
+  test("leaves future lessons scheduled without charging balance", () => {
+    const alice = createStudentRecord("Alice");
+    const db = createEmptyDatabase({
+      students: [alice],
+      payments: [createPayment(alice.id, 4)]
+    });
+
+    const lesson = buildLesson(db, {
+      startsAt: futureStartsAt,
+      lessonType: "individual",
+      studentIds: [alice.id]
+    });
+    db.lessons.push(lesson);
+
+    expect(lesson.status).toBe("scheduled");
+    expect(lesson.participants[0]?.status).toBe("awaiting");
+    expect(lesson.participants[0]?.balanceCharged).toBe(false);
+    expect(getStudentBalance(db, alice.id).remainingLessons).toBe(4);
+  });
+
+  test("creates debt when past lesson is added without paid balance", () => {
+    const alice = createStudentRecord("Alice");
+    const db = createEmptyDatabase({ students: [alice] });
+
+    const lesson = buildLesson(db, {
+      startsAt: pastStartsAt,
+      lessonType: "individual",
+      studentIds: [alice.id]
+    });
+
+    expect(lesson.participants[0]?.balanceCharged).toBe(true);
+    expect(lesson.participants[0]?.hasDebt).toBe(true);
+
+    db.lessons.push(lesson);
+
+    expect(getStudentBalance(db, alice.id)).toEqual({
+      studentId: alice.id,
+      paidLessons: 0,
+      chargedLessons: 1,
+      remainingLessons: 0,
+      debtLessons: 1
     });
   });
 });

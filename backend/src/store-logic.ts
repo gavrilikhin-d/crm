@@ -162,11 +162,44 @@ export function applyLessonCompletionCharges(db: Database, lesson: Lesson): void
       participant.balanceCharged = true;
     }
 
-    participant.hasDebt = getStudentBalance(db, participant.studentId).remainingLessons < 0;
+    participant.hasDebt = getStudentBalance(db, participant.studentId, [lesson]).remainingLessons < 1;
   }
 }
 
-export function getStudentBalance(db: Database, studentId: string): StudentBalance {
+export function isPastLessonStart(startsAt: string, referenceNow = Date.now()): boolean {
+  return new Date(startsAt).getTime() <= referenceNow;
+}
+
+export function finalizePastLesson(db: Database, lesson: Lesson, referenceNow = Date.now()): void {
+  if (!isPastLessonStart(lesson.startsAt, referenceNow)) {
+    return;
+  }
+
+  for (const participant of lesson.participants) {
+    participant.status = "attended";
+  }
+
+  applyLessonCompletionCharges(db, lesson);
+  lesson.status = "completed";
+  lesson.updatedAt = now();
+}
+
+function lessonsForBalance(db: Database, extraLessons: Lesson[] = []): Lesson[] {
+  if (!extraLessons.length) {
+    return db.lessons;
+  }
+
+  const lessons = [...db.lessons];
+  for (const lesson of extraLessons) {
+    if (!lessons.some((item) => item.id === lesson.id)) {
+      lessons.push(lesson);
+    }
+  }
+
+  return lessons;
+}
+
+export function getStudentBalance(db: Database, studentId: string, extraLessons: Lesson[] = []): StudentBalance {
   const paidLessons = db.payments
     .filter((payment) => payment.studentId === studentId)
     .reduce((sum, payment) => sum + payment.lessonCount, 0);
@@ -175,7 +208,7 @@ export function getStudentBalance(db: Database, studentId: string): StudentBalan
     .filter((adjustment) => adjustment.studentId === studentId)
     .reduce((sum, adjustment) => sum + adjustment.lessonDelta, 0);
 
-  const chargedLessons = db.lessons.reduce((sum, lesson) => {
+  const chargedLessons = lessonsForBalance(db, extraLessons).reduce((sum, lesson) => {
     return (
       sum +
       lesson.participants.filter(
@@ -239,11 +272,9 @@ export function buildLesson(
     updatedAt: timestamp
   };
 
-  return recalculateLesson(
-    lesson,
-    db.settings.individualDurationMinutes,
-    db.settings.groupDurationMinutes
-  );
+  recalculateLesson(lesson, db.settings.individualDurationMinutes, db.settings.groupDurationMinutes);
+  finalizePastLesson(db, lesson);
+  return lesson;
 }
 
 export function hasRecurringLesson(db: Database, scheduleId: string, startsAt: string): boolean {
