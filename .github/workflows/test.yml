@@ -46,6 +46,9 @@ jobs:
       - name: Lint
         run: bun run lint
 
+      - name: Typecheck
+        run: bun run typecheck
+
       - name: Push test database schema
         working-directory: backend
         env:
