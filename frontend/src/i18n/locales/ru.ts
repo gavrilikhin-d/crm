@@ -233,6 +233,7 @@ const ru = {
     googleCalendarSynced: "Синхронизировано занятий: {synced}. Ошибок: {failed}.",
     studentDeleted: "Ученик удален.",
     participantRemoved: "{name} убран(а) с занятия.",
+    participantStatusUpdated: "Статус {name} обновлён.",
     participantAdded: "{name} добавлен(а) на занятие.",
     participantAddedGroup: "{name} добавлен(а). Занятие стало групповым.",
     participantsAdded: "Добавлено учеников: {count}.",
@@ -306,6 +307,8 @@ const ru = {
     noStudentsToAdd: "Все активные ученики уже на этом занятии.",
     addParticipantAria: "Добавить ученика на занятие",
     removeParticipantAria: "Убрать {name} с занятия",
+    participantStatusAria: "Нажмите, чтобы изменить статус участника {name}",
+    participantStatusHint: "Нажмите, чтобы изменить статус",
     recurring: "Каждую неделю, {weekday} в {time}",
     delete: {
       title: "Удалить занятие",

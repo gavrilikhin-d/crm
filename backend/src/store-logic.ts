@@ -4,10 +4,16 @@ import type {
   Database,
   Lesson,
   LessonParticipant,
+  ParticipantStatus,
   RecurringSchedule,
   Student,
   StudentBalance
 } from "@crm/shared";
+import {
+  assertTeacherParticipantStatus,
+  normalizeTeacherParticipantStatus,
+  type TeacherParticipantStatus
+} from "@crm/shared/lesson-attendance";
 import { lessonOverlapsVacation } from "@crm/shared/vacation";
 
 export const RECURRING_HORIZON_WEEKS = 52;
@@ -115,6 +121,49 @@ export function recalculateLesson(
   }
 
   return lesson;
+}
+
+export function shouldChargeParticipant(
+  status: ParticipantStatus,
+  cancellationPolicy: AppSettings["cancellationPolicy"]
+): boolean {
+  return (
+    status === "attended" ||
+    status === "missed" ||
+    (status === "declined" && cancellationPolicy === "paid")
+  );
+}
+
+export function applyTeacherParticipantStatusUpdate(
+  db: Database,
+  lesson: Lesson,
+  participant: LessonParticipant,
+  status: TeacherParticipantStatus
+): void {
+  assertTeacherParticipantStatus(status);
+
+  participant.status = normalizeTeacherParticipantStatus(lesson, status);
+
+  if (lesson.status === "completed") {
+    participant.balanceCharged = shouldChargeParticipant(participant.status, db.settings.cancellationPolicy);
+  }
+
+  const balance = getStudentBalance(db, participant.studentId);
+  participant.hasDebt = balance.remainingLessons < 1;
+}
+
+export function applyLessonCompletionCharges(db: Database, lesson: Lesson): void {
+  for (const participant of lesson.participants) {
+    if (participant.status === "confirmed" || participant.status === "awaiting") {
+      participant.status = "attended";
+    }
+
+    if (shouldChargeParticipant(participant.status, db.settings.cancellationPolicy) && !participant.balanceCharged) {
+      participant.balanceCharged = true;
+    }
+
+    participant.hasDebt = getStudentBalance(db, participant.studentId).remainingLessons < 0;
+  }
 }
 
 export function getStudentBalance(db: Database, studentId: string): StudentBalance {

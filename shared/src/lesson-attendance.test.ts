@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { Lesson } from "./types";
-import { assertStudentCanChangeParticipantStatus, canStudentChangeParticipantStatus } from "./lesson-attendance";
+import {
+  assertStudentCanChangeParticipantStatus,
+  canStudentChangeParticipantStatus,
+  normalizeTeacherParticipantStatus,
+  toTeacherParticipantStatus
+} from "./lesson-attendance";
 
 function createLesson(overrides: Partial<Lesson> & Pick<Lesson, "startsAt">): Lesson {
   const timestamp = "2026-01-01T00:00:00.000Z";
@@ -53,5 +58,20 @@ describe("assertStudentCanChangeParticipantStatus", () => {
     expect(() => assertStudentCanChangeParticipantStatus(lesson, now)).toThrow(
       "Cannot change attendance for a past lesson"
     );
+  });
+});
+
+describe("teacher participant status helpers", () => {
+  test("maps attended-like statuses to confirmed for teacher UI", () => {
+    expect(toTeacherParticipantStatus("awaiting")).toBe("confirmed");
+    expect(toTeacherParticipantStatus("confirmed")).toBe("confirmed");
+    expect(toTeacherParticipantStatus("attended")).toBe("confirmed");
+    expect(toTeacherParticipantStatus("declined")).toBe("declined");
+  });
+
+  test("normalizes confirmed to attended on completed lessons", () => {
+    const lesson = createLesson({ startsAt: "2026-07-01T11:00:00.000Z", status: "completed" });
+    expect(normalizeTeacherParticipantStatus(lesson, "confirmed")).toBe("attended");
+    expect(normalizeTeacherParticipantStatus(lesson, "declined")).toBe("declined");
   });
 });

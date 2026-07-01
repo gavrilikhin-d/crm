@@ -2,7 +2,7 @@ import "./load-env.js";
 import { initSentryNode, suppressSentryTracing } from "@crm/shared/sentry-node";
 import { parameterizePath, withIncomingHttpSpan } from "@crm/shared/sentry-tracing";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import type { LessonType, PaymentMethod, RecurringDeleteScope, Reminder } from "@crm/shared";
+import type { LessonType, PaymentMethod, ParticipantStatus, RecurringDeleteScope, Reminder } from "@crm/shared";
 import {
   assertAuthSyncSecret,
   assertInternalToken,
@@ -347,7 +347,16 @@ async function addLessonParticipant(request: IncomingMessage, response: ServerRe
 async function setParticipantStatus(request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray, ctx?: AuthContext) {
   const body = await readJson(request);
   requireFields(body, ["status"]);
-  jsonOk(response, await store.setParticipantStatus(ctx!, match[1], match[2], body.status, body.action));
+  jsonOk(
+    response,
+    await store.setParticipantStatus(
+      ctx!,
+      match[1],
+      match[2],
+      body.status as ParticipantStatus,
+      body.action as "attend" | "decline" | undefined
+    )
+  );
 }
 
 async function createPayment(request: IncomingMessage, response: ServerResponse, _match: RegExpMatchArray, ctx?: AuthContext) {
@@ -425,7 +434,13 @@ async function setParticipantStatusInternal(request: IncomingMessage, response: 
   }
   jsonOk(
     response,
-    await store.setParticipantStatusForAccount(accountId, match[1], match[2], body.status, body.action)
+    await store.setParticipantStatusForAccount(
+      accountId,
+      match[1],
+      match[2],
+      body.status as ParticipantStatus,
+      body.action as "attend" | "decline" | undefined
+    )
   );
 }
 

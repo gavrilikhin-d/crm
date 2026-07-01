@@ -460,6 +460,22 @@ export default function Home() {
     });
   }
 
+  async function handleSetParticipantStatus(
+    lessonId: string,
+    studentId: string,
+    status: "confirmed" | "declined"
+  ) {
+    await withRefresh(async () => {
+      await api<Lesson>(`/api/lessons/${lessonId}/participants/${studentId}/status`, {
+        method: "POST",
+        body: { status }
+      });
+
+      const student = students.find((item) => item.id === studentId);
+      return t("toast.participantStatusUpdated", { name: student?.fullName ?? t("lessonOverview.deletedStudent") });
+    });
+  }
+
   async function handleAddParticipant(lessonId: string, studentIds: string[]) {
     const wasIndividual = selectedLesson?.originalType === "individual";
 
@@ -834,6 +850,7 @@ export default function Home() {
         onOpenChange={(open) => !open && setSelectedLessonId(null)}
         onAddParticipant={handleAddParticipant}
         onRemoveParticipant={handleRemoveParticipant}
+        onSetParticipantStatus={handleSetParticipantStatus}
         onDeleteLesson={handleDeleteLessonFromSheet}
       />
 

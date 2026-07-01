@@ -20,7 +20,7 @@ import type {
   TelegramStudentProfile,
   VacationPeriod
 } from "@crm/shared";
-import { assertStudentCanChangeParticipantStatus } from "@crm/shared/lesson-attendance";
+import { assertStudentCanChangeParticipantStatus, assertTeacherParticipantStatus } from "@crm/shared/lesson-attendance";
 import { dedupeLessonsByOccurrence } from "@crm/shared/lesson-dedupe";
 import { lessonOverlapsVacation, normalizeVacationPeriod } from "@crm/shared/vacation";
 import { getPlanLimits } from "@crm/shared/plans";
@@ -81,6 +81,8 @@ import {
   syncAllLessonsToGoogleCalendar
 } from "./google-calendar/sync";
 import {
+  applyLessonCompletionCharges,
+  applyTeacherParticipantStatusUpdate,
   buildLesson,
   buildRecurringSchedule,
   createTelegramBindToken,
@@ -526,6 +528,17 @@ export class Store {
 
     if (action) {
       assertStudentCanChangeParticipantStatus(lesson);
+    } else {
+      if (lesson.status === "cancelled_by_teacher") {
+        throw new Error("Cannot change participant status on cancelled lesson");
+      }
+      assertTeacherParticipantStatus(status);
+      applyTeacherParticipantStatusUpdate(db, lesson, participant, status);
+      lesson.updatedAt = now();
+      recalculateLesson(lesson, db.settings.individualDurationMinutes, db.settings.groupDurationMinutes);
+      await replaceLesson(lesson);
+      scheduleGoogleCalendarSync(ctx.accountId, [lesson]);
+      return lesson;
     }
 
     participant.status = status;
@@ -647,22 +660,7 @@ export class Store {
     const db = await loadAccountDatabase(ctx.accountId);
     const lesson = mustFind(db.lessons, lessonId, "Lesson");
 
-    for (const participant of lesson.participants) {
-      if (participant.status === "confirmed" || participant.status === "awaiting") {
-        participant.status = "attended";
-      }
-
-      const shouldCharge =
-        participant.status === "attended" ||
-        participant.status === "missed" ||
-        (participant.status === "declined" && db.settings.cancellationPolicy === "paid");
-
-      if (shouldCharge && !participant.balanceCharged) {
-        participant.balanceCharged = true;
-      }
-
-      participant.hasDebt = getStudentBalance(db, participant.studentId).remainingLessons < 0;
-    }
+    applyLessonCompletionCharges(db, lesson);
 
     lesson.status = "completed";
     lesson.updatedAt = now();

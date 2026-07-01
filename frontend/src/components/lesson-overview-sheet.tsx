@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Lesson, RecurringDeleteScope, RecurringSchedule, Student } from "@crm/shared";
+import type { TeacherParticipantStatus } from "@crm/shared/lesson-attendance";
 import { RefreshCw, Trash2 } from "lucide-react";
 import { StudentMultiCombobox } from "@/components/student-multi-combobox";
 import { StudentLink } from "@/components/student-link";
@@ -36,6 +37,7 @@ function LessonOverviewSheet({
   onOpenChange,
   onAddParticipant,
   onRemoveParticipant,
+  onSetParticipantStatus,
   onDeleteLesson
 }: {
   lesson: Lesson | null;
@@ -46,11 +48,17 @@ function LessonOverviewSheet({
   onOpenChange: (open: boolean) => void;
   onAddParticipant: (lessonId: string, studentIds: string[]) => Promise<void>;
   onRemoveParticipant: (lessonId: string, studentId: string, studentName: string) => Promise<void>;
+  onSetParticipantStatus: (
+    lessonId: string,
+    studentId: string,
+    status: TeacherParticipantStatus
+  ) => Promise<void>;
   onDeleteLesson: (lesson: Lesson, scope: RecurringDeleteScope) => Promise<void>;
 }) {
   const { t } = useI18n();
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
+  const [statusUpdatingStudentId, setStatusUpdatingStudentId] = useState<string | null>(null);
   const weekdayLabels = getWeekdayShortLabels("sun");
 
   function formatRecurringSchedule(schedule: RecurringSchedule): string {
@@ -66,6 +74,7 @@ function LessonOverviewSheet({
   const lessonId = lesson.id;
   const converted = lesson.originalType === "group" && lesson.effectiveType === "individual";
   const canEditParticipants = lesson.status !== "completed" && lesson.status !== "cancelled_by_teacher";
+  const canChangeParticipantStatus = lesson.status !== "cancelled_by_teacher";
 
   async function handleAddParticipants() {
     if (!selectedStudentIds.length) {
@@ -78,6 +87,15 @@ function LessonOverviewSheet({
       setSelectedStudentIds([]);
     } finally {
       setAdding(false);
+    }
+  }
+
+  async function handleParticipantStatusChange(studentId: string, status: TeacherParticipantStatus) {
+    setStatusUpdatingStudentId(studentId);
+    try {
+      await onSetParticipantStatus(lessonId, studentId, status);
+    } finally {
+      setStatusUpdatingStudentId(null);
     }
   }
 
@@ -117,6 +135,7 @@ function LessonOverviewSheet({
             <h3 className="text-sm font-medium">{t("lessonOverview.participants")}</h3>
             {lesson.participants.map((participant) => {
               const student = getStudent(participant.studentId);
+              const studentName = student?.fullName ?? t("lessonOverview.deletedStudent");
 
               return (
                 <div key={participant.id} className="flex items-center gap-3 rounded-lg border p-3">
@@ -128,7 +147,7 @@ function LessonOverviewSheet({
                     <StudentAvatar
                       student={{
                         id: participant.studentId,
-                        fullName: t("lessonOverview.deletedStudent"),
+                        fullName: studentName,
                         updatedAt: ""
                       }}
                       size="default"
@@ -136,14 +155,17 @@ function LessonOverviewSheet({
                   )}
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">
-                      {student ? (
-                        <StudentLink studentId={student.id}>{student.fullName}</StudentLink>
-                      ) : (
-                        t("lessonOverview.deletedStudent")
-                      )}
+                      {student ? <StudentLink studentId={student.id}>{student.fullName}</StudentLink> : studentName}
                     </p>
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      <ParticipantStatusBadge status={participant.status} className="text-[0.65rem]" />
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <ParticipantStatusBadge
+                        status={participant.status}
+                        className="text-[0.65rem]"
+                        interactive={canChangeParticipantStatus}
+                        disabled={statusUpdatingStudentId === participant.studentId}
+                        ariaLabel={t("lessonOverview.participantStatusAria", { name: studentName })}
+                        onStatusChange={(status) => void handleParticipantStatusChange(participant.studentId, status)}
+                      />
                       {participant.hasDebt ? (
                         <Badge variant="destructive" className="text-[0.65rem]">
                           {t("badge.debt")}
@@ -156,16 +178,8 @@ function LessonOverviewSheet({
                       variant="ghost"
                       size="icon"
                       type="button"
-                      aria-label={t("lessonOverview.removeParticipantAria", {
-                        name: student?.fullName ?? t("lessonOverview.deletedStudent")
-                      })}
-                      onClick={() =>
-                        void onRemoveParticipant(
-                          lesson.id,
-                          participant.studentId,
-                          student?.fullName ?? t("lessonOverview.deletedStudent")
-                        )
-                      }
+                      aria-label={t("lessonOverview.removeParticipantAria", { name: studentName })}
+                      onClick={() => void onRemoveParticipant(lesson.id, participant.studentId, studentName)}
                     >
                       <Trash2 className="size-4" />
                     </Button>

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { nanoid } from "nanoid";
-import type { Payment } from "@crm/shared";
+import type { LessonParticipant, Payment } from "@crm/shared";
 import {
   createEmptyDatabase,
   createLessonRecord,
@@ -10,12 +10,15 @@ import {
   futureDate
 } from "./test/fixtures";
 import {
+  applyLessonCompletionCharges,
+  applyTeacherParticipantStatusUpdate,
   getStudentBalance,
   hasRecurringLesson,
   isOccurrenceSkipped,
   materializeRecurringLessons,
   now,
   recalculateLesson,
+  shouldChargeParticipant,
   skipRecurringOccurrence
 } from "./store-logic";
 
@@ -102,6 +105,111 @@ describe("getStudentBalance", () => {
       studentId: alice.id,
       paidLessons: 6,
       chargedLessons: 3,
+      remainingLessons: 3,
+      debtLessons: 0
+    });
+  });
+});
+
+describe("teacher participant status and balance", () => {
+  test("changing completed lesson attendance updates charged balance", () => {
+    const alice = createStudentRecord("Alice");
+    const db = createEmptyDatabase({
+      students: [alice],
+      payments: [createPayment(alice.id, 4)]
+    });
+    const lesson = createLessonRecord({ db, studentIds: [alice.id] });
+    lesson.status = "completed";
+    const participant: LessonParticipant = lesson.participants[0]!;
+    participant.status = "attended";
+    participant.balanceCharged = true;
+    db.lessons.push(lesson);
+
+    expect(getStudentBalance(db, alice.id).remainingLessons).toBe(3);
+
+    applyTeacherParticipantStatusUpdate(db, lesson, participant, "declined");
+
+    expect(participant.status as LessonParticipant["status"]).toBe("declined");
+    expect(participant.balanceCharged).toBe(false);
+    expect(getStudentBalance(db, alice.id).remainingLessons).toBe(4);
+
+    applyTeacherParticipantStatusUpdate(db, lesson, participant, "confirmed");
+
+    expect(participant.status).toBe("attended");
+    expect(participant.balanceCharged).toBe(true);
+    expect(getStudentBalance(db, alice.id).remainingLessons).toBe(3);
+  });
+
+  test("does not charge balance before lesson is completed", () => {
+    const alice = createStudentRecord("Alice");
+    const db = createEmptyDatabase({
+      students: [alice],
+      payments: [createPayment(alice.id, 4)]
+    });
+    const lesson = createLessonRecord({ db, studentIds: [alice.id] });
+    db.lessons.push(lesson);
+
+    applyTeacherParticipantStatusUpdate(db, lesson, lesson.participants[0], "confirmed");
+
+    expect(lesson.participants[0].status).toBe("confirmed");
+    expect(lesson.participants[0].balanceCharged).toBe(false);
+    expect(getStudentBalance(db, alice.id).remainingLessons).toBe(4);
+  });
+
+  test("shouldChargeParticipant respects cancellation policy", () => {
+    expect(shouldChargeParticipant("attended", "free")).toBe(true);
+    expect(shouldChargeParticipant("declined", "free")).toBe(false);
+    expect(shouldChargeParticipant("declined", "paid")).toBe(true);
+  });
+
+  test("declined participant keeps balance unchanged after lesson completes", () => {
+    const alice = createStudentRecord("Alice");
+    const db = createEmptyDatabase({
+      students: [alice],
+      payments: [createPayment(alice.id, 4)]
+    });
+    const lesson = createLessonRecord({ db, studentIds: [alice.id] });
+    const participant: LessonParticipant = lesson.participants[0]!;
+    db.lessons.push(lesson);
+
+    applyTeacherParticipantStatusUpdate(db, lesson, participant, "declined");
+
+    const balanceBeforeCompletion = getStudentBalance(db, alice.id);
+    expect(balanceBeforeCompletion.remainingLessons).toBe(4);
+    expect(participant.balanceCharged).toBe(false);
+
+    applyLessonCompletionCharges(db, lesson);
+    lesson.status = "completed";
+
+    expect(participant.status as LessonParticipant["status"]).toBe("declined");
+    expect(participant.balanceCharged).toBe(false);
+    expect(getStudentBalance(db, alice.id)).toEqual(balanceBeforeCompletion);
+  });
+
+  test("awaiting participant is charged when lesson completes without response", () => {
+    const alice = createStudentRecord("Alice");
+    const db = createEmptyDatabase({
+      students: [alice],
+      payments: [createPayment(alice.id, 4)]
+    });
+    const lesson = createLessonRecord({ db, studentIds: [alice.id] });
+    const participant: LessonParticipant = lesson.participants[0]!;
+    db.lessons.push(lesson);
+
+    expect(participant.status).toBe("awaiting");
+
+    const balanceBeforeCompletion = getStudentBalance(db, alice.id);
+    expect(balanceBeforeCompletion.remainingLessons).toBe(4);
+    expect(participant.balanceCharged).toBe(false);
+
+    applyLessonCompletionCharges(db, lesson);
+    lesson.status = "completed";
+
+    expect(participant.status).toBe("attended");
+    expect(participant.balanceCharged).toBe(true);
+    expect(getStudentBalance(db, alice.id)).toEqual({
+      ...balanceBeforeCompletion,
+      chargedLessons: 1,
       remainingLessons: 3,
       debtLessons: 0
     });
