@@ -21,10 +21,14 @@ FROM gcr.io/distroless/nodejs22-debian12 AS runtime
 WORKDIR /app/backend
 
 ENV NODE_ENV=production
-ENV DATABASE_URL=postgres://crm:crm@postgres:5432/crm
 
 COPY --from=builder /app/backend/dist ./dist
 
+VOLUME ["/app/backend/data"]
+
 EXPOSE 4000
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=20s \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:4000/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
 
 CMD ["dist/server.cjs"]

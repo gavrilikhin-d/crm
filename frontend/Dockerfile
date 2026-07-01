@@ -16,8 +16,16 @@ COPY frontend frontend
 
 ARG BACKEND_INTERNAL_URL=http://backend:4000
 ARG REMINDER_INTERNAL_URL=http://reminder:4001
+ARG SENTRY_AUTH_TOKEN
+ARG SENTRY_ORG
+ARG SENTRY_PROJECT
+ARG NEXT_PUBLIC_SENTRY_DSN
 ENV BACKEND_INTERNAL_URL=$BACKEND_INTERNAL_URL
 ENV REMINDER_INTERNAL_URL=$REMINDER_INTERNAL_URL
+ENV SENTRY_AUTH_TOKEN=$SENTRY_AUTH_TOKEN
+ENV SENTRY_ORG=$SENTRY_ORG
+ENV SENTRY_PROJECT=$SENTRY_PROJECT
+ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
 
 RUN bun --filter @crm/frontend build
 
@@ -34,5 +42,8 @@ COPY --from=builder /app/frontend/.next/static ./frontend/.next/static
 COPY --from=builder /app/frontend/public ./frontend/public
 
 EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=40s \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:3000').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
 
 CMD ["frontend/server.js"]
