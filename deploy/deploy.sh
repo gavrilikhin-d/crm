@@ -8,6 +8,19 @@ AWS_REGION="${AWS_REGION:-eu-central-1}"
 
 cd "$APP_DIR"
 
+cleanup_docker_space() {
+  echo "==> Docker disk usage"
+  docker system df || true
+
+  echo "==> Pruning unused Docker objects"
+  docker container prune -f || true
+  docker image prune -af || true
+  docker builder prune -af || true
+
+  echo "==> Docker disk usage after cleanup"
+  docker system df || true
+}
+
 if [[ ! -f .env ]]; then
   echo "Missing $APP_DIR/.env — create it on the server before deploying." >&2
   exit 1
@@ -42,6 +55,8 @@ ECR_HOST="${CRM_IMAGE_REGISTRY%%/*}"
 aws ecr get-login-password --region "$AWS_REGION" \
   | docker login --username AWS --password-stdin "$ECR_HOST"
 
+cleanup_docker_space
+
 echo "==> Pulling images ($CRM_IMAGE_TAG)"
 docker compose -f "$COMPOSE_FILE" pull backend frontend bot reminder migrate
 
@@ -53,6 +68,8 @@ fi
 
 echo "==> Starting services"
 docker compose -f "$COMPOSE_FILE" up -d
+
+cleanup_docker_space
 
 echo "==> Status"
 docker compose -f "$COMPOSE_FILE" ps
