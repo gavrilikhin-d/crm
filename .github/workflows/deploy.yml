@@ -9,8 +9,20 @@
 #   NEXT_PUBLIC_SENTRY_DSN, SENTRY_ORG, SENTRY_PROJECT — optional frontend build args
 #
 # IAM user policy (in addition to ECR push):
-#   ssm:SendCommand, ssm:GetCommandInvocation, ssm:DescribeInstanceInformation
-#   on the instance and document AWS-RunShellScript
+#   {
+#     "Effect": "Allow",
+#     "Action": "ssm:DescribeInstanceInformation",
+#     "Resource": "*"
+#   },
+#   {
+#     "Effect": "Allow",
+#     "Action": ["ssm:SendCommand", "ssm:GetCommandInvocation"],
+#     "Resource": [
+#       "arn:aws:ec2:eu-central-1:982081063376:instance/i-0d217068bb9981687",
+#       "arn:aws:ssm:eu-central-1::document/AWS-RunShellScript",
+#       "arn:aws:ssm:eu-central-1:982081063376:*"
+#     ]
+#   }
 #
 # EC2 one-time setup:
 #   - IAM instance role: AmazonSSMManagedInstanceCore + AmazonEC2ContainerRegistryReadOnly
