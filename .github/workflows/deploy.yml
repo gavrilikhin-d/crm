@@ -1,7 +1,7 @@
 # Build images in GitHub Actions, push to ECR, pull on EC2.
 # Runs only after the "Tests" workflow succeeds on main (or manual dispatch with tests).
 #
-# GitHub secrets:
+# GitHub secrets (Environment: prod — Settings → Environments → prod):
 #   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY — IAM user with ECR push (+ CreateRepository)
 #   SSH_PRIVATE_KEY, SSH_HOST, SSH_USER — deploy to EC2
 #   SENTRY_AUTH_TOKEN — frontend source maps (optional)
@@ -94,6 +94,7 @@ jobs:
         (github.event_name == 'workflow_dispatch' && needs.test.result == 'success')
       )
     runs-on: ubuntu-latest
+    environment: prod
     permissions:
       contents: read
 
@@ -161,6 +162,7 @@ jobs:
     needs: [build-and-push]
     if: needs.build-and-push.result == 'success'
     runs-on: ubuntu-latest
+    environment: prod
     permissions:
       contents: read
 
