@@ -1,18 +1,22 @@
-# Build images in GitHub Actions, push to ECR, pull on EC2.
+# Build images in GitHub Actions, push to ECR, pull on EC2 via SSM.
 # Runs only after the "Tests" workflow succeeds on main (or manual dispatch with tests).
 #
 # GitHub secrets (Environment: prod — Settings → Environments → prod):
-#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY — IAM user with ECR push (+ CreateRepository)
-#   SSH_PRIVATE_KEY, SSH_HOST, SSH_USER — deploy to EC2
+#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY — IAM user: ECR push + SSM SendCommand
+#   EC2_INSTANCE_ID — target instance (e.g. i-0abc123...)
+#   EC2_DEPLOY_USER — optional, default ec2-user
 #   SENTRY_AUTH_TOKEN — frontend source maps (optional)
 #   NEXT_PUBLIC_SENTRY_DSN, SENTRY_ORG, SENTRY_PROJECT — optional frontend build args
 #
+# IAM user policy (in addition to ECR push):
+#   ssm:SendCommand, ssm:GetCommandInvocation, ssm:DescribeInstanceInformation
+#   on the instance and document AWS-RunShellScript
+#
 # EC2 one-time setup:
-#   - IAM instance role with AmazonEC2ContainerRegistryReadOnly (+ ecr:GetAuthorizationToken)
-#   - aws cli installed
-#   - ~/crm with .env including:
-#       CRM_IMAGE_REGISTRY=982081063376.dkr.ecr.eu-central-1.amazonaws.com/gavrilikhin
-#   - security group: SSH from GitHub Actions IP ranges
+#   - IAM instance role: AmazonSSMManagedInstanceCore + AmazonEC2ContainerRegistryReadOnly
+#   - SSM agent running (preinstalled on Amazon Linux 2023)
+#   - No inbound SSH required for deploy
+#   - ~/crm cloned from git with .env including CRM_IMAGE_REGISTRY
 
 name: Deploy
 
@@ -179,24 +183,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure SSH
-        run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Deploy over SSH
+      - name: Deploy via SSM
         env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          EC2_INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
+          EC2_DEPLOY_USER: ${{ secrets.EC2_DEPLOY_USER }}
           DEPLOY_SHA: ${{ needs.build-and-push.outputs.image_tag }}
           DEPLOY_REF: main
           AWS_REGION: ${{ env.AWS_REGION }}
         run: |
-          eval "$(ssh-agent -s)"
-          echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
-          chmod +x deploy/deploy.sh
-          scp deploy/deploy.sh "${SSH_USER}@${SSH_HOST}:~/deploy-remote.sh"
-          ssh "${SSH_USER}@${SSH_HOST}" \
-            "export DEPLOY_SHA='${DEPLOY_SHA}' DEPLOY_REF='${DEPLOY_REF}' AWS_REGION='${AWS_REGION}' CRM_APP_DIR=\$HOME/crm; bash ~/deploy-remote.sh"
+          if [ -z "${EC2_INSTANCE_ID:-}" ]; then
+            echo "::error::EC2_INSTANCE_ID is not set in the prod environment secrets"
+            exit 1
+          fi
+          chmod +x deploy/ssm-from-ci.sh
+          deploy/ssm-from-ci.sh \
+            "$EC2_INSTANCE_ID" \
+            "$DEPLOY_SHA" \
+            "$DEPLOY_REF" \
+            "$AWS_REGION" \
+            "${EC2_DEPLOY_USER:-ec2-user}"
