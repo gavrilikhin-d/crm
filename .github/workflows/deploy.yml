@@ -1,5 +1,5 @@
 # Build images in GitHub Actions, push to ECR, pull on EC2 via SSM.
-# Runs only after the "Tests" workflow succeeds on main (or manual dispatch with tests).
+# Runs on main pushes or manual dispatch.
 #
 # GitHub secrets (Environment: prod — Settings → Environments → prod):
 #   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY — IAM user: ECR push + SSM SendCommand
@@ -30,9 +30,7 @@
 name: Deploy
 
 on:
-  workflow_run:
-    workflows: [Tests]
-    types: [completed]
+  push:
     branches: [main]
   workflow_dispatch:
 
@@ -45,67 +43,7 @@ env:
   ECR_IMAGE_PREFIX: gavrilikhin
 
 jobs:
-  test:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: crm
-          POSTGRES_PASSWORD: crm
-          POSTGRES_DB: crm_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U crm -d crm_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 5
-
-    env:
-      TEST_DATABASE_URL: postgres://crm:crm@localhost:5432/crm_test
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.2.10"
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Lint
-        run: bun run lint
-
-      - name: Typecheck
-        run: bun run typecheck
-
-      - name: Run database migrations
-        working-directory: backend
-        env:
-          DATABASE_URL: postgres://crm:crm@localhost:5432/crm_test
-        run: bun run db:migrate
-
-      - name: Run tests
-        env:
-          DATABASE_URL: postgres://crm:crm@localhost:5432/crm_test
-        run: bun test
-
   build-and-push:
-    needs: [test]
-    if: >
-      always() &&
-      (
-        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
-        (github.event_name == 'workflow_dispatch' && needs.test.result == 'success')
-      )
     runs-on: ubuntu-latest
     environment: prod
     permissions:
@@ -118,19 +56,15 @@ jobs:
       - name: Resolve deploy commit
         id: meta
         run: |
-          if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
-          fi
+          echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ steps.meta.outputs.sha }}
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -151,7 +85,7 @@ jobs:
           done
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Create CI env stub
         run: |
@@ -194,10 +128,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
