@@ -38,6 +38,7 @@
     "test": "bun --filter @crm/shared test && bun --filter @crm/bot test && bun --filter @crm/reminder test && bun --filter @crm/backend test",
     "seed": "cd backend && bun run seed",
     "db:push": "cd backend && bun run db:push",
+    "db:migrate": "cd backend && bun run db:migrate",
     "observability:up": "docker compose -f docker-compose.observability.yml up -d",
     "observability:down": "docker compose -f docker-compose.observability.yml down",
     "prod:build": "docker compose -f docker-compose.prod.yml build",

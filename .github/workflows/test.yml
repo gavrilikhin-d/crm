@@ -49,11 +49,11 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-      - name: Push test database schema
+      - name: Run database migrations
         working-directory: backend
         env:
           DATABASE_URL: postgres://crm:crm@localhost:5432/crm_test
-        run: bun x drizzle-kit push --force
+        run: bun run db:migrate
 
       - name: Run tests
         env:

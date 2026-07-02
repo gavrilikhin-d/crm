@@ -35,7 +35,7 @@ function assertSafeTestDatabaseUrl(url: string): void {
   if (databaseName !== "crm_test" && !allowSharedDatabase) {
     throw new Error(
       `Integration tests must use database "crm_test" (current: "${databaseName || "(none)"}"). ` +
-        "Create it with: createdb crm_test && cd backend && DATABASE_URL=postgres://crm:crm@localhost:5432/crm_test bun run db:push. " +
+        "Create it with: createdb crm_test && cd backend && DATABASE_URL=postgres://crm:crm@localhost:5432/crm_test bun run db:migrate. " +
         "Or set TEST_DATABASE_URL explicitly. To override, set ALLOW_TEST_ON_DATABASE=1."
     );
   }
