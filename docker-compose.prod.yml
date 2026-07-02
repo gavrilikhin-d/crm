@@ -1,16 +1,15 @@
 # Production stack — only the reverse proxy is exposed on the host.
 #
-# Setup:
-#   cp .env.example .env
-#   # Set POSTGRES_PASSWORD, AUTH_*, INTERNAL_API_TOKEN, APP_BASE_URL, AUTH_URL, DOMAIN, etc.
+# Local build:
+#   docker compose -f docker-compose.prod.yml build
+#
+# CI builds images and pushes to ECR; the server only pulls:
+#   CRM_IMAGE_REGISTRY=982081063376.dkr.ecr.eu-central-1.amazonaws.com/gavrilikhin
+#   CRM_IMAGE_TAG=<git-sha>
 #
 # Deploy:
-#   docker compose -f docker-compose.prod.yml build
 #   docker compose -f docker-compose.prod.yml run --rm migrate
 #   docker compose -f docker-compose.prod.yml up -d
-#
-# With observability:
-#   docker compose -f docker-compose.prod.yml -f docker-compose.observability.yml up -d
 
 name: crm-prod
 
@@ -37,6 +36,8 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile.migrate
+    image: ${CRM_IMAGE_REGISTRY:-local}/crm-migrate:${CRM_IMAGE_TAG:-dev}
+    pull_policy: always
     networks:
       - crm
     environment:
@@ -52,6 +53,8 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    image: ${CRM_IMAGE_REGISTRY:-local}/crm-backend:${CRM_IMAGE_TAG:-dev}
+    pull_policy: always
     restart: unless-stopped
     networks:
       - crm
@@ -84,6 +87,8 @@ services:
     build:
       context: .
       dockerfile: reminder/Dockerfile
+    image: ${CRM_IMAGE_REGISTRY:-local}/crm-reminder:${CRM_IMAGE_TAG:-dev}
+    pull_policy: always
     restart: unless-stopped
     networks:
       - crm
@@ -114,6 +119,8 @@ services:
     build:
       context: .
       dockerfile: bot/Dockerfile
+    image: ${CRM_IMAGE_REGISTRY:-local}/crm-bot:${CRM_IMAGE_TAG:-dev}
+    pull_policy: always
     restart: unless-stopped
     networks:
       - crm
@@ -138,6 +145,8 @@ services:
         SENTRY_ORG: ${SENTRY_ORG:-}
         SENTRY_PROJECT: ${SENTRY_PROJECT:-}
         NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+    image: ${CRM_IMAGE_REGISTRY:-local}/crm-frontend:${CRM_IMAGE_TAG:-dev}
+    pull_policy: always
     restart: unless-stopped
     networks:
       - crm

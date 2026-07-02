@@ -1,0 +1,170 @@
+# Build images in GitHub Actions, push to ECR, pull on EC2.
+#
+# GitHub secrets:
+#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY — IAM user with ECR push (+ CreateRepository)
+#   AWS_REGION — e.g. eu-central-1
+#   SSH_PRIVATE_KEY, SSH_HOST, SSH_USER — deploy to EC2
+#   SENTRY_AUTH_TOKEN — frontend source maps (optional)
+#   NEXT_PUBLIC_SENTRY_DSN, SENTRY_ORG, SENTRY_PROJECT — optional frontend build args
+#
+# EC2 one-time setup:
+#   - IAM instance role with AmazonEC2ContainerRegistryReadOnly (+ ecr:GetAuthorizationToken)
+#   - aws cli installed
+#   - ~/crm with .env including:
+#       CRM_IMAGE_REGISTRY=982081063376.dkr.ecr.eu-central-1.amazonaws.com/gavrilikhin
+#   - security group: SSH from GitHub Actions IP ranges
+
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: eu-central-1
+  ECR_IMAGE_PREFIX: gavrilikhin
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: crm
+          POSTGRES_PASSWORD: crm
+          POSTGRES_DB: crm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U crm -d crm_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      TEST_DATABASE_URL: postgres://crm:crm@localhost:5432/crm_test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.2.10"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Push test database schema
+        working-directory: backend
+        env:
+          DATABASE_URL: postgres://crm:crm@localhost:5432/crm_test
+        run: bun x drizzle-kit push --force
+
+      - name: Run tests
+        run: bun test
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    outputs:
+      image_tag: ${{ github.sha }}
+      image_registry: ${{ steps.login-ecr.outputs.registry }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Ensure ECR repositories exist
+        env:
+          ECR_PREFIX: ${{ env.ECR_IMAGE_PREFIX }}
+        run: |
+          for repo in crm-backend crm-frontend crm-bot crm-reminder crm-migrate; do
+            name="${ECR_PREFIX}/${repo}"
+            aws ecr describe-repositories --repository-names "$name" >/dev/null 2>&1 \
+              || aws ecr create-repository --repository-name "$name"
+          done
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push images
+        env:
+          CRM_IMAGE_REGISTRY: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_IMAGE_PREFIX }}
+          CRM_IMAGE_TAG: ${{ github.sha }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
+        run: |
+          docker compose -f docker-compose.prod.yml build
+          docker compose -f docker-compose.prod.yml push
+
+          for repo in crm-backend crm-frontend crm-bot crm-reminder crm-migrate; do
+            docker tag "${CRM_IMAGE_REGISTRY}/${repo}:${CRM_IMAGE_TAG}" \
+              "${CRM_IMAGE_REGISTRY}/${repo}:latest"
+            docker push "${CRM_IMAGE_REGISTRY}/${repo}:latest"
+          done
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy over SSH
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          DEPLOY_SHA: ${{ needs.build-and-push.outputs.image_tag }}
+          DEPLOY_REF: ${{ github.ref_name }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+        run: |
+          eval "$(ssh-agent -s)"
+          echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+          chmod +x deploy/deploy.sh
+          scp deploy/deploy.sh "${SSH_USER}@${SSH_HOST}:~/deploy-remote.sh"
+          ssh "${SSH_USER}@${SSH_HOST}" \
+            "export DEPLOY_SHA='${DEPLOY_SHA}' DEPLOY_REF='${DEPLOY_REF}' AWS_REGION='${AWS_REGION}' CRM_APP_DIR=\$HOME/crm; bash ~/deploy-remote.sh"
