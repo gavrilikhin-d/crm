@@ -69,9 +69,13 @@ describe("parseLessonIndex", () => {
   });
 });
 
+function futureStartsAt(offsetMs = 86_400_000): string {
+  return new Date(Date.now() + offsetMs).toISOString();
+}
+
 describe("isActionableLesson", () => {
   test("blocks completed and cancelled lessons", () => {
-    const lesson = createLesson({ id: "l1", startsAt: "2026-07-01T18:00:00.000Z" });
+    const lesson = createLesson({ id: "l1", startsAt: futureStartsAt() });
     expect(isActionableLesson(lesson, "s1")).toBe(true);
     expect(isActionableLesson({ ...lesson, status: "completed" }, "s1")).toBe(false);
     expect(isActionableLesson({ ...lesson, status: "cancelled_by_teacher" }, "s1")).toBe(false);
@@ -90,8 +94,8 @@ describe("isActionableLesson", () => {
 describe("findLessonByScheduleIndex", () => {
   test("maps 1-based schedule index to upcoming lessons", () => {
     const profile = createProfile([
-      createLesson({ id: "l1", startsAt: "2026-07-01T18:00:00.000Z" }),
-      createLesson({ id: "l2", startsAt: "2026-07-02T18:00:00.000Z" })
+      createLesson({ id: "l1", startsAt: futureStartsAt() }),
+      createLesson({ id: "l2", startsAt: futureStartsAt(172_800_000) })
     ]);
 
     expect(findLessonByScheduleIndex(profile, 2)?.id).toBe("l2");
@@ -104,7 +108,7 @@ describe("formatAttendancePrompt", () => {
     const profile = createProfile([
       createLesson({
         id: "l1",
-        startsAt: "2026-07-01T18:00:00.000Z",
+        startsAt: futureStartsAt(),
         participantStatus: "confirmed"
       })
     ]);
@@ -121,7 +125,7 @@ describe("formatAttendanceResult", () => {
   test("includes debt warning when participant has debt", () => {
     const lesson = createLesson({
       id: "l1",
-      startsAt: "2026-07-01T18:00:00.000Z",
+      startsAt: futureStartsAt(),
       hasDebt: true
     });
 
