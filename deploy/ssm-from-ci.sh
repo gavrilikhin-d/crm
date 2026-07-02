@@ -14,34 +14,9 @@ WRAPPED="sudo -u ${DEPLOY_USER} -H bash -lc $(printf '%q' "$REMOTE_SCRIPT")"
 
 aws_cli=(aws --region "$AWS_REGION")
 
-describe_out="$("${aws_cli[@]}" ssm describe-instance-information \
-  --filters "Key=InstanceIds,Values=${INSTANCE_ID}" \
-  --output json 2>&1)" || describe_rc=$?
-
-if [[ "${describe_rc:-0}" -ne 0 ]]; then
-  echo "Failed to query SSM instance status (region: ${AWS_REGION}):" >&2
-  echo "$describe_out" >&2
-  if [[ "$describe_out" == *"AccessDenied"* || "$describe_out" == *"not authorized"* ]]; then
-    echo >&2
-    echo "GitHub IAM user needs ssm:DescribeInstanceInformation on Resource \"*\"." >&2
-    echo "Instance-scoped policies are not enough for this API." >&2
-  fi
-  exit 1
-fi
-
-ping_status="$(echo "$describe_out" | jq -r '.InstanceInformationList[0].PingStatus // "None"')"
-
-if [[ "$ping_status" != "Online" ]]; then
-  echo "Instance ${INSTANCE_ID} is not online in SSM (status: ${ping_status}, region: ${AWS_REGION})." >&2
-  echo "On EC2, check:" >&2
-  echo "  1. Instance IAM role includes AmazonSSMManagedInstanceCore" >&2
-  echo "  2. sudo systemctl status amazon-ssm-agent" >&2
-  echo "  3. Outbound HTTPS (443) to AWS is allowed" >&2
-  echo "  4. EC2_INSTANCE_ID secret is i-0d217068bb9981687 (eu-central-1)" >&2
-  exit 1
-fi
-
 params="$(jq -n --arg cmd "$WRAPPED" '{commands: [$cmd]}')"
+
+echo "Sending SSM deploy command to ${INSTANCE_ID} (region: ${AWS_REGION})..."
 
 command_id="$("${aws_cli[@]}" ssm send-command \
   --instance-ids "$INSTANCE_ID" \
@@ -50,7 +25,13 @@ command_id="$("${aws_cli[@]}" ssm send-command \
   --timeout-seconds 900 \
   --parameters "$params" \
   --query Command.CommandId \
-  --output text)"
+  --output text 2>&1)" || send_rc=$?
+
+if [[ "${send_rc:-0}" -ne 0 ]]; then
+  echo "Failed to send SSM command:" >&2
+  echo "$command_id" >&2
+  exit 1
+fi
 
 echo "SSM command: ${command_id}"
 

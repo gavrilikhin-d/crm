@@ -8,12 +8,7 @@
 #   SENTRY_AUTH_TOKEN — frontend source maps (optional)
 #   NEXT_PUBLIC_SENTRY_DSN, SENTRY_ORG, SENTRY_PROJECT — optional frontend build args
 #
-# IAM user policy (in addition to ECR push):
-#   {
-#     "Effect": "Allow",
-#     "Action": "ssm:DescribeInstanceInformation",
-#     "Resource": "*"
-#   },
+# IAM user policy (in addition to ECR push) — SendCommand only, no DescribeInstanceInformation:
 #   {
 #     "Effect": "Allow",
 #     "Action": ["ssm:SendCommand", "ssm:GetCommandInvocation"],
