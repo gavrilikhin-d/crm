@@ -12,12 +12,15 @@ import { formatFullDate, formatMonth, formatWeekRange } from "@/i18n/format";
 import type { Lesson, Student, VacationPeriod } from "@crm/shared";
 import { pageSectionClass } from "@/screens/dashboard/constants";
 import type { CalendarRange, ScheduleView } from "@/screens/dashboard/types";
-import { getDefaultLessonStartsAt } from "@/screens/schedule/utils/calendar";
+import { getDefaultLessonStartsAt, sameDate } from "@/screens/schedule/utils/calendar";
 import { LessonForm } from "./components/lesson-form";
 import { CalendarScrollArea } from "./components/calendar/calendar-scroll-area";
 import { DayCalendar } from "./components/calendar/day-calendar";
 import { WeekCalendar } from "./components/calendar/week-calendar";
 import { MonthCalendar } from "./components/calendar/month-calendar";
+
+const weekCalendarMinWidth = 664;
+const weekCalendarTimeAxisWidth = 62;
 
 export function ScheduleScreen({
   scheduleView,
@@ -86,6 +89,12 @@ export function ScheduleScreen({
     week: t("calendar.view.week"),
     month: t("calendar.view.month")
   };
+  const todayWeekIndex = weekDays.findIndex((day) => sameDate(day, currentTime));
+  const weekDayWidth = (weekCalendarMinWidth - weekCalendarTimeAxisWidth) / 7;
+  const weekHorizontalAnchor =
+    todayWeekIndex === -1
+      ? undefined
+      : weekCalendarTimeAxisWidth + weekDayWidth * todayWeekIndex + weekDayWidth / 2;
 
   return (
     <section className={pageSectionClass} id="schedule">
@@ -180,7 +189,8 @@ export function ScheduleScreen({
 
         {scheduleView === "week" ? (
           <CalendarScrollArea
-            minWidth={664}
+            horizontalAnchorOffset={weekHorizontalAnchor}
+            minWidth={weekCalendarMinWidth}
             stickyHeader
             scrollAnchorOffset={weekScrollAnchor}
             scrollKey={`week-${selectedDate.toISOString()}`}
