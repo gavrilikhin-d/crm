@@ -27,6 +27,6 @@ COPY --from=builder /app/reminder/dist ./dist
 EXPOSE 4001
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=30s \
-  CMD ["node", "-e", "fetch('http://127.0.0.1:4001/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+  CMD ["/nodejs/bin/node", "-e", "fetch('http://127.0.0.1:4001/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
 
 CMD ["dist/main.cjs"]

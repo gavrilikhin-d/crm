@@ -45,7 +45,7 @@ echo "==> Pulling images ($CRM_IMAGE_TAG)"
 docker compose -f "$COMPOSE_FILE" pull backend frontend bot reminder migrate
 
 echo "==> Running migrations"
-if ! docker compose -f "$COMPOSE_FILE" run --rm migrate; then
+if ! docker compose -f "$COMPOSE_FILE" run --rm -T --no-build migrate; then
   echo "Migration failed — check logs above." >&2
   exit 1
 fi
