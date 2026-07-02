@@ -148,9 +148,14 @@ jobs:
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
           NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
+          # Placeholders only — compose parses postgres/caddy too; real values live in EC2 .env
+          DOMAIN: fake.example.com
+          POSTGRES_USER: fake
+          POSTGRES_PASSWORD: fake
+          POSTGRES_DB: fake
         run: |
-          docker compose -f docker-compose.prod.yml build
-          docker compose -f docker-compose.prod.yml push
+          docker compose -f docker-compose.prod.yml build backend frontend bot reminder migrate
+          docker compose -f docker-compose.prod.yml push backend frontend bot reminder migrate
 
           for repo in crm-backend crm-frontend crm-bot crm-reminder crm-migrate; do
             docker tag "${CRM_IMAGE_REGISTRY}/${repo}:${CRM_IMAGE_TAG}" \
