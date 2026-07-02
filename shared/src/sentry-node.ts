@@ -25,12 +25,25 @@ function tracePropagationTargets(): Array<string | RegExp> {
 }
 
 function registerProfilerShutdown(): void {
+  if (!Sentry.profiler) {
+    return;
+  }
+
   const stop = (): void => {
     Sentry.profiler.stopProfiler();
   };
 
   process.once("SIGTERM", stop);
   process.once("SIGINT", stop);
+}
+
+async function loadProfilingIntegration(): Promise<Sentry.Integration | null> {
+  try {
+    const { nodeProfilingIntegration } = await import("@sentry/profiling-node");
+    return nodeProfilingIntegration();
+  } catch {
+    return null;
+  }
 }
 
 export async function initSentryNode(service: string, dsnOverride?: string): Promise<void> {
@@ -40,7 +53,7 @@ export async function initSentryNode(service: string, dsnOverride?: string): Pro
   }
 
   const rate = sampleRate();
-  const { nodeProfilingIntegration } = await import("@sentry/profiling-node");
+  const profilingIntegration = await loadProfilingIntegration();
 
   const options: Sentry.NodeOptions = {
     dsn,
@@ -48,15 +61,19 @@ export async function initSentryNode(service: string, dsnOverride?: string): Pro
     integrations: [
       ...Sentry.getDefaultIntegrations({ dsn }),
       Sentry.consoleLoggingIntegration({ levels: [...SENTRY_CONSOLE_LOG_LEVELS] }),
-      nodeProfilingIntegration(),
+      ...(profilingIntegration ? [profilingIntegration] : []),
       Sentry.nodeRuntimeMetricsIntegration(),
       ...(service === "backend" ? [Sentry.postgresJsIntegration()] : [])
     ],
     tracesSampler: tracesSampler,
     tracePropagationTargets: tracePropagationTargets(),
     ignoreSpans: [/health/i, /monitoring/i],
-    profileSessionSampleRate: rate,
-    profileLifecycle: "trace",
+    ...(profilingIntegration
+      ? {
+          profileSessionSampleRate: rate,
+          profileLifecycle: "trace" as const
+        }
+      : {}),
     includeLocalVariables: true,
     enableLogs: true
   };

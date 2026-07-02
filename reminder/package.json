@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/main.ts",
-    "build": "esbuild src/main.ts --bundle --platform=node --format=cjs --target=node22 --outfile=dist/main.cjs",
+    "build": "esbuild src/main.ts --bundle --platform=node --format=cjs --target=node22 --external:@sentry/profiling-node --external:@sentry/node-cpu-profiler --outfile=dist/main.cjs",
     "start": "node dist/main.cjs",
     "test": "bun test src",
     "typecheck": "tsc --noEmit"
