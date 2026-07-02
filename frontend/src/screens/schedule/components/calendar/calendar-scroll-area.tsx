@@ -6,12 +6,14 @@ import { calendarHeaderHeight } from "@/screens/dashboard/constants";
 
 export function CalendarScrollArea({
   children,
+  horizontalAnchorOffset,
   minWidth,
   scrollAnchorOffset,
   scrollKey,
   stickyHeader
 }: {
   children: ReactNode;
+  horizontalAnchorOffset?: number;
   minWidth?: number;
   scrollAnchorOffset?: number;
   scrollKey?: string;
@@ -20,6 +22,7 @@ export function CalendarScrollArea({
   const containerRef = useRef<HTMLDivElement>(null);
   const didScrollRef = useRef<string | null>(null);
   const enableVerticalScroll = scrollAnchorOffset !== undefined || stickyHeader;
+  const enableHorizontalScroll = horizontalAnchorOffset !== undefined;
 
   useEffect(() => {
     didScrollRef.current = null;
@@ -27,7 +30,7 @@ export function CalendarScrollArea({
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || scrollAnchorOffset === undefined || !scrollKey) {
+    if (!container || !scrollKey) {
       return;
     }
 
@@ -36,18 +39,25 @@ export function CalendarScrollArea({
     }
 
     const headerHeight = calendarHeaderHeight;
-    const targetTop = headerHeight + scrollAnchorOffset;
     const frame = window.requestAnimationFrame(() => {
-      container.scrollTop = Math.max(0, targetTop - container.clientHeight / 3);
+      if (scrollAnchorOffset !== undefined) {
+        const targetTop = headerHeight + scrollAnchorOffset;
+        container.scrollTop = Math.max(0, targetTop - container.clientHeight / 2);
+      }
+
+      if (horizontalAnchorOffset !== undefined) {
+        container.scrollLeft = Math.max(0, horizontalAnchorOffset - container.clientWidth / 2);
+      }
+
       didScrollRef.current = scrollKey;
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [scrollAnchorOffset, scrollKey]);
+  }, [horizontalAnchorOffset, scrollAnchorOffset, scrollKey]);
 
   return (
     <div
-      ref={enableVerticalScroll ? containerRef : undefined}
+      ref={enableVerticalScroll || enableHorizontalScroll ? containerRef : undefined}
       className={cn(
         "-mx-4 px-4 sm:mx-0 sm:px-0",
         enableVerticalScroll
