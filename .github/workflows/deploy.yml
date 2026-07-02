@@ -1,8 +1,8 @@
 # Build images in GitHub Actions, push to ECR, pull on EC2.
+# Runs only after the "Tests" workflow succeeds on main (or manual dispatch with tests).
 #
 # GitHub secrets:
 #   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY — IAM user with ECR push (+ CreateRepository)
-#   AWS_REGION — e.g. eu-central-1
 #   SSH_PRIVATE_KEY, SSH_HOST, SSH_USER — deploy to EC2
 #   SENTRY_AUTH_TOKEN — frontend source maps (optional)
 #   NEXT_PUBLIC_SENTRY_DSN, SENTRY_ORG, SENTRY_PROJECT — optional frontend build args
@@ -17,9 +17,10 @@
 name: Deploy
 
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows: [Tests]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -32,6 +33,7 @@ env:
 
 jobs:
   test:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -82,18 +84,34 @@ jobs:
         run: bun test
 
   build-and-push:
-    needs: test
+    needs: [test]
+    if: >
+      always() &&
+      (
+        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+        (github.event_name == 'workflow_dispatch' && needs.test.result == 'success')
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read
 
     outputs:
-      image_tag: ${{ github.sha }}
-      image_registry: ${{ steps.login-ecr.outputs.registry }}
+      image_tag: ${{ steps.meta.outputs.sha }}
 
     steps:
+      - name: Resolve deploy commit
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.meta.outputs.sha }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -122,7 +140,7 @@ jobs:
       - name: Build and push images
         env:
           CRM_IMAGE_REGISTRY: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_IMAGE_PREFIX }}
-          CRM_IMAGE_TAG: ${{ github.sha }}
+          CRM_IMAGE_TAG: ${{ steps.meta.outputs.sha }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
@@ -138,7 +156,8 @@ jobs:
           done
 
   deploy:
-    needs: build-and-push
+    needs: [build-and-push]
+    if: needs.build-and-push.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -159,7 +178,7 @@ jobs:
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           DEPLOY_SHA: ${{ needs.build-and-push.outputs.image_tag }}
-          DEPLOY_REF: ${{ github.ref_name }}
+          DEPLOY_REF: main
           AWS_REGION: ${{ env.AWS_REGION }}
         run: |
           eval "$(ssh-agent -s)"
