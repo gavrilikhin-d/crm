@@ -29,6 +29,7 @@ if [[ -z "${DEPLOY_SHA:-}" ]]; then
 fi
 
 export CRM_IMAGE_TAG="$DEPLOY_SHA"
+export SENTRY_RELEASE="$DEPLOY_SHA"
 
 echo "==> Syncing deploy files from git ($DEPLOY_REF @ $DEPLOY_SHA)"
 git fetch origin "$DEPLOY_REF"

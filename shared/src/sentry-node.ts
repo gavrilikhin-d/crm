@@ -58,6 +58,7 @@ export async function initSentryNode(service: string, dsnOverride?: string): Pro
   const options: Sentry.NodeOptions = {
     dsn,
     environment: process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? "development",
+    release: process.env.SENTRY_RELEASE,
     integrations: [
       ...Sentry.getDefaultIntegrations({ dsn }),
       Sentry.consoleLoggingIntegration({ levels: [...SENTRY_CONSOLE_LOG_LEVELS] }),
