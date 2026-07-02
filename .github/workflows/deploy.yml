@@ -5,8 +5,10 @@
 #   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY — IAM user: ECR push + SSM SendCommand
 #   EC2_INSTANCE_ID — target instance (e.g. i-0abc123...)
 #   EC2_DEPLOY_USER — optional, default ec2-user
-#   SENTRY_AUTH_TOKEN — frontend source maps (optional)
+#   SENTRY_AUTH_TOKEN — source map uploads (optional)
 #   NEXT_PUBLIC_SENTRY_DSN, SENTRY_ORG, SENTRY_PROJECT — optional frontend build args
+#   BACKEND_SENTRY_PROJECT, BOT_SENTRY_PROJECT, REMINDER_SENTRY_PROJECT — optional service source maps
+#   SENTRY_RELEASE is set from the deploy commit SHA for source map uploads
 #
 # IAM user policy (in addition to ECR push) — SendCommand only, no DescribeInstanceInformation:
 #   {
@@ -168,6 +170,10 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          BACKEND_SENTRY_PROJECT: ${{ secrets.BACKEND_SENTRY_PROJECT || 'backend' }}
+          BOT_SENTRY_PROJECT: ${{ secrets.BOT_SENTRY_PROJECT || 'bot' }}
+          REMINDER_SENTRY_PROJECT: ${{ secrets.REMINDER_SENTRY_PROJECT || 'reminder' }}
+          SENTRY_RELEASE: ${{ steps.meta.outputs.sha }}
           NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
           # Placeholders only — compose parses postgres/caddy too; real values live in EC2 .env
           DOMAIN: fake.example.com

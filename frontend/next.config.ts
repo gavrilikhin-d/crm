@@ -40,6 +40,7 @@ export default withSentryConfig(nextConfig, {
   org: process.env.SENTRY_ORG ?? "gavrilikhin-daniil",
   project: process.env.SENTRY_PROJECT ?? "javascript-nextjs",
   authToken: process.env.SENTRY_AUTH_TOKEN,
+  release: process.env.SENTRY_RELEASE ? { name: process.env.SENTRY_RELEASE } : undefined,
   widenClientFileUpload: true,
   tunnelRoute: "/monitoring",
   silent: !process.env.CI
