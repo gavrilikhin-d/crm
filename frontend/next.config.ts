@@ -10,6 +10,7 @@ loadEnvConfig(path.resolve(frontendDir, ".."));
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   output: "standalone",
+  allowedDevOrigins: ["daniil.gavrilikhin.ngrok.dev"],
   async headers() {
     return [
       {
