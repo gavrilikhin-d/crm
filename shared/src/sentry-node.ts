@@ -37,7 +37,7 @@ function registerProfilerShutdown(): void {
   process.once("SIGINT", stop);
 }
 
-async function loadProfilingIntegration(): Promise<Sentry.Integration | null> {
+async function loadProfilingIntegration() {
   try {
     const { nodeProfilingIntegration } = await import("@sentry/profiling-node");
     return nodeProfilingIntegration();
