@@ -81,6 +81,8 @@ jobs:
         run: bun x drizzle-kit push --force
 
       - name: Run tests
+        env:
+          DATABASE_URL: postgres://crm:crm@localhost:5432/crm_test
         run: bun test
 
   build-and-push:
