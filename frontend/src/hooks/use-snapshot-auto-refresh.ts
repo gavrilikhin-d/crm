@@ -5,13 +5,31 @@ import { getAccessToken } from "@/lib/api";
 
 type RefreshSource = "initial" | "manual" | "auto";
 
+type SnapshotLoadOptions = {
+  silent?: boolean;
+  force?: boolean;
+  calendarOnly?: boolean;
+};
+
+type SnapshotWebSocketMessage =
+  | { type: "snapshot"; payload?: unknown }
+  | { type: "lesson:upsert"; payload?: unknown }
+  | { type: "lesson:delete"; payload?: { lessonId?: unknown } }
+  | { type: "calendar:invalidate"; payload?: { months?: unknown } }
+  | { type: "snapshot:stale" }
+  | { type: "error"; error?: unknown };
+
 type UseSnapshotAutoRefreshOptions = {
-  loadSnapshot: (options?: { silent?: boolean }) => Promise<void>;
+  loadSnapshot: (options?: SnapshotLoadOptions) => Promise<void>;
   onSnapshot: (snapshot: unknown) => void;
+  onLessonUpsert?: (lesson: unknown) => void;
+  onLessonDelete?: (lessonId: string) => void;
+  onCalendarInvalidate?: (months?: string[]) => void | Promise<void>;
+  getSnapshotMonths?: () => string[];
   reconnectMs?: number;
 };
 
-function getSnapshotWebSocketUrl(token: string): string {
+function getSnapshotWebSocketUrl(token: string, months?: string[]): string {
   const configuredUrl = process.env.NEXT_PUBLIC_BACKEND_WS_URL?.trim();
   const baseUrl =
     configuredUrl ||
@@ -28,10 +46,21 @@ function getSnapshotWebSocketUrl(token: string): string {
     url.pathname = "/api/ws/snapshot";
   }
   url.searchParams.set("token", token);
+  if (months?.length) {
+    url.searchParams.set("months", months.join(","));
+  }
   return url.toString();
 }
 
-function useSnapshotAutoRefresh({ loadSnapshot, onSnapshot, reconnectMs = 5_000 }: UseSnapshotAutoRefreshOptions) {
+function useSnapshotAutoRefresh({
+  loadSnapshot,
+  onSnapshot,
+  onLessonUpsert,
+  onLessonDelete,
+  onCalendarInvalidate,
+  getSnapshotMonths,
+  reconnectMs = 5_000
+}: UseSnapshotAutoRefreshOptions) {
   const reconnectSeconds = Math.max(1, Math.round(reconnectMs / 1000));
   const [secondsUntilReconnect, setSecondsUntilReconnect] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -39,6 +68,10 @@ function useSnapshotAutoRefresh({ loadSnapshot, onSnapshot, reconnectMs = 5_000 
   const [connected, setConnected] = useState(false);
   const loadSnapshotRef = useRef(loadSnapshot);
   const onSnapshotRef = useRef(onSnapshot);
+  const onLessonUpsertRef = useRef(onLessonUpsert);
+  const onLessonDeleteRef = useRef(onLessonDelete);
+  const onCalendarInvalidateRef = useRef(onCalendarInvalidate);
+  const getSnapshotMonthsRef = useRef(getSnapshotMonths);
   const runningRef = useRef(false);
   const receivedSnapshotRef = useRef(false);
 
@@ -50,12 +83,28 @@ function useSnapshotAutoRefresh({ loadSnapshot, onSnapshot, reconnectMs = 5_000 
     onSnapshotRef.current = onSnapshot;
   }, [onSnapshot]);
 
+  useEffect(() => {
+    onLessonUpsertRef.current = onLessonUpsert;
+  }, [onLessonUpsert]);
+
+  useEffect(() => {
+    onLessonDeleteRef.current = onLessonDelete;
+  }, [onLessonDelete]);
+
+  useEffect(() => {
+    onCalendarInvalidateRef.current = onCalendarInvalidate;
+  }, [onCalendarInvalidate]);
+
+  useEffect(() => {
+    getSnapshotMonthsRef.current = getSnapshotMonths;
+  }, [getSnapshotMonths]);
+
   const markRefreshed = useCallback(() => {
     setLastRefreshedAt(new Date());
   }, []);
 
   const runRefresh = useCallback(
-    async (source: RefreshSource) => {
+    async (source: RefreshSource, options?: Pick<SnapshotLoadOptions, "calendarOnly">) => {
       if (runningRef.current) {
         return;
       }
@@ -64,7 +113,11 @@ function useSnapshotAutoRefresh({ loadSnapshot, onSnapshot, reconnectMs = 5_000 
       setRefreshing(true);
 
       try {
-        await loadSnapshotRef.current({ silent: source === "auto" });
+        await loadSnapshotRef.current({
+          silent: source === "auto",
+          force: source !== "initial",
+          calendarOnly: options?.calendarOnly ?? source !== "initial"
+        });
         markRefreshed();
       } finally {
         runningRef.current = false;
@@ -114,7 +167,7 @@ function useSnapshotAutoRefresh({ loadSnapshot, onSnapshot, reconnectMs = 5_000 
         return;
       }
 
-      webSocket = new WebSocket(getSnapshotWebSocketUrl(token));
+      webSocket = new WebSocket(getSnapshotWebSocketUrl(token, getSnapshotMonthsRef.current?.()));
       webSocket.addEventListener("open", () => {
         setConnected(true);
         setSecondsUntilReconnect(0);
@@ -122,14 +175,40 @@ function useSnapshotAutoRefresh({ loadSnapshot, onSnapshot, reconnectMs = 5_000 
       });
       webSocket.addEventListener("message", (event) => {
         try {
-          const message = JSON.parse(String(event.data)) as { type?: string; payload?: unknown };
+          const message = JSON.parse(String(event.data)) as SnapshotWebSocketMessage;
           if (message.type === "snapshot" && message.payload) {
             onSnapshotRef.current(message.payload);
             markRefreshed();
             receivedSnapshotRef.current = true;
+            return;
+          }
+          if (message.type === "lesson:upsert" && message.payload) {
+            onLessonUpsertRef.current?.(message.payload);
+            markRefreshed();
+            return;
+          }
+          if (message.type === "lesson:delete" && typeof message.payload?.lessonId === "string") {
+            onLessonDeleteRef.current?.(message.payload.lessonId);
+            markRefreshed();
+            return;
+          }
+          if (message.type === "calendar:invalidate") {
+            const months = Array.isArray(message.payload?.months)
+              ? message.payload.months.filter((month): month is string => typeof month === "string")
+              : undefined;
+            const invalidation = onCalendarInvalidateRef.current?.(months);
+            if (invalidation instanceof Promise) {
+              void invalidation.then(markRefreshed);
+            } else {
+              markRefreshed();
+            }
+            return;
+          }
+          if (message.type === "snapshot:stale") {
+            void runRefresh("auto", { calendarOnly: false });
           }
         } catch {
-          // Ignore malformed websocket messages; the connection itself can keep streaming snapshots.
+          // Ignore malformed websocket messages; the connection itself can keep streaming updates.
         }
       });
       webSocket.addEventListener("close", () => {
