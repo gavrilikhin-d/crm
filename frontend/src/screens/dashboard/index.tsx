@@ -19,7 +19,8 @@ import type {
   Lesson,
   LessonPackage,
   RecurringDeleteScope,
-  Student
+  Student,
+  VacationPeriod
 } from "@crm/shared";
 import { resolveCurrency, type CurrencyCode } from "@crm/shared/currency";
 import { ClientsView } from "@/screens/clients";
@@ -45,10 +46,108 @@ import { SessionsView } from "@/screens/sessions";
 import { PackageForm } from "@/screens/sessions/components/package-form";
 import { SettingsView } from "@/screens/settings";
 
+type SnapshotLoadOptions = {
+  silent?: boolean;
+  months?: string[];
+  force?: boolean;
+  calendarOnly?: boolean;
+};
+
+type CalendarSnapshot = Pick<Snapshot, "lessons" | "vacationPeriods">;
+
+function getMonthKey(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
+function addMonths(value: Date, amount: number): Date {
+  return new Date(value.getFullYear(), value.getMonth() + amount, 1);
+}
+
+function getMonthKeysAround(value: Date): string[] {
+  return [addMonths(value, -1), addMonths(value, 0), addMonths(value, 1)].map(getMonthKey);
+}
+
+function uniqueMonthKeys(months: string[]): string[] {
+  return [...new Set(months)];
+}
+
+function getSnapshotPath(months: string[], fields?: "calendar"): string {
+  const params = new URLSearchParams({ months: months.join(",") });
+  if (fields) {
+    params.set("fields", fields);
+  }
+  return `/api/snapshot?${params.toString()}`;
+}
+
+function mergePagedSnapshot(current: Snapshot | null, next: Snapshot, months: string[]): Snapshot {
+  if (!current) {
+    return next;
+  }
+
+  const monthSet = new Set(months);
+  const retainedLessons = current.lessons.filter((lesson) => !monthSet.has(getMonthKey(new Date(lesson.startsAt))));
+  const retainedVacationPeriods = current.vacationPeriods.filter((period) => !vacationOverlapsMonths(period, monthSet));
+
+  return {
+    ...current,
+    ...next,
+    lessons: mergeById(retainedLessons, next.lessons),
+    vacationPeriods: mergeById(retainedVacationPeriods, next.vacationPeriods)
+  };
+}
+
+function mergeCalendarSnapshot(current: Snapshot, next: CalendarSnapshot, months: string[]): Snapshot {
+  const monthSet = new Set(months);
+  const retainedLessons = current.lessons.filter((lesson) => !monthSet.has(getMonthKey(new Date(lesson.startsAt))));
+  const retainedVacationPeriods = current.vacationPeriods.filter((period) => !vacationOverlapsMonths(period, monthSet));
+
+  return {
+    ...current,
+    lessons: mergeById(retainedLessons, next.lessons),
+    vacationPeriods: mergeById(retainedVacationPeriods, next.vacationPeriods)
+  };
+}
+
+function mergeById<T extends { id: string }>(current: T[], next: T[]): T[] {
+  const items = new Map(current.map((item) => [item.id, item]));
+  for (const item of next) {
+    items.set(item.id, item);
+  }
+  return [...items.values()];
+}
+
+function vacationOverlapsMonths(period: VacationPeriod, months: Set<string>): boolean {
+  return [...months].some((month) => vacationOverlapsMonth(period, month));
+}
+
+function vacationOverlapsMonth(period: VacationPeriod, month: string): boolean {
+  const monthStart = parseMonthStart(month);
+  const monthEnd = addMonths(monthStart, 1);
+  const vacationStart = parseDateOnly(period.startsOn);
+  const vacationEnd = parseDateOnly(period.endsOn);
+  vacationEnd.setDate(vacationEnd.getDate() + 1);
+  return vacationStart < monthEnd && vacationEnd > monthStart;
+}
+
+function parseMonthStart(month: string): Date {
+  const [year, monthNumber] = month.split("-").map(Number);
+  return new Date(year, monthNumber - 1, 1);
+}
+
+function parseDateOnly(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
 export default function Home() {
   const { t } = useI18n();
   const isMobile = useIsMobile();
   const hasMobileScheduleDefault = useRef(false);
+  const hasBaseSnapshotRef = useRef(false);
+  const loadedMonthKeysRef = useRef<Set<string>>(new Set());
+  const loadingMonthKeysRef = useRef<Set<string>>(new Set());
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [activeSection, setActiveSection] = useState<ActiveSection>(() => {
     if (typeof window === "undefined") {
@@ -163,18 +262,126 @@ export default function Home() {
     [scheduleLessons, monthDays]
   );
 
-  const loadSnapshot = useCallback(async (options?: { silent?: boolean }) => {
+  const getSnapshotMonthsForRequest = useCallback(() => {
+    const loadedMonths = [...loadedMonthKeysRef.current];
+    return loadedMonths.length ? loadedMonths : getMonthKeysAround(selectedDate);
+  }, [selectedDate]);
+
+  const applyPagedSnapshot = useCallback((nextSnapshot: Snapshot, months: string[]) => {
+    setSnapshot((current) => mergePagedSnapshot(current, nextSnapshot, months));
+    hasBaseSnapshotRef.current = true;
+    for (const month of months) {
+      loadedMonthKeysRef.current.add(month);
+    }
+  }, []);
+
+  const applyCalendarSnapshot = useCallback((nextSnapshot: CalendarSnapshot, months: string[]) => {
+    setSnapshot((current) => (current ? mergeCalendarSnapshot(current, nextSnapshot, months) : current));
+    for (const month of months) {
+      loadedMonthKeysRef.current.add(month);
+    }
+  }, []);
+
+  const loadSnapshot = useCallback(async (options?: SnapshotLoadOptions) => {
+    const requestedMonths = uniqueMonthKeys(options?.months?.length ? options.months : getSnapshotMonthsForRequest());
+    const targetMonths = requestedMonths.filter((month) => {
+      if (loadingMonthKeysRef.current.has(month)) {
+        return false;
+      }
+      return options?.force || !loadedMonthKeysRef.current.has(month);
+    });
+
+    if (!targetMonths.length) {
+      return;
+    }
+
+    for (const month of targetMonths) {
+      loadingMonthKeysRef.current.add(month);
+    }
+
+    const calendarOnly = options?.calendarOnly && hasBaseSnapshotRef.current;
+
     try {
-      setSnapshot(await api<Snapshot>("/api/snapshot"));
+      if (calendarOnly) {
+        applyCalendarSnapshot(await api<CalendarSnapshot>(getSnapshotPath(targetMonths, "calendar")), targetMonths);
+      } else {
+        applyPagedSnapshot(await api<Snapshot>(getSnapshotPath(targetMonths)), targetMonths);
+      }
     } catch (error) {
       if (!options?.silent) {
         toast.error(error instanceof Error ? error.message : t("toast.loadFailed"));
       }
+    } finally {
+      for (const month of targetMonths) {
+        loadingMonthKeysRef.current.delete(month);
+      }
     }
-  }, [t]);
+  }, [applyCalendarSnapshot, applyPagedSnapshot, getSnapshotMonthsForRequest, t]);
+
+  const applyLessonUpsert = useCallback((payload: unknown) => {
+    const lesson = payload as Lesson;
+    if (!lesson?.id || !lesson.startsAt) {
+      return;
+    }
+
+    const month = getMonthKey(new Date(lesson.startsAt));
+    if (!loadedMonthKeysRef.current.has(month)) {
+      return;
+    }
+
+    setSnapshot((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const existingIndex = current.lessons.findIndex((item) => item.id === lesson.id);
+      const lessons =
+        existingIndex === -1
+          ? [...current.lessons, lesson]
+          : current.lessons.map((item, index) => (index === existingIndex ? lesson : item));
+      return { ...current, lessons };
+    });
+  }, []);
+
+  const applyLessonDelete = useCallback((lessonId: string) => {
+    setSnapshot((current) =>
+      current ? { ...current, lessons: current.lessons.filter((lesson) => lesson.id !== lessonId) } : current
+    );
+  }, []);
+
+  const invalidateCalendar = useCallback(async (months?: string[]) => {
+    const loadedMonths = loadedMonthKeysRef.current;
+    const requestedMonths = months?.length
+      ? uniqueMonthKeys(months).filter((month) => loadedMonths.has(month))
+      : [...loadedMonths];
+    await loadSnapshot({
+      silent: true,
+      months: requestedMonths.length ? requestedMonths : getSnapshotMonthsForRequest(),
+      force: true,
+      calendarOnly: true
+    });
+  }, [getSnapshotMonthsForRequest, loadSnapshot]);
+
+  const applySocketSnapshot = useCallback((payload: unknown) => {
+    applyPagedSnapshot(payload as Snapshot, getSnapshotMonthsForRequest());
+  }, [applyPagedSnapshot, getSnapshotMonthsForRequest]);
 
   const { secondsUntilRefresh, connected, refreshing, lastRefreshedAt, refreshNow } =
-    useSnapshotAutoRefresh({ loadSnapshot, onSnapshot: (nextSnapshot) => setSnapshot(nextSnapshot as Snapshot) });
+    useSnapshotAutoRefresh({
+      loadSnapshot,
+      onSnapshot: applySocketSnapshot,
+      onLessonUpsert: applyLessonUpsert,
+      onLessonDelete: applyLessonDelete,
+      onCalendarInvalidate: invalidateCalendar,
+      getSnapshotMonths: getSnapshotMonthsForRequest
+    });
+
+  useEffect(() => {
+    const missingMonths = getMonthKeysAround(selectedDate).filter((month) => !loadedMonthKeysRef.current.has(month));
+    if (missingMonths.length) {
+      void loadSnapshot({ silent: true, months: missingMonths, calendarOnly: snapshot !== null });
+    }
+  }, [loadSnapshot, selectedDate, snapshot]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setCurrentTime(new Date()), 60_000);
