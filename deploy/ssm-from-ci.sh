@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Invoked from GitHub Actions to run deploy/deploy.sh on EC2 via SSM.
+# Invoked from GitHub Actions to run deploy/helm-deploy.sh on EC2 via SSM.
 set -euo pipefail
 
 INSTANCE_ID="${1:?EC2 instance id required}"
@@ -7,9 +7,13 @@ DEPLOY_SHA="${2:?deploy sha required}"
 DEPLOY_REF="${3:-main}"
 AWS_REGION="${4:-eu-central-1}"
 DEPLOY_USER="${5:-ec2-user}"
+CRM_IMAGE_REGISTRY="${6:-}"
+KUBE_NAMESPACE="${7:-crm}"
+HELM_RELEASE="${8:-crm}"
+KUBE_INGRESS_HOST="${9:-vocalcrm.site}"
 
 CRM_APP_DIR="/home/${DEPLOY_USER}/crm"
-REMOTE_SCRIPT="export DEPLOY_SHA='${DEPLOY_SHA}' DEPLOY_REF='${DEPLOY_REF}' AWS_REGION='${AWS_REGION}' CRM_APP_DIR='${CRM_APP_DIR}'; bash '${CRM_APP_DIR}/deploy/deploy.sh'"
+REMOTE_SCRIPT="export DEPLOY_SHA='${DEPLOY_SHA}' DEPLOY_REF='${DEPLOY_REF}' AWS_REGION='${AWS_REGION}' CRM_APP_DIR='${CRM_APP_DIR}' CRM_IMAGE_REGISTRY='${CRM_IMAGE_REGISTRY}' KUBE_NAMESPACE='${KUBE_NAMESPACE}' HELM_RELEASE='${HELM_RELEASE}' KUBE_INGRESS_HOST='${KUBE_INGRESS_HOST}'; bash '${CRM_APP_DIR}/deploy/helm-deploy.sh'"
 WRAPPED="sudo -u ${DEPLOY_USER} -H bash -lc $(printf '%q' "$REMOTE_SCRIPT")"
 
 aws_cli=(aws --region "$AWS_REGION")

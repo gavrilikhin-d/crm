@@ -2,8 +2,9 @@
 # Runs on main pushes or manual dispatch.
 #
 # GitHub secrets (Environment: prod — Settings → Environments → prod):
-#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY — IAM user: ECR push
-#   KUBE_CONFIG_B64 — base64-encoded kubeconfig for the target cluster
+#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY — IAM user: ECR push + SSM SendCommand
+#   EC2_INSTANCE_ID — k3s host instance
+#   EC2_DEPLOY_USER — optional, default ec2-user
 #   SENTRY_AUTH_TOKEN — source map uploads (optional)
 #   NEXT_PUBLIC_SENTRY_DSN, SENTRY_ORG, SENTRY_PROJECT — optional frontend build args
 #   BACKEND_SENTRY_PROJECT, BOT_SENTRY_PROJECT, REMINDER_SENTRY_PROJECT — optional service source maps
@@ -121,55 +122,42 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v4
 
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v4
-
-      - name: Configure kubeconfig
-        env:
-          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_B64 }}
-        run: |
-          if [ -z "${KUBE_CONFIG_B64:-}" ]; then
-            echo "::error::KUBE_CONFIG_B64 is not set in the prod environment secrets"
-            exit 1
-          fi
-
-          mkdir -p "$HOME/.kube"
-          printf '%s' "$KUBE_CONFIG_B64" | base64 -d > "$HOME/.kube/config"
-          chmod 600 "$HOME/.kube/config"
-
       - name: Lint Helm chart
         run: helm lint deploy/helm/crm -f deploy/helm/crm/values-small.yaml
 
-      - name: Deploy via Helm
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy via SSM Helm
         env:
+          EC2_INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
+          EC2_DEPLOY_USER: ${{ secrets.EC2_DEPLOY_USER }}
           DEPLOY_SHA: ${{ needs.build-and-push.outputs.image_tag }}
           CRM_IMAGE_REGISTRY: ${{ needs.build-and-push.outputs.image_registry }}
           KUBE_NAMESPACE: ${{ vars.KUBE_NAMESPACE || 'crm' }}
           HELM_RELEASE: ${{ vars.HELM_RELEASE || 'crm' }}
           KUBE_INGRESS_HOST: ${{ vars.KUBE_INGRESS_HOST || 'vocalcrm.site' }}
         run: |
-          helm upgrade --install "$HELM_RELEASE" deploy/helm/crm \
-            --namespace "$KUBE_NAMESPACE" \
-            --create-namespace \
-            -f deploy/helm/crm/values-small.yaml \
-            --set global.imageRegistry="$CRM_IMAGE_REGISTRY" \
-            --set global.imageTag="$DEPLOY_SHA" \
-            --set ingress.host="$KUBE_INGRESS_HOST" \
-            --set config.appBaseUrl="https://$KUBE_INGRESS_HOST" \
-            --set config.authUrl="https://$KUBE_INGRESS_HOST" \
-            --atomic \
-            --wait \
-            --timeout 10m
+          if [ -z "${EC2_INSTANCE_ID:-}" ]; then
+            echo "::error::EC2_INSTANCE_ID is not set in the prod environment secrets"
+            exit 1
+          fi
 
-      - name: Verify rollouts
-        env:
-          KUBE_NAMESPACE: ${{ vars.KUBE_NAMESPACE || 'crm' }}
-          HELM_RELEASE: ${{ vars.HELM_RELEASE || 'crm' }}
-        run: |
-          kubectl rollout status "deployment/${HELM_RELEASE}-crm-backend" --namespace "$KUBE_NAMESPACE" --timeout=5m
-          kubectl rollout status "deployment/${HELM_RELEASE}-crm-frontend" --namespace "$KUBE_NAMESPACE" --timeout=5m
-          kubectl rollout status "deployment/${HELM_RELEASE}-crm-reminder" --namespace "$KUBE_NAMESPACE" --timeout=5m
-          kubectl rollout status "deployment/${HELM_RELEASE}-crm-bot" --namespace "$KUBE_NAMESPACE" --timeout=5m
+          chmod +x deploy/ssm-from-ci.sh
+          deploy/ssm-from-ci.sh \
+            "$EC2_INSTANCE_ID" \
+            "$DEPLOY_SHA" \
+            main \
+            "$AWS_REGION" \
+            "${EC2_DEPLOY_USER:-ec2-user}" \
+            "$CRM_IMAGE_REGISTRY" \
+            "$KUBE_NAMESPACE" \
+            "$HELM_RELEASE" \
+            "$KUBE_INGRESS_HOST"
 
       - name: Print rollback command
         if: failure()
@@ -177,4 +165,4 @@ jobs:
           KUBE_NAMESPACE: ${{ vars.KUBE_NAMESPACE || 'crm' }}
           HELM_RELEASE: ${{ vars.HELM_RELEASE || 'crm' }}
         run: |
-          echo "Rollback with: helm rollback $HELM_RELEASE --namespace $KUBE_NAMESPACE"
+          echo "Rollback from the EC2 host with: helm rollback $HELM_RELEASE --namespace $KUBE_NAMESPACE"
