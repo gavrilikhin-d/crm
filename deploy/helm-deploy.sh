@@ -74,6 +74,8 @@ configure_sparse_checkout() {
   mkdir -p .git/info
   cat > .git/info/sparse-checkout <<'EOF'
 /.gitignore
+/docker-compose.prod.yml
+/deploy/Caddyfile
 /deploy/helm/
 /deploy/helm-deploy.sh
 EOF
