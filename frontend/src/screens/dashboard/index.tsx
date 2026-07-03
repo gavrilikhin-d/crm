@@ -200,6 +200,9 @@ export default function Home() {
         case "package_limit":
           toast.error(t("plan.limit.packages"));
           break;
+        case "recurring_limit":
+          toast.error(t("plan.limit.recurring"));
+          break;
         case "recurring_disabled":
           toast.error(t("plan.limit.recurring"));
           break;

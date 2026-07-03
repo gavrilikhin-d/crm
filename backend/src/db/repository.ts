@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, eq, gt, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type {
   Account,
@@ -325,7 +325,8 @@ export async function countLessonsInMonth(accountId: string, monthStart: Date, m
       and(
         eq(lessons.accountId, accountId),
         gte(lessons.startsAt, monthStart.toISOString()),
-        lt(lessons.startsAt, monthEnd.toISOString())
+        lt(lessons.startsAt, monthEnd.toISOString()),
+        isNull(lessons.recurringScheduleId)
       )
     );
   return Number(rows[0]?.count ?? 0);
@@ -340,10 +341,16 @@ export async function countPackages(accountId: string): Promise<number> {
 }
 
 export async function countRecurringSchedules(accountId: string): Promise<number> {
+  const now = new Date().toISOString();
   const rows = await db
     .select({ count: sql<number>`count(*)` })
     .from(recurringSchedules)
-    .where(eq(recurringSchedules.accountId, accountId));
+    .where(
+      and(
+        eq(recurringSchedules.accountId, accountId),
+        or(isNull(recurringSchedules.activeTo), gt(recurringSchedules.activeTo, now))
+      )
+    );
   return Number(rows[0]?.count ?? 0);
 }
 

@@ -23,6 +23,15 @@ function monthBounds(date = new Date()): { start: Date; end: Date } {
   return { start, end };
 }
 
+function countInstantsInRange(values: string[], start: Date, end: Date): number {
+  const startTime = start.getTime();
+  const endTime = end.getTime();
+  return values.filter((value) => {
+    const time = new Date(value).getTime();
+    return time >= startTime && time < endTime;
+  }).length;
+}
+
 export async function getAccountUsage(accountId: string) {
   const { start, end } = monthBounds();
   const [students, lessonsThisMonth, packages, recurringSchedules] = await Promise.all([
@@ -50,12 +59,22 @@ export async function assertCanCreateStudent(accountId: string, plan: AccountPla
 export async function assertCanCreateLesson(
   accountId: string,
   plan: AccountPlan,
-  options?: { repeatWeekly?: boolean; additionalLessons?: number }
+  options?: { repeatWeekly?: boolean; additionalLessons?: number; additionalLessonStartsAt?: string[] }
 ): Promise<void> {
   const limits = getPlanLimits(plan);
 
   if (options?.repeatWeekly && !limits.recurringEnabled) {
     throw new PlanLimitError("recurring_disabled", "Recurring lessons are not available on the free plan");
+  }
+
+  if (options?.repeatWeekly && limits.maxRecurringSchedules !== null) {
+    const current = await countRecurringSchedules(accountId);
+    if (current >= limits.maxRecurringSchedules) {
+      throw new PlanLimitError(
+        "recurring_limit",
+        `Recurring lesson limit reached (${limits.maxRecurringSchedules})`
+      );
+    }
   }
 
   if (limits.maxLessonsPerMonth === null) {
@@ -64,7 +83,10 @@ export async function assertCanCreateLesson(
 
   const { start, end } = monthBounds();
   const current = await countLessonsInMonth(accountId, start, end);
-  const additional = options?.additionalLessons ?? 1;
+  const additional =
+    options?.additionalLessonStartsAt !== undefined
+      ? countInstantsInRange(options.additionalLessonStartsAt, start, end)
+      : (options?.additionalLessons ?? 1);
   if (current + additional > limits.maxLessonsPerMonth) {
     throw new PlanLimitError(
       "lesson_limit",

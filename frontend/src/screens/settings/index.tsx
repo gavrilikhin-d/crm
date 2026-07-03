@@ -101,6 +101,11 @@ export function SettingsView({
                 used={accountInfo.usage.packages}
                 limit={accountInfo.limits.maxPackages}
               />
+              <PlanUsageRow
+                label={t("plan.usage.recurringSchedules")}
+                used={accountInfo.usage.recurringSchedules}
+                limit={accountInfo.limits.maxRecurringSchedules}
+              />
               <p className="text-sm text-muted-foreground">
                 {accountInfo.limits.recurringEnabled ? t("plan.recurringEnabled") : t("plan.recurringDisabled")}
               </p>
