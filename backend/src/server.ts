@@ -1,8 +1,18 @@
 import "./load-env.js";
 import { initSentryNode, suppressSentryTracing } from "@crm/shared/sentry-node";
 import { parameterizePath, withIncomingHttpSpan } from "@crm/shared/sentry-tracing";
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import type { LessonType, PaymentMethod, ParticipantStatus, RecurringDeleteScope, Reminder } from "@crm/shared";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import type { Duplex } from "node:stream";
+import { WebSocketServer, type WebSocket } from "ws";
+import type {
+  Database,
+  LessonType,
+  PaymentMethod,
+  ParticipantStatus,
+  RecurringDeleteScope,
+  Reminder,
+  StudentBalance
+} from "@crm/shared";
 import {
   assertAuthSyncSecret,
   assertInternalToken,
@@ -20,7 +30,14 @@ type Handler = (
   ctx?: AuthContext
 ) => Promise<void> | void;
 
+type SnapshotPayload = Database & {
+  balances: StudentBalance[];
+  dashboard: Awaited<ReturnType<typeof store.getDashboard>>;
+  account: Awaited<ReturnType<typeof store.getAccountInfo>>;
+};
+
 const port = Number(process.env.PORT ?? 4000);
+const snapshotWebSocketPath = "/api/ws/snapshot";
 
 const publicRoutes: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
   route("GET", /^\/api\/health$/, async (_request, response) => jsonOk(response, { ok: true })),
@@ -87,7 +104,7 @@ async function startServer() {
   await initSentryNode("backend", process.env.BACKEND_SENTRY_DSN);
   await store.initialize();
 
-  createServer(async (request, response) => {
+  const server = createServer(async (request, response) => {
     const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
     const routeName = `${request.method ?? "GET"} ${parameterizePath(url.pathname)}`;
     const untraced = request.method === "OPTIONS" || url.pathname === "/api/health";
@@ -132,6 +149,9 @@ async function startServer() {
         const ctx = await authenticateRequest(request);
         const match = url.pathname.match(protectedRoute.pattern);
         await protectedRoute.handler(request, response, match as RegExpMatchArray, ctx);
+        if (request.method !== "GET" && request.method !== "HEAD") {
+          void broadcastSnapshot(ctx);
+        }
       } catch (error) {
         if (error instanceof PlanLimitError) {
           jsonError(response, error, 403, { code: error.code });
@@ -152,7 +172,11 @@ async function startServer() {
     }
 
     await withIncomingHttpSpan(request, response, routeName, handle);
-  }).listen(port, () => {
+  });
+
+  attachSnapshotWebSocket(server);
+
+  server.listen(port, () => {
     console.log(`Backend API listening on ${port}`);
   });
 }
@@ -186,13 +210,17 @@ async function deleteAccount(_request: IncomingMessage, response: ServerResponse
 }
 
 async function getSnapshot(_request: IncomingMessage, response: ServerResponse, _match: RegExpMatchArray, ctx?: AuthContext) {
+  jsonOk(response, await buildSnapshot(ctx!));
+}
+
+async function buildSnapshot(ctx: AuthContext): Promise<SnapshotPayload> {
   const [snapshot, balances, dashboard, accountInfo] = await Promise.all([
-    store.getSnapshot(ctx!),
-    store.getBalances(ctx!),
-    store.getDashboard(ctx!),
-    store.getAccountInfo(ctx!)
+    store.getSnapshot(ctx),
+    store.getBalances(ctx),
+    store.getDashboard(ctx),
+    store.getAccountInfo(ctx)
   ]);
-  jsonOk(response, { ...snapshot, balances, dashboard, account: accountInfo });
+  return { ...snapshot, balances, dashboard, account: accountInfo };
 }
 
 async function getStudentAvatar(_request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray, ctx?: AuthContext) {
@@ -437,16 +465,105 @@ async function setParticipantStatusInternal(request: IncomingMessage, response: 
     jsonError(response, new Error("Lesson not found"), 404);
     return;
   }
-  jsonOk(
-    response,
-    await store.setParticipantStatusForAccount(
-      accountId,
-      match[1],
-      match[2],
-      body.status as ParticipantStatus,
-      body.action as "attend" | "decline" | undefined
-    )
+  const lesson = await store.setParticipantStatusForAccount(
+    accountId,
+    match[1],
+    match[2],
+    body.status as ParticipantStatus,
+    body.action as "attend" | "decline" | undefined
   );
+  jsonOk(response, lesson);
+
+  const account = await getAccountById(accountId);
+  if (account) {
+    void broadcastSnapshot({ accountId, email: account.email, plan: account.plan });
+  }
+}
+
+const snapshotClients = new Map<string, Set<WebSocket>>();
+
+function attachSnapshotWebSocket(server: Server) {
+  const webSocketServer = new WebSocketServer({ noServer: true });
+
+  server.on("upgrade", (request, socket, head) => {
+    const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+    if (url.pathname !== snapshotWebSocketPath) {
+      socket.destroy();
+      return;
+    }
+
+    void handleSnapshotUpgrade(webSocketServer, request, socket, head, url);
+  });
+
+  webSocketServer.on("connection", (webSocket, request: IncomingMessage & { authContext?: AuthContext }) => {
+    const ctx = request.authContext;
+    if (!ctx) {
+      webSocket.close(1008, "Unauthorized");
+      return;
+    }
+
+    const clients = snapshotClients.get(ctx.accountId) ?? new Set<WebSocket>();
+    clients.add(webSocket);
+    snapshotClients.set(ctx.accountId, clients);
+
+    webSocket.on("close", () => {
+      clients.delete(webSocket);
+      if (!clients.size) {
+        snapshotClients.delete(ctx.accountId);
+      }
+    });
+
+    void sendSnapshot(webSocket, ctx);
+  });
+}
+
+async function handleSnapshotUpgrade(
+  webSocketServer: WebSocketServer,
+  request: IncomingMessage & { authContext?: AuthContext },
+  socket: Duplex,
+  head: Buffer,
+  url: URL
+) {
+  try {
+    const token = url.searchParams.get("token");
+    if (token) {
+      request.headers.authorization = `Bearer ${token}`;
+    }
+
+    request.authContext = await authenticateRequest(request);
+    webSocketServer.handleUpgrade(request, socket, head, (webSocket) => {
+      webSocketServer.emit("connection", webSocket, request);
+    });
+  } catch {
+    socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+    socket.destroy();
+  }
+}
+
+async function sendSnapshot(webSocket: WebSocket, ctx: AuthContext) {
+  if (webSocket.readyState !== webSocket.OPEN) {
+    return;
+  }
+
+  try {
+    webSocket.send(JSON.stringify({ type: "snapshot", payload: await buildSnapshot(ctx) }));
+  } catch (error) {
+    webSocket.send(JSON.stringify({ type: "error", error: error instanceof Error ? error.message : "Unexpected error" }));
+  }
+}
+
+async function broadcastSnapshot(ctx: AuthContext) {
+  const clients = snapshotClients.get(ctx.accountId);
+  if (!clients?.size) {
+    return;
+  }
+
+  const message = JSON.stringify({ type: "snapshot", payload: await buildSnapshot(ctx) });
+  for (const client of clients) {
+    if (client.readyState === client.OPEN) {
+      client.send(message);
+    }
+  }
 }
 
 async function bindTelegram(request: IncomingMessage, response: ServerResponse) {

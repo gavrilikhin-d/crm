@@ -32,6 +32,13 @@ spec:
                 port:
                   name: http
           {{- end }}
+          - path: /api/ws/snapshot
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "crm.fullname" . }}-backend
+                port:
+                  name: http
           - path: /
             pathType: Prefix
             backend:

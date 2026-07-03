@@ -61,8 +61,10 @@ const ru = {
     moreLessons: "+{count} еще",
     lessonFallback: "Занятие",
     refresh: "Обновить",
-    refreshIn: "Автообновление через {seconds} с",
-    autoRefreshed: "Обновлено автоматически",
+    live: "Live",
+    liveUpdates: "Обновления приходят автоматически",
+    reconnectingShort: "Связь...",
+    reconnecting: "Переподключение через {seconds} с",
     lastRefreshed: "Последнее обновление: {time}",
     vacation: {
       title: "Отпуск",

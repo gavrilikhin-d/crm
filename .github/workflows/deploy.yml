@@ -6,7 +6,7 @@
 #   EC2_INSTANCE_ID — k3s host instance
 #   EC2_DEPLOY_USER — optional, default ec2-user
 #   SENTRY_AUTH_TOKEN — source map uploads (optional)
-#   NEXT_PUBLIC_SENTRY_DSN, SENTRY_PROJECT — optional frontend build args
+#   NEXT_PUBLIC_SENTRY_DSN, NEXT_PUBLIC_BACKEND_WS_URL, SENTRY_PROJECT — optional frontend build args
 #   BACKEND_SENTRY_PROJECT, BOT_SENTRY_PROJECT, REMINDER_SENTRY_PROJECT — optional service source maps
 #   SENTRY_RELEASE is set from the deploy commit SHA for source map uploads
 #
@@ -99,6 +99,7 @@ jobs:
           REMINDER_SENTRY_PROJECT: ${{ secrets.REMINDER_SENTRY_PROJECT || 'reminder' }}
           SENTRY_RELEASE: ${{ steps.meta.outputs.sha }}
           NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
+          NEXT_PUBLIC_BACKEND_WS_URL: ${{ vars.NEXT_PUBLIC_BACKEND_WS_URL }}
           NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: ${{ vars.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'VocalLessonBot' }}
           # Placeholders only — compose parses postgres/caddy too; real values live in EC2 .env
           DOMAIN: fake.example.com

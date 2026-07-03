@@ -43,8 +43,8 @@ export function ScheduleScreen({
   lessonDialogOpen,
   setLessonDialogOpen,
   secondsUntilRefresh,
+  connected,
   refreshing,
-  showAutoRefreshed,
   lastRefreshedAt,
   refreshNow,
   onShiftCalendar,
@@ -73,8 +73,8 @@ export function ScheduleScreen({
   lessonDialogOpen: boolean;
   setLessonDialogOpen: (open: boolean) => void;
   secondsUntilRefresh: number;
+  connected: boolean;
   refreshing: boolean;
-  showAutoRefreshed: boolean;
   lastRefreshedAt: Date | null;
   refreshNow: () => Promise<void>;
   onShiftCalendar: (direction: -1 | 1) => void;
@@ -129,8 +129,8 @@ export function ScheduleScreen({
           <div className="flex items-center justify-center gap-2 sm:justify-end">
             <SnapshotRefreshControl
               secondsUntilRefresh={secondsUntilRefresh}
+              connected={connected}
               refreshing={refreshing}
-              showAutoRefreshed={showAutoRefreshed}
               lastRefreshedAt={lastRefreshedAt}
               onRefresh={() => void refreshNow()}
             />
