@@ -1,3 +1,4 @@
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { Telegraf } from "telegraf";
 import type { InlineKeyboardMarkup } from "@telegraf/types";
 import type { Context } from "telegraf";
@@ -26,10 +27,13 @@ import {
   SCHEDULE_COMMANDS
 } from "./schedule-days";
 
+const DEFAULT_BOT_PORT = 4002;
+const WEBHOOK_PREFIX = "/telegram/webhook";
+
 let bot: Telegraf | null = null;
 
 export function getTelegramBot(): Telegraf | null {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const token = getTelegramToken();
   if (!token) {
     return null;
   }
@@ -341,25 +345,31 @@ export function getTelegramBot(): Telegraf | null {
 export async function startTelegramBot(): Promise<void> {
   const instance = getTelegramBot();
   if (!instance) {
-    log.warn("Telegram bot disabled", { reason: "TELEGRAM_BOT_TOKEN is not set" });
+    log.warn("Telegram bot disabled", { reason: "Telegram bot token is not set" });
+    startWebhookServer(null, { port: getBotPort(), path: "", secret: "" });
     return;
   }
 
-  log.info("Telegram bot starting polling");
+  const webhook = getWebhookConfig();
+  const port = getBotPort();
+  const webhookUrl = `${webhook.baseUrl}${webhook.path}`;
+
+  log.info("Telegram bot starting webhook", { webhookUrl, port });
 
   try {
     const botInfo = await withTimeout(instance.telegram.getMe(), 15_000, "Telegram getMe timeout");
     await registerBotCommands(instance.telegram);
-    void instance.launch({ dropPendingUpdates: true }).catch((error) => {
-      log.error("Telegram polling stopped with error", { err: error });
+    await instance.telegram.setWebhook(webhookUrl, {
+      drop_pending_updates: true,
+      secret_token: webhook.secret
     });
-    log.info("Telegram bot polling started", { username: botInfo.username });
+    const server = startWebhookServer(instance, { port, path: webhook.path, secret: webhook.secret });
+    log.info("Telegram bot webhook started", { username: botInfo.username, port, path: webhook.path });
+    registerShutdown(instance, server);
   } catch (error) {
     log.error("Telegram bot failed to start", { err: error });
+    throw error;
   }
-
-  process.once("SIGINT", () => instance.stop("SIGINT"));
-  process.once("SIGTERM", () => instance.stop("SIGTERM"));
 }
 
 export async function sendLessonReminder(student: Student, lesson: Lesson): Promise<void> {
@@ -556,6 +566,113 @@ function getStartPayload(message: unknown): string | undefined {
 
   const [, payload] = message.text.trim().split(/\s+/, 2);
   return payload;
+}
+
+function getBotPort(): number {
+  const raw = process.env.BOT_PORT ?? process.env.PORT;
+  const port = raw ? Number(raw) : DEFAULT_BOT_PORT;
+
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new Error(`Invalid bot port: ${raw}`);
+  }
+
+  return port;
+}
+
+function getTelegramToken(): string | undefined {
+  const devToken = readEnv("TELEGRAM_DEV_BOT_TOKEN");
+  if (!isProduction() && devToken) {
+    return devToken;
+  }
+
+  return readEnv("TELEGRAM_BOT_TOKEN") || undefined;
+}
+
+function getWebhookConfig(): { baseUrl: string; path: string; secret: string } {
+  const useDevWebhook = !isProduction() && Boolean(readEnv("TELEGRAM_DEV_BOT_TOKEN"));
+  const baseUrlKey = useDevWebhook ? "TELEGRAM_DEV_WEBHOOK_BASE_URL" : "TELEGRAM_WEBHOOK_BASE_URL";
+  const secretKey = useDevWebhook ? "TELEGRAM_DEV_WEBHOOK_SECRET" : "TELEGRAM_WEBHOOK_SECRET";
+  const baseUrl = readEnv(baseUrlKey)?.replace(/\/+$/, "");
+  const secret = readEnv(secretKey);
+
+  if (!baseUrl) {
+    throw new Error(`${baseUrlKey} is required when the Telegram bot token is set`);
+  }
+  if (!secret) {
+    throw new Error(`${secretKey} is required when the Telegram bot token is set`);
+  }
+
+  return {
+    baseUrl,
+    path: `${WEBHOOK_PREFIX}/${encodeURIComponent(secret)}`,
+    secret
+  };
+}
+
+function readEnv(key: string): string {
+  return process.env[key]?.trim() ?? "";
+}
+
+function isProduction(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
+function startWebhookServer(
+  instance: Telegraf | null,
+  webhook: { port: number; path: string; secret: string }
+): Server {
+  const webhookHandler = instance ? instance.webhookCallback(webhook.path) : undefined;
+  const server = createServer((request, response) => {
+    const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+
+    if (request.method === "GET" && url.pathname === "/health") {
+      jsonOk(response, { ok: true, telegramEnabled: Boolean(instance) });
+      return;
+    }
+
+    if (request.method !== "POST" || url.pathname !== webhook.path || !webhookHandler) {
+      jsonError(response, "Route not found", 404);
+      return;
+    }
+
+    if (!hasValidTelegramSecret(request, webhook.secret)) {
+      jsonError(response, "Forbidden", 403);
+      return;
+    }
+
+    webhookHandler(request, response);
+  });
+
+  server.listen(webhook.port, () => {
+    log.info("Telegram bot HTTP server listening", { port: webhook.port });
+  });
+
+  return server;
+}
+
+function hasValidTelegramSecret(request: IncomingMessage, secret: string): boolean {
+  return request.headers["x-telegram-bot-api-secret-token"] === secret;
+}
+
+function registerShutdown(instance: Telegraf, server: Server): void {
+  const shutdown = (signal: NodeJS.Signals) => {
+    server.close(() => {
+      instance.stop(signal);
+    });
+  };
+
+  process.once("SIGINT", () => shutdown("SIGINT"));
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+}
+
+function jsonOk(response: ServerResponse, payload: unknown): void {
+  response.writeHead(200, { "content-type": "application/json" });
+  response.end(JSON.stringify(payload));
+}
+
+function jsonError(response: ServerResponse, message: string, status: number): void {
+  response.writeHead(status, { "content-type": "application/json" });
+  response.end(JSON.stringify({ error: message }));
 }
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {

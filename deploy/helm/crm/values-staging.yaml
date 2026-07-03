@@ -1,6 +1,7 @@
 config:
   appBaseUrl: "https://staging.vocalcrm.site"
   authUrl: "https://staging.vocalcrm.site"
+  telegramWebhookBaseUrl: "https://staging.vocalcrm.site"
   sentryEnvironment: "staging"
 
 frontend:

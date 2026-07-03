@@ -4,13 +4,22 @@ import type { Lesson, Student } from "@crm/shared";
 let bot: Telegraf | null = null;
 
 function getTelegramBot(): Telegraf | null {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const token = getTelegramToken();
   if (!token) {
     return null;
   }
 
   bot ??= new Telegraf(token);
   return bot;
+}
+
+function getTelegramToken(): string | undefined {
+  const devToken = process.env.TELEGRAM_DEV_BOT_TOKEN?.trim();
+  if (process.env.NODE_ENV !== "production" && devToken) {
+    return devToken;
+  }
+
+  return process.env.TELEGRAM_BOT_TOKEN?.trim() || undefined;
 }
 
 export async function sendLessonReminder(student: Student, lesson: Lesson): Promise<void> {

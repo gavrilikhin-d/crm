@@ -29,7 +29,10 @@ const profiles: Record<
       { key: "AUTH_URL", hint: "http://localhost:3000" },
       { key: "AUTH_SYNC_SECRET", hint: "optional; falls back to AUTH_SECRET" },
       { key: "BACKEND_INTERNAL_URL", hint: "http://localhost:4000" },
-      { key: "REMINDER_INTERNAL_URL", hint: "http://localhost:4001" }
+      { key: "REMINDER_INTERNAL_URL", hint: "http://localhost:4001" },
+      { key: "TELEGRAM_DEV_BOT_TOKEN", hint: "optional; local test bot token for bun dev:all" },
+      { key: "TELEGRAM_DEV_WEBHOOK_BASE_URL", hint: "required when TELEGRAM_DEV_BOT_TOKEN is set" },
+      { key: "TELEGRAM_DEV_WEBHOOK_SECRET", hint: "required when TELEGRAM_DEV_BOT_TOKEN is set" }
     ],
     checkPostgres: true
   },
@@ -51,11 +54,21 @@ const profiles: Record<
   },
   bot: {
     required: [{ key: "INTERNAL_API_TOKEN", hint: "generate with: openssl rand -base64 32" }],
-    recommended: [{ key: "TELEGRAM_BOT_TOKEN", hint: "optional; bot skips Telegram without it" }]
+    recommended: [
+      { key: "TELEGRAM_BOT_TOKEN", hint: "optional; bot skips Telegram without it" },
+      { key: "TELEGRAM_DEV_BOT_TOKEN", hint: "optional; local test bot token" },
+      { key: "TELEGRAM_DEV_WEBHOOK_BASE_URL", hint: "required when TELEGRAM_DEV_BOT_TOKEN is set" },
+      { key: "TELEGRAM_DEV_WEBHOOK_SECRET", hint: "required when TELEGRAM_DEV_BOT_TOKEN is set" },
+      { key: "TELEGRAM_WEBHOOK_BASE_URL", hint: "required when TELEGRAM_BOT_TOKEN is set" },
+      { key: "TELEGRAM_WEBHOOK_SECRET", hint: "required when TELEGRAM_BOT_TOKEN is set" }
+    ]
   },
   reminder: {
     required: [{ key: "INTERNAL_API_TOKEN", hint: "generate with: openssl rand -base64 32" }],
-    recommended: [{ key: "TELEGRAM_BOT_TOKEN", hint: "optional; reminders skip Telegram without it" }]
+    recommended: [
+      { key: "TELEGRAM_BOT_TOKEN", hint: "optional; reminders skip Telegram without it" },
+      { key: "TELEGRAM_DEV_BOT_TOKEN", hint: "optional; local test bot token" }
+    ]
   }
 };
 
@@ -123,8 +136,29 @@ async function main() {
     process.exit(1);
   }
 
-  const missing = spec.required.filter(({ key }) => !isSet(key));
-  const emptyRecommended = spec.recommended?.filter(({ key }) => !isSet(key)) ?? [];
+  let missing = spec.required.filter(({ key }) => !isSet(key));
+  if ((profile === "dev" || profile === "bot") && (isSet("TELEGRAM_DEV_BOT_TOKEN") || isSet("TELEGRAM_BOT_TOKEN"))) {
+    const webhookEnv = isSet("TELEGRAM_DEV_BOT_TOKEN")
+      ? [
+          { key: "TELEGRAM_DEV_WEBHOOK_BASE_URL", hint: "public HTTPS tunnel origin, e.g. https://example.ngrok-free.app" },
+          { key: "TELEGRAM_DEV_WEBHOOK_SECRET", hint: "generate a URL-safe random value for local dev" }
+        ]
+      : [
+          { key: "TELEGRAM_WEBHOOK_BASE_URL", hint: "public HTTPS ingress origin, e.g. https://vocalcrm.site" },
+          { key: "TELEGRAM_WEBHOOK_SECRET", hint: "generate a URL-safe random value" }
+        ];
+    missing = [
+      ...missing,
+      ...webhookEnv.filter(({ key }) => !isSet(key))
+    ];
+  }
+  let emptyRecommended = spec.recommended?.filter(({ key }) => !isSet(key)) ?? [];
+  if ((profile === "bot" || profile === "reminder") && isSet("TELEGRAM_DEV_BOT_TOKEN")) {
+    emptyRecommended = emptyRecommended.filter(({ key }) => !key.startsWith("TELEGRAM_BOT") && !key.startsWith("TELEGRAM_WEBHOOK"));
+  }
+  if ((profile === "bot" || profile === "reminder") && isSet("TELEGRAM_BOT_TOKEN")) {
+    emptyRecommended = emptyRecommended.filter(({ key }) => !key.startsWith("TELEGRAM_DEV"));
+  }
 
   if (missing.length > 0) {
     console.error(`Missing required environment variables for "${profile}":\n`);
