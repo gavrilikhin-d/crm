@@ -14,6 +14,7 @@
 #   KUBE_NAMESPACE — default crm
 #   HELM_RELEASE — default crm
 #   KUBE_INGRESS_HOST — default vocalcrm.site
+#   NEXT_PUBLIC_TELEGRAM_BOT_USERNAME — frontend Telegram connect links
 
 name: Deploy
 
@@ -98,6 +99,7 @@ jobs:
           REMINDER_SENTRY_PROJECT: ${{ secrets.REMINDER_SENTRY_PROJECT || 'reminder' }}
           SENTRY_RELEASE: ${{ steps.meta.outputs.sha }}
           NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
+          NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: ${{ vars.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'VocalLessonBot' }}
           # Placeholders only — compose parses postgres/caddy too; real values live in EC2 .env
           DOMAIN: fake.example.com
           POSTGRES_USER: fake
