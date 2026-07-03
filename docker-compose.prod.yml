@@ -56,9 +56,6 @@ services:
       context: .
       dockerfile: backend/Dockerfile
       args:
-        SENTRY_AUTH_TOKEN: ${SENTRY_AUTH_TOKEN:-}
-        SENTRY_ORG: ${SENTRY_ORG:-}
-        SENTRY_PROJECT: ${BACKEND_SENTRY_PROJECT:-backend}
         SENTRY_RELEASE: ${SENTRY_RELEASE:-}
     image: ${CRM_IMAGE_REGISTRY:-local}/crm-backend:${CRM_IMAGE_TAG:-dev}
     pull_policy: always
@@ -96,9 +93,6 @@ services:
       context: .
       dockerfile: reminder/Dockerfile
       args:
-        SENTRY_AUTH_TOKEN: ${SENTRY_AUTH_TOKEN:-}
-        SENTRY_ORG: ${SENTRY_ORG:-}
-        SENTRY_PROJECT: ${REMINDER_SENTRY_PROJECT:-reminder}
         SENTRY_RELEASE: ${SENTRY_RELEASE:-}
     image: ${CRM_IMAGE_REGISTRY:-local}/crm-reminder:${CRM_IMAGE_TAG:-dev}
     pull_policy: always
@@ -134,9 +128,6 @@ services:
       context: .
       dockerfile: bot/Dockerfile
       args:
-        SENTRY_AUTH_TOKEN: ${SENTRY_AUTH_TOKEN:-}
-        SENTRY_ORG: ${SENTRY_ORG:-}
-        SENTRY_PROJECT: ${BOT_SENTRY_PROJECT:-bot}
         SENTRY_RELEASE: ${SENTRY_RELEASE:-}
     image: ${CRM_IMAGE_REGISTRY:-local}/crm-bot:${CRM_IMAGE_TAG:-dev}
     pull_policy: always
@@ -161,7 +152,6 @@ services:
       args:
         BACKEND_INTERNAL_URL: http://backend:4000
         REMINDER_INTERNAL_URL: http://reminder:4001
-        SENTRY_AUTH_TOKEN: ${SENTRY_AUTH_TOKEN:-}
         SENTRY_ORG: ${SENTRY_ORG:-}
         SENTRY_PROJECT: ${SENTRY_PROJECT:-}
         SENTRY_RELEASE: ${SENTRY_RELEASE:-}

@@ -6,7 +6,7 @@
 #   EC2_INSTANCE_ID — k3s host instance
 #   EC2_DEPLOY_USER — optional, default ec2-user
 #   SENTRY_AUTH_TOKEN — source map uploads (optional)
-#   NEXT_PUBLIC_SENTRY_DSN, SENTRY_ORG, SENTRY_PROJECT — optional frontend build args
+#   NEXT_PUBLIC_SENTRY_DSN, SENTRY_PROJECT — optional frontend build args
 #   BACKEND_SENTRY_PROJECT, BOT_SENTRY_PROJECT, REMINDER_SENTRY_PROJECT — optional service source maps
 #   SENTRY_RELEASE is set from the deploy commit SHA for source map uploads
 #
@@ -14,6 +14,7 @@
 #   KUBE_NAMESPACE — default crm
 #   HELM_RELEASE — default crm
 #   KUBE_INGRESS_HOST — default vocalcrm.site
+#   SENTRY_ORG — Sentry organization slug for source map uploads
 #   NEXT_PUBLIC_TELEGRAM_BOT_USERNAME — frontend Telegram connect links
 
 name: Deploy
@@ -91,9 +92,8 @@ jobs:
         env:
           CRM_IMAGE_REGISTRY: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_IMAGE_PREFIX }}
           CRM_IMAGE_TAG: ${{ steps.meta.outputs.sha }}
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
-          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG || vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT || vars.SENTRY_PROJECT }}
           BACKEND_SENTRY_PROJECT: ${{ secrets.BACKEND_SENTRY_PROJECT || 'backend' }}
           BOT_SENTRY_PROJECT: ${{ secrets.BOT_SENTRY_PROJECT || 'bot' }}
           REMINDER_SENTRY_PROJECT: ${{ secrets.REMINDER_SENTRY_PROJECT || 'reminder' }}
@@ -118,6 +118,108 @@ jobs:
             --set migrate.cache-from=type=gha,scope=crm-migrate \
             --set migrate.cache-to=type=gha,scope=crm-migrate,mode=max \
             backend frontend bot reminder migrate
+
+  upload-source-maps:
+    needs: [build-and-push]
+    if: always() && needs.build-and-push.result == 'success'
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    environment: prod
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.build-and-push.outputs.image_tag }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.10
+
+      - name: Install Sentry CLI dependency
+        run: bun install --frozen-lockfile
+
+      - name: Upload source maps to Sentry
+        env:
+          CRM_IMAGE_REGISTRY: ${{ needs.build-and-push.outputs.image_registry }}
+          CRM_IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG || vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT || vars.SENTRY_PROJECT }}
+          BACKEND_SENTRY_PROJECT: ${{ secrets.BACKEND_SENTRY_PROJECT || 'backend' }}
+          BOT_SENTRY_PROJECT: ${{ secrets.BOT_SENTRY_PROJECT || 'bot' }}
+          REMINDER_SENTRY_PROJECT: ${{ secrets.REMINDER_SENTRY_PROJECT || 'reminder' }}
+          SENTRY_RELEASE: ${{ needs.build-and-push.outputs.image_tag }}
+        run: |
+          if [ -z "${SENTRY_AUTH_TOKEN:-}" ] || [ -z "${SENTRY_ORG:-}" ] || [ -z "${SENTRY_RELEASE:-}" ]; then
+            echo "Skipping source map upload; SENTRY_AUTH_TOKEN, SENTRY_ORG, or SENTRY_RELEASE is missing."
+            exit 0
+          fi
+
+          shopt -s globstar nullglob
+
+          copy_from_image() {
+            service="$1"
+            image="$2"
+            source_path="$3"
+            output_dir="sentry-artifacts/$service"
+
+            rm -rf "$output_dir"
+            mkdir -p "$output_dir"
+
+            docker pull "$image"
+            container_id="$(docker create "$image")"
+            docker cp "$container_id:$source_path" "$output_dir/"
+            docker rm "$container_id"
+          }
+
+          upload_sourcemaps() {
+            service="$1"
+            project="$2"
+            source_dir="$3"
+
+            if [ -z "${project:-}" ]; then
+              echo "Skipping $service source maps; Sentry project is not set."
+              return
+            fi
+
+            maps=("$source_dir"/**/*.map)
+            if [ "${#maps[@]}" -eq 0 ]; then
+              echo "Skipping $service source maps; no .map files found in $source_dir."
+              return
+            fi
+
+            ./node_modules/.bin/sentry-cli sourcemaps upload \
+              --org "$SENTRY_ORG" \
+              --project "$project" \
+              --release "$SENTRY_RELEASE" \
+              "$source_dir"
+          }
+
+          copy_from_image backend "$CRM_IMAGE_REGISTRY/crm-backend:$CRM_IMAGE_TAG" /app/backend/dist
+          upload_sourcemaps backend "$BACKEND_SENTRY_PROJECT" sentry-artifacts/backend
+
+          copy_from_image bot "$CRM_IMAGE_REGISTRY/crm-bot:$CRM_IMAGE_TAG" /app/bot/dist
+          upload_sourcemaps bot "$BOT_SENTRY_PROJECT" sentry-artifacts/bot
+
+          copy_from_image reminder "$CRM_IMAGE_REGISTRY/crm-reminder:$CRM_IMAGE_TAG" /app/reminder/dist
+          upload_sourcemaps reminder "$REMINDER_SENTRY_PROJECT" sentry-artifacts/reminder
+
+          copy_from_image frontend "$CRM_IMAGE_REGISTRY/crm-frontend:$CRM_IMAGE_TAG" /app/frontend/.next
+          upload_sourcemaps frontend "$SENTRY_PROJECT" sentry-artifacts/frontend
 
   deploy:
     needs: [build-and-push]
