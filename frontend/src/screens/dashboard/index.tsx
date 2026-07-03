@@ -182,10 +182,7 @@ export default function Home() {
     );
   }, [snapshot?.lessons]);
   const scheduleLessons = useMemo(
-    () =>
-      lessons.filter(
-        (lesson) => lesson.status !== "cancelled_by_teacher" && lesson.status !== "cancelled_by_student"
-      ),
+    () => lessons.filter((lesson) => lesson.status !== "cancelled_by_teacher"),
     [lessons]
   );
   const payments = useMemo(

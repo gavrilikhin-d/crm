@@ -3,7 +3,11 @@ import type { calendar_v3 } from "googleapis";
 
 export const CALENDAR_TIMEZONE = process.env.APP_TIMEZONE?.trim() || "Europe/Minsk";
 
-const ACTIVE_LESSON_STATUSES = new Set<Lesson["status"]>(["scheduled", "confirmed"]);
+const GOOGLE_CALENDAR_SYNCABLE_LESSON_STATUSES = new Set<Lesson["status"]>([
+  "scheduled",
+  "confirmed",
+  "cancelled_by_student"
+]);
 const INACTIVE_PARTICIPANT_STATUSES = new Set<ParticipantStatus>(["declined", "missed"]);
 
 const PARTICIPANT_STATUS_LABEL: Record<ParticipantStatus, string> = {
@@ -15,7 +19,7 @@ const PARTICIPANT_STATUS_LABEL: Record<ParticipantStatus, string> = {
 };
 
 export function shouldSyncLessonToGoogleCalendar(lesson: Lesson): boolean {
-  return ACTIVE_LESSON_STATUSES.has(lesson.status);
+  return GOOGLE_CALENDAR_SYNCABLE_LESSON_STATUSES.has(lesson.status);
 }
 
 /** RFC3339 local wall-clock time in the given IANA timezone (no offset suffix). */
@@ -77,7 +81,8 @@ export function buildGoogleCalendarSummary(
     .map((participant) => participantName(participant, studentsById))
     .filter(Boolean) as string[];
 
-  return allNames.join(", ") || "Занятие";
+  const summary = allNames.join(", ") || "Занятие";
+  return lesson.status === "cancelled_by_student" ? `Отменено: ${summary}` : summary;
 }
 
 export function buildGoogleCalendarDescription(
@@ -85,6 +90,7 @@ export function buildGoogleCalendarDescription(
   studentsById: Map<string, Student>
 ): string {
   const typeLabel = lesson.effectiveType === "group" ? "Групповое" : "Индивидуальное";
+  const statusLine = lesson.status === "cancelled_by_student" ? "Статус: отменено учеником" : null;
   const lines = lesson.participants
     .map((participant) => {
       const name = participantName(participant, studentsById);
@@ -92,7 +98,9 @@ export function buildGoogleCalendarDescription(
     })
     .filter(Boolean);
 
-  return [`Занятие из CRM`, `Формат: ${typeLabel}`, "", "Ученики:", ...lines].join("<br>");
+  return [`Занятие из CRM`, statusLine, `Формат: ${typeLabel}`, "", "Ученики:", ...lines]
+    .filter((line) => line !== null)
+    .join("<br>");
 }
 
 export function buildGoogleCalendarEvent(
@@ -102,7 +110,7 @@ export function buildGoogleCalendarEvent(
   const start = new Date(lesson.startsAt);
   const end = new Date(start.getTime() + lesson.durationMinutes * 60_000);
 
-  return {
+  const event: calendar_v3.Schema$Event = {
     summary: buildGoogleCalendarSummary(lesson, studentsById),
     description: buildGoogleCalendarDescription(lesson, studentsById),
     start: {
@@ -119,4 +127,11 @@ export function buildGoogleCalendarEvent(
       }
     }
   };
+
+  if (lesson.status === "cancelled_by_student") {
+    event.reminders = { useDefault: false, overrides: [] };
+    event.transparency = "transparent";
+  }
+
+  return event;
 }
