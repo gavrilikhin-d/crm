@@ -67,11 +67,24 @@ cleanup_k3s_space() {
     2>/dev/null || true
 }
 
+configure_sparse_checkout() {
+  echo "==> Configuring sparse deploy checkout"
+  git config core.sparseCheckout true
+  git config core.sparseCheckoutCone false
+  mkdir -p .git/info
+  cat > .git/info/sparse-checkout <<'EOF'
+/.gitignore
+/deploy/helm/
+/deploy/helm-deploy.sh
+EOF
+}
+
 echo "==> Syncing deploy files from git ($DEPLOY_REF @ $DEPLOY_SHA)"
+configure_sparse_checkout
 git fetch origin "$DEPLOY_REF"
-git checkout "$DEPLOY_REF"
-git pull --ff-only origin "$DEPLOY_REF"
+git checkout --detach "$DEPLOY_SHA"
 git reset --hard "$DEPLOY_SHA"
+git clean -ffd
 
 echo "==> Ensuring namespace exists ($KUBE_NAMESPACE)"
 kubectl create namespace "$KUBE_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
