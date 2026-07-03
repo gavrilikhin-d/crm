@@ -67,6 +67,14 @@ kubectl create secret docker-registry ecr-pull-secret \
   --docker-password="$ECR_PASSWORD" \
   --dry-run=client -o yaml | kubectl apply -f -
 
+BAD_POD_REASONS="CreateContainerConfigError|CreateContainerError|InvalidImageName|ErrImagePull|ImagePullBackOff|CrashLoopBackOff"
+
+find_bad_pod() {
+  kubectl get pods --namespace "$KUBE_NAMESPACE" \
+    -o jsonpath='{range .items[*]}{.metadata.name}{" "}{range .status.containerStatuses[*]}{.state.waiting.reason}{" "}{end}{"\n"}{end}' \
+    | awk -v reasons="$BAD_POD_REASONS" '$0 ~ reasons { print $1; exit }'
+}
+
 echo "==> Deploying Helm release ($HELM_RELEASE -> $DEPLOY_SHA)"
 helm upgrade --install "$HELM_RELEASE" deploy/helm/crm \
   --namespace "$KUBE_NAMESPACE" \
@@ -80,7 +88,42 @@ helm upgrade --install "$HELM_RELEASE" deploy/helm/crm \
   --set config.authUrl="https://$KUBE_INGRESS_HOST" \
   --atomic \
   --wait \
-  --timeout 10m
+  --timeout 10m &
+helm_pid=$!
+monitor_failure_file="$(mktemp)"
+
+(
+  while kill -0 "$helm_pid" >/dev/null 2>&1; do
+    bad_pod="$(find_bad_pod || true)"
+    if [[ -n "$bad_pod" ]]; then
+      echo "Detected unrecoverable pod state while Helm is waiting: $bad_pod" >&2
+      kubectl describe pod "$bad_pod" --namespace "$KUBE_NAMESPACE" >&2 || true
+      echo "$bad_pod" > "$monitor_failure_file"
+      kill "$helm_pid" >/dev/null 2>&1 || true
+      exit 0
+    fi
+    sleep 10
+  done
+) &
+monitor_pid=$!
+
+set +e
+wait "$helm_pid"
+helm_rc=$?
+set -e
+
+kill "$monitor_pid" >/dev/null 2>&1 || true
+wait "$monitor_pid" >/dev/null 2>&1 || true
+
+if [[ -s "$monitor_failure_file" ]]; then
+  rm -f "$monitor_failure_file"
+  exit 1
+fi
+
+rm -f "$monitor_failure_file"
+if [[ "$helm_rc" -ne 0 ]]; then
+  exit "$helm_rc"
+fi
 
 echo "==> Verifying rollouts"
 kubectl rollout status "deployment/${HELM_RELEASE}-crm-backend" --namespace "$KUBE_NAMESPACE" --timeout=5m

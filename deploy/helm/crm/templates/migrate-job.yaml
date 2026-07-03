@@ -24,7 +24,6 @@ spec:
         - name: migrate
           image: {{ include "crm.image" (list . .Values.migrate) | quote }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
-          {{- include "crm.envFrom" . | nindent 10 }}
           env:
             - name: NODE_ENV
               value: production
