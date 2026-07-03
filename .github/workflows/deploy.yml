@@ -165,5 +165,5 @@ jobs:
           KUBE_NAMESPACE: ${{ vars.KUBE_NAMESPACE || 'crm' }}
           HELM_RELEASE: ${{ vars.HELM_RELEASE || 'crm' }}
         run: |
-          echo "Helm deploy uses --rollback-on-failure, so failed upgrades should roll back automatically."
+          echo "Helm deploy uses --atomic, so failed upgrades should roll back automatically."
           echo "If you need a manual fallback, run from the EC2 host: helm rollback $HELM_RELEASE --namespace $KUBE_NAMESPACE"

@@ -78,7 +78,7 @@ helm upgrade --install "$HELM_RELEASE" deploy/helm/crm \
   --set ingress.host="$KUBE_INGRESS_HOST" \
   --set config.appBaseUrl="https://$KUBE_INGRESS_HOST" \
   --set config.authUrl="https://$KUBE_INGRESS_HOST" \
-  --rollback-on-failure \
+  --atomic \
   --wait \
   --timeout 10m
 
