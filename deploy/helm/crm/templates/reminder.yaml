@@ -1,0 +1,77 @@
+{{- if .Values.reminder.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "crm.fullname" . }}-reminder
+  labels:
+    {{- include "crm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: reminder
+spec:
+  replicas: {{ .Values.reminder.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "crm.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: reminder
+  template:
+    metadata:
+      labels:
+        {{- include "crm.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: reminder
+    spec:
+      {{- include "crm.imagePullSecrets" . | nindent 6 }}
+      terminationGracePeriodSeconds: {{ .Values.rollout.terminationGracePeriodSeconds }}
+      containers:
+        - name: reminder
+          image: {{ include "crm.image" (list . .Values.reminder) | quote }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.reminder.port }}
+          {{- include "crm.envFrom" . | nindent 10 }}
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: {{ .Values.reminder.port | quote }}
+            - name: BACKEND_INTERNAL_URL
+              value: http://{{ include "crm.fullname" . }}-backend:{{ .Values.backend.port }}
+            - name: SENTRY_RELEASE
+              value: {{ .Values.global.imageTag | quote }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.reminder.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "crm.fullname" . }}-reminder
+  labels:
+    {{- include "crm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: reminder
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "crm.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: reminder
+  ports:
+    - name: http
+      port: {{ .Values.reminder.port }}
+      targetPort: http
+{{- end }}

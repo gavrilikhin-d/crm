@@ -1,0 +1,39 @@
+{{- if .Values.bot.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "crm.fullname" . }}-bot
+  labels:
+    {{- include "crm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bot
+spec:
+  replicas: {{ .Values.bot.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "crm.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: bot
+  template:
+    metadata:
+      labels:
+        {{- include "crm.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: bot
+    spec:
+      {{- include "crm.imagePullSecrets" . | nindent 6 }}
+      terminationGracePeriodSeconds: {{ .Values.rollout.terminationGracePeriodSeconds }}
+      containers:
+        - name: bot
+          image: {{ include "crm.image" (list . .Values.bot) | quote }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          {{- include "crm.envFrom" . | nindent 10 }}
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: BACKEND_INTERNAL_URL
+              value: http://{{ include "crm.fullname" . }}-backend:{{ .Values.backend.port }}
+            - name: SENTRY_RELEASE
+              value: {{ .Values.global.imageTag | quote }}
+          resources:
+            {{- toYaml .Values.bot.resources | nindent 12 }}
+{{- end }}

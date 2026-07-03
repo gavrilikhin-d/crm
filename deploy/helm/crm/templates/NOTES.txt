@@ -1,0 +1,12 @@
+CRM has been installed as release {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
+
+Frontend service:
+  {{ include "crm.fullname" . }}-frontend:{{ .Values.frontend.port }}
+
+Backend service:
+  {{ include "crm.fullname" . }}-backend:{{ .Values.backend.port }}
+
+Expected external secret:
+  {{ .Values.secrets.existingSecret }}
+
+For a small host, keep replica counts at 1 and rely on maxSurge=1 during frontend/backend rollouts.

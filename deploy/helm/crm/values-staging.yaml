@@ -1,0 +1,23 @@
+config:
+  appBaseUrl: "https://staging.vocalcrm.site"
+  authUrl: "https://staging.vocalcrm.site"
+  sentryEnvironment: "staging"
+
+frontend:
+  replicaCount: 1
+
+backend:
+  replicaCount: 1
+
+reminder:
+  replicaCount: 1
+
+bot:
+  replicaCount: 1
+
+ingress:
+  host: staging.vocalcrm.site
+
+rollout:
+  maxUnavailable: 0
+  maxSurge: 1
