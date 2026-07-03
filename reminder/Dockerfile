@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 FROM oven/bun:1.2.10 AS builder
 
 WORKDIR /app
@@ -14,18 +16,8 @@ RUN bun install --frozen-lockfile
 COPY shared shared
 COPY reminder reminder
 
-ARG SENTRY_AUTH_TOKEN
-ARG SENTRY_ORG
-ARG SENTRY_PROJECT
-ARG SENTRY_RELEASE
-
 RUN bun --filter @crm/reminder build \
-  && if [ -n "$SENTRY_AUTH_TOKEN" ] && [ -n "$SENTRY_ORG" ] && [ -n "$SENTRY_PROJECT" ] && [ -n "$SENTRY_RELEASE" ]; then \
-    /app/node_modules/.bin/sentry-cli sourcemaps inject reminder/dist \
-    && /app/node_modules/.bin/sentry-cli sourcemaps upload --org "$SENTRY_ORG" --project "$SENTRY_PROJECT" --release "$SENTRY_RELEASE" reminder/dist; \
-  else \
-    echo "Skipping reminder source map upload; Sentry release upload variables are incomplete."; \
-  fi
+  && /app/node_modules/.bin/sentry-cli sourcemaps inject reminder/dist
 
 FROM gcr.io/distroless/nodejs22-debian12 AS runtime
 
