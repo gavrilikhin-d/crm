@@ -35,6 +35,7 @@ import {
 } from "./avatars";
 import {
   deleteLessonsByIds,
+  deleteAccountRecord,
   deleteLessonPackageRecord,
   deleteRecurringScheduleRecord,
   deleteStudentRecords,
@@ -80,6 +81,7 @@ import {
   setGoogleCalendarSyncEnabled,
   syncAllLessonsToGoogleCalendar
 } from "./google-calendar/sync";
+import { notifyTelegramDisconnects } from "./telegram-disconnect";
 import {
   applyLessonCompletionCharges,
   applyTeacherParticipantStatusUpdate,
@@ -125,6 +127,27 @@ export class Store {
       usage,
       limits: getPlanLimits(account.plan)
     };
+  }
+
+  async deleteAccount(ctx: AuthContext): Promise<void> {
+    const db = await loadAccountDatabase(ctx.accountId);
+    const avatarStudentIds = db.students
+      .filter((student) => student.avatarUrl)
+      .map((student) => student.id);
+    const telegramTargets = db.students.flatMap((student) =>
+      student.telegramChatId ? [{ chatId: student.telegramChatId }] : []
+    );
+
+    await deleteAccountRecord(ctx.accountId);
+    await notifyTelegramDisconnects(telegramTargets);
+
+    const avatarResults = await Promise.allSettled(
+      avatarStudentIds.map((studentId) => deleteStudentAvatar(studentId))
+    );
+    const failedAvatarDeletes = avatarResults.filter((result) => result.status === "rejected");
+    if (failedAvatarDeletes.length) {
+      console.warn(`[account-delete] Failed to delete ${failedAvatarDeletes.length} student avatar(s)`);
+    }
   }
 
   async getSnapshot(ctx: AuthContext): Promise<Database> {

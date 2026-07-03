@@ -1,10 +1,24 @@
 "use client";
 
+import { useState, type FormEvent } from "react";
 import { GoogleCalendarSettings } from "@/components/google-calendar-settings";
+import { signOut } from "next-auth/react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger
+} from "@/components/ui/dialog";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -18,6 +32,7 @@ import type { AccountInfo } from "@crm/shared";
 import { CURRENCIES, type CurrencyCode } from "@crm/shared/currency";
 import { PLAN_META } from "@crm/shared/plans";
 import { pageSectionClass } from "@/screens/dashboard/constants";
+import { api } from "@/lib/api";
 import { PlanUsageRow } from "./components/plan-usage-row";
 
 export function SettingsView({
@@ -33,6 +48,27 @@ export function SettingsView({
 }) {
   const { t } = useI18n();
   const plan = accountInfo?.account.plan ?? "free";
+  const accountEmail = accountInfo?.account.email ?? "";
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
+
+  async function handleDeleteAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!accountInfo || deleteConfirmation !== accountEmail) {
+      return;
+    }
+
+    setDeletingAccount(true);
+    try {
+      await api("/api/account", { method: "DELETE" });
+      await signOut({ callbackUrl: "/login" });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("toast.accountDeleteFailed"));
+      setDeletingAccount(false);
+    }
+  }
 
   return (
     <section className={pageSectionClass} id="settings">
@@ -105,6 +141,70 @@ export function SettingsView({
         </Card>
 
         <GoogleCalendarSettings onChanged={onRefresh} />
+
+        {accountInfo ? (
+          <Card className="max-w-xl border-destructive/30">
+            <CardHeader>
+              <CardTitle>{t("settings.accountDeletion.title")}</CardTitle>
+              <CardDescription>{t("settings.accountDeletion.description")}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Dialog
+                open={deleteDialogOpen}
+                onOpenChange={(open) => {
+                  setDeleteDialogOpen(open);
+                  if (!open) {
+                    setDeleteConfirmation("");
+                  }
+                }}
+              >
+                <DialogTrigger asChild>
+                  <Button type="button" variant="destructive">
+                    {t("settings.accountDeletion.open")}
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <form onSubmit={handleDeleteAccount} className="grid gap-4">
+                    <DialogHeader>
+                      <DialogTitle>{t("settings.accountDeletion.confirmTitle")}</DialogTitle>
+                      <DialogDescription>
+                        {t("settings.accountDeletion.confirmDescription", { email: accountEmail })}
+                      </DialogDescription>
+                    </DialogHeader>
+                    <Field>
+                      <FieldLabel htmlFor="delete-account-confirmation">
+                        {t("settings.accountDeletion.confirmLabel")}
+                      </FieldLabel>
+                      <Input
+                        id="delete-account-confirmation"
+                        value={deleteConfirmation}
+                        onChange={(event) => setDeleteConfirmation(event.target.value)}
+                        placeholder={accountEmail}
+                        autoComplete="off"
+                        disabled={deletingAccount}
+                      />
+                      <FieldDescription>{t("settings.accountDeletion.confirmHint")}</FieldDescription>
+                    </Field>
+                    <DialogFooter>
+                      <DialogClose asChild>
+                        <Button type="button" variant="outline" disabled={deletingAccount}>
+                          {t("form.cancel")}
+                        </Button>
+                      </DialogClose>
+                      <Button
+                        type="submit"
+                        variant="destructive"
+                        disabled={deletingAccount || deleteConfirmation !== accountEmail}
+                      >
+                        {deletingAccount ? t("settings.accountDeletion.deleting") : t("settings.accountDeletion.confirm")}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
     </section>
   );
