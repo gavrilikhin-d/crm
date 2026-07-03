@@ -103,12 +103,21 @@ migrate:
 
 ingress:
   enabled: true
-  className: ""
-  annotations: {}
+  className: traefik
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
   host: vocalcrm.site
   tls:
-    enabled: false
-    secretName: ""
+    enabled: true
+    secretName: vocalcrm-site-tls
+
+certManager:
+  clusterIssuer:
+    enabled: true
+    name: letsencrypt-prod
+    email: ""
+    server: https://acme-v02.api.letsencrypt.org/directory
+    ingressClassName: traefik
 
 rollout:
   maxUnavailable: 0

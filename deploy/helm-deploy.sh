@@ -97,6 +97,7 @@ helm upgrade --install "$HELM_RELEASE" deploy/helm/crm \
   --set ingress.host="$KUBE_INGRESS_HOST" \
   --set config.appBaseUrl="https://$KUBE_INGRESS_HOST" \
   --set config.authUrl="https://$KUBE_INGRESS_HOST" \
+  --set certManager.clusterIssuer.email="${ACME_EMAIL:?ACME_EMAIL is required for cert-manager ClusterIssuer}" \
   --atomic \
   --wait \
   --timeout 10m &
