@@ -71,7 +71,7 @@ BAD_POD_REASONS="CreateContainerConfigError|CreateContainerError|InvalidImageNam
 
 find_bad_pod() {
   kubectl get pods --namespace "$KUBE_NAMESPACE" \
-    -o jsonpath='{range .items[*]}{.metadata.name}{" "}{range .status.containerStatuses[*]}{.state.waiting.reason}{" "}{end}{"\n"}{end}' \
+    -o go-template='{{range .items}}{{if not .metadata.deletionTimestamp}}{{.metadata.name}} {{range .status.containerStatuses}}{{if .state.waiting}}{{.state.waiting.reason}} {{end}}{{end}}{{"\n"}}{{end}}{{end}}' \
     | awk -v reasons="$BAD_POD_REASONS" '$0 ~ reasons { print $1; exit }'
 }
 
@@ -97,7 +97,11 @@ monitor_failure_file="$(mktemp)"
     bad_pod="$(find_bad_pod || true)"
     if [[ -n "$bad_pod" ]]; then
       echo "Detected unrecoverable pod state while Helm is waiting: $bad_pod" >&2
-      kubectl describe pod "$bad_pod" --namespace "$KUBE_NAMESPACE" >&2 || true
+      if ! kubectl describe pod "$bad_pod" --namespace "$KUBE_NAMESPACE" >&2; then
+        echo "Pod $bad_pod disappeared before diagnostics could be collected; continuing to watch Helm." >&2
+        sleep 5
+        continue
+      fi
       echo "$bad_pod" > "$monitor_failure_file"
       kill "$helm_pid" >/dev/null 2>&1 || true
       exit 0
