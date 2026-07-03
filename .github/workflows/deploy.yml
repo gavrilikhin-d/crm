@@ -186,6 +186,20 @@ jobs:
             docker rm "$container_id"
           }
 
+          copy_frontend_sourcemaps() {
+            image="$1"
+            output_dir="sentry-artifacts/frontend/.next"
+
+            rm -rf "sentry-artifacts/frontend"
+            mkdir -p "$output_dir"
+
+            docker pull "$image"
+            container_id="$(docker create "$image")"
+            docker cp "$container_id:/app/frontend/.next/static" "$output_dir/" || true
+            docker cp "$container_id:/app/frontend/.next/server" "$output_dir/" || true
+            docker rm "$container_id"
+          }
+
           upload_sourcemaps() {
             service="$1"
             project="$2"
@@ -218,7 +232,7 @@ jobs:
           copy_from_image reminder "$CRM_IMAGE_REGISTRY/crm-reminder:$CRM_IMAGE_TAG" /app/reminder/dist
           upload_sourcemaps reminder "$REMINDER_SENTRY_PROJECT" sentry-artifacts/reminder
 
-          copy_from_image frontend "$CRM_IMAGE_REGISTRY/crm-frontend:$CRM_IMAGE_TAG" /app/frontend/.next
+          copy_frontend_sourcemaps "$CRM_IMAGE_REGISTRY/crm-frontend:$CRM_IMAGE_TAG"
           upload_sourcemaps frontend "$SENTRY_PROJECT" sentry-artifacts/frontend
 
   deploy:
