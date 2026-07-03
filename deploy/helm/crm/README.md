@@ -35,6 +35,20 @@ Optional Sentry keys can also live in the same secret: `SENTRY_DSN`, `BACKEND_SE
 
 For the current small deployment, keep PostgreSQL outside the chart and point the app at it through the `DATABASE_URL` secret key. When moving off the current machine, prefer RDS PostgreSQL over an in-cluster single-pod database. The optional Terraform in `deploy/terraform` can create RDS later, but the Helm chart only needs the final connection string.
 
+If you temporarily reuse the Docker Compose Postgres container on the same EC2 host, do not use `localhost` in `DATABASE_URL`. Kubernetes pods treat `localhost` as the pod itself. Publish Postgres from Compose and use the EC2 private IP:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d postgres
+
+EC2_PRIVATE_IP="$(hostname -I | awk '{print $1}')"
+
+kubectl create secret generic crm-secrets \
+  --namespace crm \
+  --from-env-file=.env \
+  --from-literal=DATABASE_URL="postgres://${POSTGRES_USER:-crm}:${POSTGRES_PASSWORD}@${EC2_PRIVATE_IP}:${POSTGRES_HOST_PORT:-5432}/${POSTGRES_DB:-crm}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
 ## Small-Host Install
 
 ```bash

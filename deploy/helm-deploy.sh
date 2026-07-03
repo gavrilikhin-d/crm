@@ -75,6 +75,17 @@ find_bad_pod() {
     | awk -v reasons="$BAD_POD_REASONS" '$0 ~ reasons { print $1; exit }'
 }
 
+print_failed_hook_diagnostics() {
+  echo "==> Failed hook diagnostics" >&2
+  kubectl get jobs,pods --namespace "$KUBE_NAMESPACE" \
+    -l "app.kubernetes.io/instance=$HELM_RELEASE,app.kubernetes.io/component=migrate" >&2 || true
+  kubectl describe jobs --namespace "$KUBE_NAMESPACE" \
+    -l "app.kubernetes.io/instance=$HELM_RELEASE,app.kubernetes.io/component=migrate" >&2 || true
+  kubectl logs --namespace "$KUBE_NAMESPACE" \
+    -l "app.kubernetes.io/instance=$HELM_RELEASE,app.kubernetes.io/component=migrate" \
+    --all-containers=true --tail=-1 >&2 || true
+}
+
 echo "==> Deploying Helm release ($HELM_RELEASE -> $DEPLOY_SHA)"
 helm upgrade --install "$HELM_RELEASE" deploy/helm/crm \
   --namespace "$KUBE_NAMESPACE" \
@@ -126,6 +137,7 @@ fi
 
 rm -f "$monitor_failure_file"
 if [[ "$helm_rc" -ne 0 ]]; then
+  print_failed_hook_diagnostics
   exit "$helm_rc"
 fi
 
