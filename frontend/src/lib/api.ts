@@ -55,4 +55,4 @@ async function api<T = unknown>(path: string, options: ApiOptions = {}): Promise
   return response.json() as Promise<T>;
 }
 
-export { api, type ApiOptions };
+export { api, getAccessToken, type ApiOptions };

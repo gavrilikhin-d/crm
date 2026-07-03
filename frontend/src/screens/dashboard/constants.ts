@@ -11,4 +11,3 @@ export const lessonDurationByType = {
   group: 90,
   individual: 60
 } as const;
-export const snapshotPollMs = 30_000;

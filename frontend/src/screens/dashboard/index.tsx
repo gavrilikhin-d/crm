@@ -26,7 +26,7 @@ import { ClientsView } from "@/screens/clients";
 import { DashboardSidebar } from "@/screens/dashboard/components/dashboard-sidebar";
 import { MobileFab } from "@/screens/dashboard/components/mobile-fab";
 import { Modal } from "@/screens/dashboard/components/modal";
-import { lessonDurationByType, pageHeaderClass, snapshotPollMs } from "@/screens/dashboard/constants";
+import { lessonDurationByType, pageHeaderClass } from "@/screens/dashboard/constants";
 import type { ActiveModal, ActiveSection, ScheduleView, Snapshot } from "@/screens/dashboard/types";
 import { formData } from "@/screens/dashboard/utils/form-data";
 import { PaymentsView } from "@/screens/payments";
@@ -173,8 +173,8 @@ export default function Home() {
     }
   }, [t]);
 
-  const { secondsUntilRefresh, refreshing, showAutoRefreshed, lastRefreshedAt, refreshNow } =
-    useSnapshotAutoRefresh({ loadSnapshot, pollMs: snapshotPollMs });
+  const { secondsUntilRefresh, connected, refreshing, lastRefreshedAt, refreshNow } =
+    useSnapshotAutoRefresh({ loadSnapshot, onSnapshot: (nextSnapshot) => setSnapshot(nextSnapshot as Snapshot) });
 
   useEffect(() => {
     const interval = window.setInterval(() => setCurrentTime(new Date()), 60_000);
@@ -507,8 +507,8 @@ export default function Home() {
             lessonDialogOpen={lessonDialogOpen}
             setLessonDialogOpen={setLessonDialogOpen}
             secondsUntilRefresh={secondsUntilRefresh}
+            connected={connected}
             refreshing={refreshing}
-            showAutoRefreshed={showAutoRefreshed}
             lastRefreshedAt={lastRefreshedAt}
             refreshNow={refreshNow}
             onShiftCalendar={shiftCalendar}
