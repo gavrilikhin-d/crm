@@ -106,8 +106,18 @@ jobs:
           POSTGRES_PASSWORD: fake
           POSTGRES_DB: fake
         run: |
-          docker compose -f docker-compose.prod.yml build backend frontend bot reminder migrate
-          docker compose -f docker-compose.prod.yml push backend frontend bot reminder migrate
+          docker buildx bake -f docker-compose.prod.yml --push \
+            --set backend.cache-from=type=gha,scope=crm-backend \
+            --set backend.cache-to=type=gha,scope=crm-backend,mode=max \
+            --set frontend.cache-from=type=gha,scope=crm-frontend \
+            --set frontend.cache-to=type=gha,scope=crm-frontend,mode=max \
+            --set bot.cache-from=type=gha,scope=crm-bot \
+            --set bot.cache-to=type=gha,scope=crm-bot,mode=max \
+            --set reminder.cache-from=type=gha,scope=crm-reminder \
+            --set reminder.cache-to=type=gha,scope=crm-reminder,mode=max \
+            --set migrate.cache-from=type=gha,scope=crm-migrate \
+            --set migrate.cache-to=type=gha,scope=crm-migrate,mode=max \
+            backend frontend bot reminder migrate
 
   deploy:
     needs: [build-and-push]
