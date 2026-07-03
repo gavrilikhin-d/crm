@@ -1,0 +1,16 @@
+# Future larger-cluster defaults. Use after moving off the tiny host.
+frontend:
+  replicaCount: 2
+
+backend:
+  replicaCount: 2
+
+reminder:
+  replicaCount: 1
+
+bot:
+  replicaCount: 1
+
+rollout:
+  maxUnavailable: 0
+  maxSurge: 1

@@ -1,0 +1,16 @@
+# Current tiny-host defaults. Suitable for a single small VM or k3s node.
+frontend:
+  replicaCount: 1
+
+backend:
+  replicaCount: 1
+
+reminder:
+  replicaCount: 1
+
+bot:
+  replicaCount: 1
+
+rollout:
+  maxUnavailable: 0
+  maxSurge: 1
