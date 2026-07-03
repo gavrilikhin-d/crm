@@ -14,6 +14,7 @@ config:
   logLevel: "info"
   lessonReminderMinutes: "1440,120"
   telegramBotUsername: "VocalLessonBot"
+  telegramWebhookBaseUrl: "https://vocalcrm.site"
   sentryEnvironment: "production"
   nextPublicSentryDsn: ""
 
@@ -21,7 +22,8 @@ secrets:
   # Create this secret outside Helm, or wire it through External Secrets later.
   # Expected keys include DATABASE_URL, AUTH_SECRET, AUTH_SYNC_SECRET,
   # AUTH_GOOGLE_ID, AUTH_GOOGLE_SECRET, INTERNAL_API_TOKEN, TELEGRAM_BOT_TOKEN,
-  # SENTRY_DSN, BACKEND_SENTRY_DSN, BOT_SENTRY_DSN, and REMINDER_SENTRY_DSN.
+  # TELEGRAM_WEBHOOK_SECRET, SENTRY_DSN, BACKEND_SENTRY_DSN, BOT_SENTRY_DSN,
+  # and REMINDER_SENTRY_DSN.
   existingSecret: crm-secrets
 
 database:
@@ -81,6 +83,7 @@ bot:
   replicaCount: 1
   image:
     repository: crm-bot
+  port: 4002
   resources:
     requests:
       cpu: 25m

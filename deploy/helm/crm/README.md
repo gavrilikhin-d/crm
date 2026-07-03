@@ -39,10 +39,13 @@ kubectl create secret generic crm-secrets \
   --from-literal=AUTH_GOOGLE_ID='replace-me' \
   --from-literal=AUTH_GOOGLE_SECRET='replace-me' \
   --from-literal=INTERNAL_API_TOKEN='replace-me' \
-  --from-literal=TELEGRAM_BOT_TOKEN='replace-me'
+  --from-literal=TELEGRAM_BOT_TOKEN='replace-me' \
+  --from-literal=TELEGRAM_WEBHOOK_SECRET='replace-me-with-url-safe-random-value'
 ```
 
 Optional Sentry keys can also live in the same secret: `SENTRY_DSN`, `BACKEND_SENTRY_DSN`, `BOT_SENTRY_DSN`, and `REMINDER_SENTRY_DSN`.
+
+The Telegram bot registers a webhook at the chart's public ingress host by default, using `config.telegramWebhookBaseUrl` and the secret path `/telegram/webhook/<TELEGRAM_WEBHOOK_SECRET>`. Keep `bot.replicaCount` at `1` unless Telegram update processing is made safe for concurrent pod delivery.
 
 ## Database Placement
 
@@ -75,7 +78,7 @@ helm upgrade --install crm ./deploy/helm/crm \
   --atomic --wait
 ```
 
-This keeps each service at one steady-state replica. Frontend and backend can briefly surge to two pods during rollout. TLS is enabled by default through Traefik, cert-manager, and the `letsencrypt-prod` ClusterIssuer.
+This keeps each service at one steady-state replica. Frontend and backend can briefly surge to two pods during rollout. TLS is enabled by default through Traefik, cert-manager, and the `letsencrypt-prod` ClusterIssuer. Telegram webhook traffic is routed through the same ingress host under `/telegram/webhook/`.
 
 ## Later Production Install
 
