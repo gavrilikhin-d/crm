@@ -10,6 +10,28 @@ describe.skipIf(!databaseAvailable)("lesson lifecycle integration", () => {
     return createTestAccount();
   }
 
+  async function setupFreeAccount() {
+    const account = await createTestAccount();
+    return {
+      ...account,
+      ctx: { ...account.ctx, plan: "free" as const }
+    };
+  }
+
+  function currentMonthDate(index: number): string {
+    const date = new Date();
+    date.setDate(1);
+    date.setHours(8 + Math.floor(index / 2), index % 2 === 0 ? 0 : 30, 0, 0);
+    return date.toISOString();
+  }
+
+  function daysFromNow(days: number, hour = 18, minute = 0): string {
+    const date = new Date();
+    date.setDate(date.getDate() + days);
+    date.setHours(hour, minute, 0, 0);
+    return date.toISOString();
+  }
+
   test("deletes one-off lesson when the last participant is removed", async () => {
     const { ctx, cleanup: localCleanup } = await setupAccount();
 
@@ -27,6 +49,181 @@ describe.skipIf(!databaseAvailable)("lesson lifecycle integration", () => {
 
       const db = await loadAccountDatabase(ctx.accountId);
       expect(db.lessons.some((item) => item.id === lesson.id)).toBe(false);
+    } finally {
+      await localCleanup();
+    }
+  });
+
+  test("enforces free plan active student limit", async () => {
+    const { ctx, cleanup: localCleanup } = await setupFreeAccount();
+
+    try {
+      for (let index = 0; index < 15; index += 1) {
+        await store.createStudent(ctx, { fullName: `Free Student ${index + 1}` });
+      }
+
+      await expect(store.createStudent(ctx, { fullName: "Free Student 16" })).rejects.toMatchObject({
+        code: "student_limit"
+      });
+    } finally {
+      await localCleanup();
+    }
+  });
+
+  test("enforces free plan package limit", async () => {
+    const { ctx, cleanup: localCleanup } = await setupFreeAccount();
+
+    try {
+      for (let index = 0; index < 3; index += 1) {
+        await store.createLessonPackage(ctx, {
+          name: `Free Package ${index + 1}`,
+          lessonCount: 4,
+          price: 10_000
+        });
+      }
+
+      await expect(
+        store.createLessonPackage(ctx, {
+          name: "Free Package 4",
+          lessonCount: 4,
+          price: 10_000
+        })
+      ).rejects.toMatchObject({ code: "package_limit" });
+    } finally {
+      await localCleanup();
+    }
+  });
+
+  test("enforces free plan monthly lesson limit", async () => {
+    const { ctx, cleanup: localCleanup } = await setupFreeAccount();
+
+    try {
+      const alice = await store.createStudent(ctx, { fullName: "Alice Free Lessons" });
+
+      for (let index = 0; index < 50; index += 1) {
+        await store.createLesson(ctx, {
+          startsAt: currentMonthDate(index),
+          lessonType: "individual",
+          studentIds: [alice.id]
+        });
+      }
+
+      await expect(
+        store.createLesson(ctx, {
+          startsAt: currentMonthDate(50),
+          lessonType: "individual",
+          studentIds: [alice.id]
+        })
+      ).rejects.toMatchObject({ code: "lesson_limit" });
+    } finally {
+      await localCleanup();
+    }
+  });
+
+  test("does not count materialized recurring lessons toward the free plan monthly lesson limit", async () => {
+    const { ctx, cleanup: localCleanup } = await setupFreeAccount();
+
+    try {
+      const alice = await store.createStudent(ctx, { fullName: "Alice Free Monthly Recurring" });
+
+      for (let index = 0; index < 50; index += 1) {
+        await store.createLesson(ctx, {
+          startsAt: currentMonthDate(index),
+          lessonType: "individual",
+          studentIds: [alice.id]
+        });
+      }
+
+      const recurringLesson = await store.createLesson(ctx, {
+        startsAt: currentMonthDate(60),
+        lessonType: "individual",
+        studentIds: [alice.id],
+        repeatWeekly: true
+      });
+      const db = await loadAccountDatabase(ctx.accountId);
+      const recurringLessonsThisMonth = db.lessons.filter(
+        (lesson) =>
+          lesson.recurringScheduleId === recurringLesson.recurringScheduleId &&
+          new Date(lesson.startsAt).getMonth() === new Date().getMonth()
+      );
+
+      expect(recurringLesson.recurringScheduleId).toBeDefined();
+      expect(recurringLessonsThisMonth.length).toBeGreaterThan(0);
+      await expect(
+        store.createLesson(ctx, {
+          startsAt: currentMonthDate(61),
+          lessonType: "individual",
+          studentIds: [alice.id]
+        })
+      ).rejects.toMatchObject({ code: "lesson_limit" });
+    } finally {
+      await localCleanup();
+    }
+  });
+
+  test("allows free plan accounts to keep two recurring schedules", async () => {
+    const { ctx, cleanup: localCleanup } = await setupFreeAccount();
+
+    try {
+      const alice = await store.createStudent(ctx, { fullName: "Alice Free Recurring" });
+
+      await store.createLesson(ctx, {
+        startsAt: futureDate(10, 18, 0),
+        lessonType: "individual",
+        studentIds: [alice.id],
+        repeatWeekly: true
+      });
+      await store.createLesson(ctx, {
+        startsAt: futureDate(11, 19, 0),
+        lessonType: "individual",
+        studentIds: [alice.id],
+        repeatWeekly: true
+      });
+
+      const db = await loadAccountDatabase(ctx.accountId);
+      expect(db.recurringSchedules).toHaveLength(2);
+
+      await expect(
+        store.createLesson(ctx, {
+          startsAt: futureDate(12, 20, 0),
+          lessonType: "individual",
+          studentIds: [alice.id],
+          repeatWeekly: true
+        })
+      ).rejects.toMatchObject({ code: "recurring_limit" });
+    } finally {
+      await localCleanup();
+    }
+  });
+
+  test("does not count ended recurring schedules toward the free plan recurring limit", async () => {
+    const { ctx, cleanup: localCleanup } = await setupFreeAccount();
+
+    try {
+      const alice = await store.createStudent(ctx, { fullName: "Alice Free Ended Recurring" });
+      const first = await store.createLesson(ctx, {
+        startsAt: daysFromNow(-7, 18, 0),
+        lessonType: "individual",
+        studentIds: [alice.id],
+        repeatWeekly: true
+      });
+      await store.createLesson(ctx, {
+        startsAt: futureDate(11, 19, 0),
+        lessonType: "individual",
+        studentIds: [alice.id],
+        repeatWeekly: true
+      });
+
+      await store.deleteLesson(ctx, first.id, "following");
+
+      const third = await store.createLesson(ctx, {
+        startsAt: futureDate(12, 20, 0),
+        lessonType: "individual",
+        studentIds: [alice.id],
+        repeatWeekly: true
+      });
+
+      expect(third.recurringScheduleId).toBeDefined();
     } finally {
       await localCleanup();
     }

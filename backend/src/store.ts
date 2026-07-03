@@ -505,7 +505,7 @@ export class Store {
     const toInsert: Lesson[] = [];
 
     if (input.repeatWeekly) {
-      await assertCanCreateLesson(ctx.accountId, ctx.plan, { repeatWeekly: true });
+      await assertCanCreateLesson(ctx.accountId, ctx.plan, { repeatWeekly: true, additionalLessonStartsAt: [] });
       const schedule = buildRecurringSchedule({
         startsAt,
         durationMinutes,
@@ -529,7 +529,11 @@ export class Store {
     const materialized = materializeRecurringLessons(db);
     toInsert.push(...materialized);
 
-    await assertCanCreateLesson(ctx.accountId, ctx.plan, { additionalLessons: toInsert.length });
+    await assertCanCreateLesson(ctx.accountId, ctx.plan, {
+      additionalLessonStartsAt: toInsert
+        .filter((item) => !item.recurringScheduleId)
+        .map((item) => item.startsAt)
+    });
     await insertLessons(ctx.accountId, toInsert);
     scheduleGoogleCalendarSync(ctx.accountId, toInsert);
     return lesson;
