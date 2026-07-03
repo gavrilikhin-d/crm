@@ -40,6 +40,33 @@ fi
 
 export KUBECONFIG
 
+cleanup_k3s_space() {
+  echo "==> k3s disk usage"
+  df -h /var/lib/rancher/k3s 2>/dev/null || true
+  sudo du -sh \
+    /var/lib/rancher/k3s/agent/containerd \
+    /var/log/containers \
+    /var/log/pods \
+    2>/dev/null || true
+
+  echo "==> Pruning unused Kubernetes images"
+  if command -v crictl >/dev/null 2>&1; then
+    sudo crictl rmi --prune || true
+  elif command -v k3s >/dev/null 2>&1; then
+    sudo k3s crictl rmi --prune || true
+  else
+    echo "crictl/k3s not found; skipping Kubernetes image prune"
+  fi
+
+  echo "==> k3s disk usage after cleanup"
+  df -h /var/lib/rancher/k3s 2>/dev/null || true
+  sudo du -sh \
+    /var/lib/rancher/k3s/agent/containerd \
+    /var/log/containers \
+    /var/log/pods \
+    2>/dev/null || true
+}
+
 echo "==> Syncing deploy files from git ($DEPLOY_REF @ $DEPLOY_SHA)"
 git fetch origin "$DEPLOY_REF"
 git checkout "$DEPLOY_REF"
@@ -66,6 +93,8 @@ kubectl create secret docker-registry ecr-pull-secret \
   --docker-username=AWS \
   --docker-password="$ECR_PASSWORD" \
   --dry-run=client -o yaml | kubectl apply -f -
+
+cleanup_k3s_space
 
 BAD_POD_REASONS="CreateContainerConfigError|CreateContainerError|InvalidImageName|ErrImagePull|ImagePullBackOff|CrashLoopBackOff"
 
@@ -150,3 +179,5 @@ kubectl rollout status "deployment/${HELM_RELEASE}-crm-bot" --namespace "$KUBE_N
 
 echo "==> Helm status"
 helm status "$HELM_RELEASE" --namespace "$KUBE_NAMESPACE"
+
+cleanup_k3s_space
