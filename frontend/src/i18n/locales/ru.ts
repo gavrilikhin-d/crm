@@ -211,6 +211,19 @@ const ru = {
       syncNow: "Синхронизировать сейчас",
       disconnect: "Отключить",
       disconnectConfirm: "Отключить Google Calendar? Существующие события в календаре не будут удалены."
+    },
+    accountDeletion: {
+      title: "Удаление аккаунта",
+      description:
+        "Навсегда удаляет аккаунт и все связанные данные CRM: учеников, занятия, оплаты, настройки и напоминания.",
+      open: "Удалить аккаунт",
+      confirmTitle: "Удалить аккаунт?",
+      confirmDescription:
+        "Это действие нельзя отменить. Чтобы подтвердить удаление всех данных, введите email аккаунта: {email}",
+      confirmLabel: "Email аккаунта",
+      confirmHint: "Кнопка удаления станет активной только после точного совпадения.",
+      confirm: "Удалить аккаунт",
+      deleting: "Удаляем..."
     }
   },
   toast: {
@@ -242,6 +255,7 @@ const ru = {
     lessonDeletedFollowing: "Это и последующие занятия удалены.",
     lessonDeletedAll: "Вся серия занятий удалена.",
     packageDeleted: "Пакет удален.",
+    accountDeleteFailed: "Не удалось удалить аккаунт.",
     telegramLinkCopied: "Ссылка скопирована, перешлите её ученику",
     selectStudent: "Выберите ученика.",
     saveFailed: "Не удалось сохранить изменения."

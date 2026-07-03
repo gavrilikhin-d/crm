@@ -117,6 +117,10 @@ export async function getAccountByGoogleSub(googleSub: string): Promise<Account 
   return rows[0] ? mapAccount(rows[0]) : null;
 }
 
+export async function deleteAccountRecord(accountId: string): Promise<void> {
+  await db.delete(accounts).where(eq(accounts.id, accountId));
+}
+
 export type GoogleCalendarCredentials = {
   refreshToken: string | null;
   accessToken: string | null;

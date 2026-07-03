@@ -30,6 +30,7 @@ const publicRoutes: Array<{ method: string; pattern: RegExp; handler: Handler }>
 
 const protectedRoutes: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
   route("GET", /^\/api\/account$/, getAccount),
+  route("DELETE", /^\/api\/account$/, deleteAccount),
   route("GET", /^\/api\/snapshot$/, getSnapshot),
   route("GET", /^\/api\/dashboard$/, async (_request, response, _match, ctx) =>
     jsonOk(response, await store.getDashboard(ctx!))
@@ -177,6 +178,11 @@ async function syncAccount(request: IncomingMessage, response: ServerResponse) {
 
 async function getAccount(_request: IncomingMessage, response: ServerResponse, _match: RegExpMatchArray, ctx?: AuthContext) {
   jsonOk(response, await store.getAccountInfo(ctx!));
+}
+
+async function deleteAccount(_request: IncomingMessage, response: ServerResponse, _match: RegExpMatchArray, ctx?: AuthContext) {
+  await store.deleteAccount(ctx!);
+  jsonOk(response, { ok: true });
 }
 
 async function getSnapshot(_request: IncomingMessage, response: ServerResponse, _match: RegExpMatchArray, ctx?: AuthContext) {
