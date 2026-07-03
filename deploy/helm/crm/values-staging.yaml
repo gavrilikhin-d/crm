@@ -17,6 +17,8 @@ bot:
 
 ingress:
   host: staging.vocalcrm.site
+  tls:
+    secretName: staging-vocalcrm-site-tls
 
 rollout:
   maxUnavailable: 0

@@ -5,6 +5,7 @@ This chart packages the CRM app for Kubernetes with small-host defaults. It is i
 ## Prerequisites
 
 - A Kubernetes cluster with an ingress controller.
+- `cert-manager` installed in the cluster for Let's Encrypt certificates.
 - A PostgreSQL database reachable from the cluster. The chart does not run PostgreSQL.
 - A Kubernetes secret named `crm-secrets` by default.
 - The CRM images pushed to a registry:
@@ -13,6 +14,18 @@ This chart packages the CRM app for Kubernetes with small-host defaults. It is i
   - `crm-bot`
   - `crm-reminder`
   - `crm-migrate`
+
+Install `cert-manager` once:
+
+```bash
+helm repo add jetstack https://charts.jetstack.io
+helm repo update
+
+helm upgrade --install cert-manager jetstack/cert-manager \
+  --namespace cert-manager \
+  --create-namespace \
+  --set installCRDs=true
+```
 
 ## Secret Contract
 
@@ -58,10 +71,11 @@ helm upgrade --install crm ./deploy/helm/crm \
   --set global.imageRegistry=982081063376.dkr.ecr.eu-central-1.amazonaws.com/gavrilikhin \
   --set global.imageTag=<git-sha> \
   --set ingress.host=vocalcrm.site \
+  --set certManager.clusterIssuer.email=you@example.com \
   --atomic --wait
 ```
 
-This keeps each service at one steady-state replica. Frontend and backend can briefly surge to two pods during rollout.
+This keeps each service at one steady-state replica. Frontend and backend can briefly surge to two pods during rollout. TLS is enabled by default through Traefik, cert-manager, and the `letsencrypt-prod` ClusterIssuer.
 
 ## Later Production Install
 
@@ -77,6 +91,7 @@ helm upgrade --install crm-staging ./deploy/helm/crm \
   -f ./deploy/helm/crm/values-staging.yaml \
   --set global.imageRegistry=982081063376.dkr.ecr.eu-central-1.amazonaws.com/gavrilikhin \
   --set global.imageTag=<git-sha> \
+  --set certManager.clusterIssuer.email=you@example.com \
   --atomic --wait
 ```
 
