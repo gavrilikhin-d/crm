@@ -47,12 +47,23 @@ function DialogOverlay({
   )
 }
 
-function useDialogVisualViewportStyle() {
-  const [style, setStyle] = React.useState<React.CSSProperties>(
-    {
+function getDialogVisualViewportStyle(): React.CSSProperties {
+  if (typeof window === "undefined" || !window.visualViewport) {
+    return {
       "--dialog-visual-viewport-height": "100dvh",
       "--dialog-visual-viewport-offset-top": "0px",
     } as React.CSSProperties
+  }
+
+  return {
+    "--dialog-visual-viewport-height": `${window.visualViewport.height}px`,
+    "--dialog-visual-viewport-offset-top": `${window.visualViewport.offsetTop}px`,
+  } as React.CSSProperties
+}
+
+function useDialogVisualViewportStyle() {
+  const [style, setStyle] = React.useState<React.CSSProperties>(
+    getDialogVisualViewportStyle
   )
 
   React.useEffect(() => {
@@ -63,10 +74,7 @@ function useDialogVisualViewportStyle() {
     }
 
     const updateViewportStyle = () => {
-      setStyle({
-        "--dialog-visual-viewport-height": `${visualViewport.height}px`,
-        "--dialog-visual-viewport-offset-top": `${visualViewport.offsetTop}px`,
-      } as React.CSSProperties)
+      setStyle(getDialogVisualViewportStyle())
     }
 
     updateViewportStyle()
