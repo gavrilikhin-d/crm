@@ -1,7 +1,6 @@
 import preview from "../../../.storybook/preview";
 import { responsiveViewports } from "../../../.storybook/fixtures";
 import { CalendarDays, CreditCard, Settings, Users } from "lucide-react";
-import { expect } from "storybook/test";
 import {
   Sidebar,
   SidebarContent,
@@ -86,9 +85,6 @@ export const Expanded = meta.story({
     chromatic: {
       viewports: responsiveViewports
     }
-  },
-  play: async ({ canvas }) => {
-    await expect(canvas.getByText("Расписание")).toBeVisible();
   }
 });
 

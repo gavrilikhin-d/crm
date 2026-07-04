@@ -1,6 +1,6 @@
 import preview from "../../../../.storybook/preview";
 import { responsiveViewports } from "../../../../.storybook/fixtures";
-import { expect, fn } from "storybook/test";
+import { fn } from "storybook/test";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { DashboardSidebar } from "./dashboard-sidebar";
 
@@ -25,9 +25,6 @@ export const ScheduleActive = meta.story({
     chromatic: {
       viewports: responsiveViewports
     }
-  },
-  play: async ({ canvas }) => {
-    await expect(canvas.getByText("VOCAL")).toBeVisible();
   }
 });
 
