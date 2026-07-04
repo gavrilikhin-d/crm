@@ -31,9 +31,9 @@ export const SearchInput = meta.story({
 export const WithText = meta.story({
   render: () => (
     <InputGroup className="max-w-sm">
-      <InputGroupInput defaultValue="3500" />
+      <InputGroupInput defaultValue="120" />
       <InputGroupAddon align="inline-end">
-        <InputGroupText>RUB</InputGroupText>
+        <InputGroupText>BYN</InputGroupText>
       </InputGroupAddon>
     </InputGroup>
   )

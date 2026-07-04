@@ -46,6 +46,7 @@ export default defineConfig(
     "**/node_modules/**",
     "**/.next/**",
     "**/dist/**",
+    "**/storybook-static/**",
     "**/coverage/**",
     "frontend/public/mockServiceWorker.js",
     "frontend/next-env.d.ts"

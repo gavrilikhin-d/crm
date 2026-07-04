@@ -21,9 +21,8 @@ export const PaymentMethod = meta.story({
 
 export const Grouped = meta.story({
   render: () => (
-    <NativeSelect className="w-64" defaultValue="RUB">
+    <NativeSelect className="w-64" defaultValue="BYN">
       <NativeSelectOptGroup label="Основные">
-        <NativeSelectOption value="RUB">Российский рубль</NativeSelectOption>
         <NativeSelectOption value="BYN">Белорусский рубль</NativeSelectOption>
       </NativeSelectOptGroup>
       <NativeSelectOptGroup label="Международные">

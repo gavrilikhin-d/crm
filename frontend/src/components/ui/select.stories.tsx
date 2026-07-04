@@ -17,7 +17,7 @@ const meta = preview.meta({
 
 export const Currency = meta.story({
   args: {
-    defaultValue: "RUB"
+    defaultValue: "BYN"
   },
   render: (args) => (
     <Select {...args}>
@@ -27,7 +27,6 @@ export const Currency = meta.story({
       <SelectContent>
         <SelectGroup>
           <SelectLabel>Валюты</SelectLabel>
-          <SelectItem value="RUB">Российский рубль</SelectItem>
           <SelectItem value="BYN">Белорусский рубль</SelectItem>
           <SelectSeparator />
           <SelectItem value="USD">Доллар США</SelectItem>

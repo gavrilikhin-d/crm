@@ -6,17 +6,17 @@ const meta = preview.meta({
   tags: ["ai-generated"]
 });
 
-export const Rubles = meta.story({
+export const BelarusianRubles = meta.story({
   args: {
-    currency: "RUB",
+    currency: "BYN",
     placeholder: "0",
-    defaultValue: 3500
+    defaultValue: 120
   }
 });
 
-export const Euros = meta.story({
+export const Empty = meta.story({
   args: {
-    currency: "EUR",
+    currency: "BYN",
     placeholder: "0"
   }
 });
