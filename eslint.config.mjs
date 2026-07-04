@@ -1,3 +1,4 @@
+import storybook from "eslint-plugin-storybook";
 import { defineConfig, globalIgnores } from "eslint/config";
 import eslint from "@eslint/js";
 import nextTs from "eslint-config-next/typescript";
@@ -45,7 +46,9 @@ export default defineConfig(
     "**/node_modules/**",
     "**/.next/**",
     "**/dist/**",
+    "**/storybook-static/**",
     "**/coverage/**",
+    "frontend/public/mockServiceWorker.js",
     "frontend/next-env.d.ts"
   ]),
   ...tseslint.config(
@@ -62,6 +65,7 @@ export default defineConfig(
   ),
   ...scopeToFrontend(nextVitals),
   ...scopeToFrontend(nextTs),
+  ...scopeToFrontend(storybook.configs["flat/recommended"]),
   {
     files: nodeFiles,
     rules: {
