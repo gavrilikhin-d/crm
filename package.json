@@ -46,7 +46,10 @@
     "prod:up": "docker compose -f docker-compose.prod.yml up -d",
     "prod:down": "docker compose -f docker-compose.prod.yml down",
     "migrate:multitenancy": "cd backend && bun run migrate:multitenancy",
-    "migrate:json": "cd backend && bun run migrate:json"
+    "migrate:json": "cd backend && bun run migrate:json",
+    "storybook": "bun --filter @crm/frontend storybook",
+    "build-storybook": "bun --filter @crm/frontend build-storybook",
+    "chromatic": "bun --filter @crm/frontend chromatic"
   },
   "dependencies": {
     "googleapis": "^173.0.0"
