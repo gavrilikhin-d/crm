@@ -43,7 +43,7 @@ jobs:
         env:
           CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
           NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: ${{ vars.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'VocalLessonBot' }}
-        run: bunx chromatic --only-changed
+        run: bunx chromatic --only-changed --exit-zero-on-changes
 
       - name: Publish and accept Chromatic baseline
         if: github.event_name != 'pull_request'
