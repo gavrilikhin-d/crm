@@ -13,10 +13,6 @@ jobs:
       contents: read
       pull-requests: write
 
-    env:
-      CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
-      NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: ${{ vars.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'VocalLessonBot' }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -31,10 +27,27 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Verify Chromatic token
+        env:
+          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+        run: |
+          if [ -z "$CHROMATIC_PROJECT_TOKEN" ]; then
+            echo "::error::Missing CHROMATIC_PROJECT_TOKEN repository secret."
+            exit 1
+          fi
+
       - name: Publish to Chromatic for review
         if: github.event_name == 'pull_request'
-        run: bun run chromatic --only-changed
+        working-directory: frontend
+        env:
+          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+          NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: ${{ vars.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'VocalLessonBot' }}
+        run: bunx chromatic --only-changed
 
       - name: Publish and accept Chromatic baseline
         if: github.event_name != 'pull_request'
-        run: bun run chromatic --auto-accept-changes main
+        working-directory: frontend
+        env:
+          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+          NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: ${{ vars.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'VocalLessonBot' }}
+        run: bunx chromatic --auto-accept-changes main

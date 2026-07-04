@@ -248,7 +248,7 @@ function makeWeekDays(start = selectedDate): Date[] {
   });
 }
 
-function makeMonthDays(start = selectedDate): Date[] {
+function makeMonthDays(): Date[] {
   return Array.from({ length: 35 }, (_, index) => {
     const day = new Date("2024-03-25T00:00:00.000Z");
     day.setDate(day.getDate() + index);
