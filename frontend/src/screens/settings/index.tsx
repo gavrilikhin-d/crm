@@ -119,14 +119,10 @@ export function SettingsView({
 
   return (
     <section className={pageSectionClass} id="settings">
-      <div className="grid max-w-6xl gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.85fr)]">
-        <div className="grid gap-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("settings.title")}</CardTitle>
-              <CardDescription>{t("settings.description")}</CardDescription>
-            </CardHeader>
-            <CardContent>
+      <div className="grid max-w-6xl gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.85fr)]">
+        <div className="grid content-start gap-3">
+          <Card size="sm" className="gap-3 py-3">
+            <CardContent className="px-3">
               <FieldGroup>
                 <Field>
                   <FieldLabel htmlFor="settings-currency">{t("settings.currency")}</FieldLabel>
@@ -144,18 +140,16 @@ export function SettingsView({
                       </SelectGroup>
                     </SelectContent>
                   </Select>
-                  <FieldDescription>{t("settings.currencyHint")}</FieldDescription>
                 </Field>
               </FieldGroup>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
+          <Card size="sm" className="gap-3 py-3">
+            <CardHeader className="px-3">
               <CardTitle>{t("settings.lessonReminders.title")}</CardTitle>
-              <CardDescription>{t("settings.lessonReminders.description")}</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-3">
               <FieldGroup>
                 <Field>
                   <FieldLabel>{t("settings.lessonReminders.leadTimes")}</FieldLabel>
@@ -181,7 +175,6 @@ export function SettingsView({
                       </ToggleGroupItem>
                     ))}
                   </ToggleGroup>
-                  <FieldDescription>{t("settings.lessonReminders.hint")}</FieldDescription>
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="settings-custom-reminder-minutes">
@@ -199,7 +192,6 @@ export function SettingsView({
                       {t("settings.lessonReminders.customAdd")}
                     </Button>
                   </div>
-                  <FieldDescription>{t("settings.lessonReminders.customHint")}</FieldDescription>
                 </Field>
                 <Button
                   type="button"
@@ -216,10 +208,10 @@ export function SettingsView({
           <GoogleCalendarSettings onChanged={onRefresh} />
         </div>
 
-        <aside className="grid content-start gap-4">
+        <aside className="grid content-start gap-3">
           {accountInfo ? (
-            <Card size="sm" className="gap-2 py-3 sm:gap-4 sm:py-4">
-              <CardHeader className="pb-0">
+            <Card size="sm" className="gap-3 py-3">
+              <CardHeader className="px-3">
                 <CardTitle className="flex flex-wrap items-center gap-2">
                   {t("plan.current")}
                   <Badge variant="secondary">{t(`plan.${plan}`)}</Badge>
@@ -227,9 +219,8 @@ export function SettingsView({
                     <Badge variant="outline">{t("plan.prioritySupport")}</Badge>
                   ) : null}
                 </CardTitle>
-                <CardDescription>{t("plan.usageDescription")}</CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-2 px-3 sm:px-4">
+              <CardContent className="grid gap-2 px-3">
                 <PlanUsageRow
                   label={t("plan.usage.students")}
                   used={accountInfo.usage.students}
@@ -250,22 +241,19 @@ export function SettingsView({
                   used={accountInfo.usage.recurringSchedules}
                   limit={accountInfo.limits.maxRecurringSchedules}
                 />
-                <p className="text-sm text-muted-foreground">
-                  {accountInfo.limits.recurringEnabled ? t("plan.recurringEnabled") : t("plan.recurringDisabled")}
-                </p>
-                <Button type="button" disabled className="mt-2 w-full sm:w-auto">
+                <Button type="button" disabled className="w-full sm:w-auto">
                   {t("plan.upgradeSoon")}
                 </Button>
               </CardContent>
             </Card>
           ) : null}
 
-          <Card className="border-destructive/30">
-            <CardHeader>
+          <Card size="sm" className="gap-3 border-destructive/30 py-3">
+            <CardHeader className="px-3">
               <CardTitle>{t("settings.accountDeletion.title")}</CardTitle>
               <CardDescription>{t("settings.accountDeletion.description")}</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-3">
               <Dialog
                 open={deleteDialogOpen}
                 onOpenChange={(open) => {

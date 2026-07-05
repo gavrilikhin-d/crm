@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldContent, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { useI18n } from "@/i18n/context";
 import { api } from "@/lib/api";
 import type { GoogleCalendarStatus } from "@crm/shared";
@@ -138,12 +138,11 @@ export function GoogleCalendarSettings({ onChanged }: GoogleCalendarSettingsProp
   const syncEnabled = status?.syncEnabled ?? false;
 
   return (
-    <Card className="max-w-xl">
-      <CardHeader>
+    <Card size="sm" className="gap-3 py-3">
+      <CardHeader className="px-3">
         <CardTitle>{t("settings.googleCalendar.title")}</CardTitle>
-        <CardDescription>{t("settings.googleCalendar.description")}</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-3">
         <FieldGroup>
           {loading ? (
             <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
@@ -160,7 +159,6 @@ export function GoogleCalendarSettings({ onChanged }: GoogleCalendarSettingsProp
                   <FieldLabel htmlFor="google-calendar-sync-enabled">
                     {t("settings.googleCalendar.syncEnabled")}
                   </FieldLabel>
-                  <FieldDescription>{t("settings.googleCalendar.syncEnabledHint")}</FieldDescription>
                 </FieldContent>
               </Field>
 
@@ -175,7 +173,6 @@ export function GoogleCalendarSettings({ onChanged }: GoogleCalendarSettingsProp
             </>
           ) : (
             <>
-              <FieldDescription>{t("settings.googleCalendar.connectHint")}</FieldDescription>
               <Button type="button" disabled={busy} onClick={() => void handleConnect()}>
                 {t("settings.googleCalendar.connect")}
               </Button>
