@@ -410,6 +410,9 @@ export default function Home() {
         case "recurring_disabled":
           toast.error(t("plan.limit.recurring"));
           break;
+        case "duplicate_lesson":
+          toast.error(t("toast.duplicateLesson"));
+          break;
         default:
           toast.error(apiError.message || t("toast.actionFailed"));
       }

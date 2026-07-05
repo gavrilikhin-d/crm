@@ -82,6 +82,36 @@ export function createTelegramBindToken(db: Database): string {
   return token;
 }
 
+function normalizeStudentIds(studentIds: string[]): string {
+  return [...new Set(studentIds)].filter(Boolean).sort().join(",");
+}
+
+export function hasExactLessonDuplicate(
+  db: Database,
+  input: {
+    startsAt: string;
+    durationMinutes: number;
+    lessonType: Lesson["originalType"];
+    studentIds: string[];
+  }
+): boolean {
+  const startsAt = new Date(input.startsAt).getTime();
+  const studentIds = normalizeStudentIds(input.studentIds);
+
+  return db.lessons.some((lesson) => {
+    if (lesson.status === "cancelled_by_teacher") {
+      return false;
+    }
+
+    return (
+      new Date(lesson.startsAt).getTime() === startsAt &&
+      lesson.durationMinutes === input.durationMinutes &&
+      lesson.originalType === input.lessonType &&
+      normalizeStudentIds(lesson.participants.map((participant) => participant.studentId)) === studentIds
+    );
+  });
+}
+
 export function recalculateLesson(
   lesson: Lesson,
   individualDurationMinutes: number,

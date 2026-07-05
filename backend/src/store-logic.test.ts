@@ -14,6 +14,7 @@ import {
   applyTeacherParticipantStatusUpdate,
   buildLesson,
   getStudentBalance,
+  hasExactLessonDuplicate,
   hasRecurringLesson,
   isOccurrenceSkipped,
   materializeRecurringLessons,
@@ -35,6 +36,60 @@ function createPayment(studentId: string, lessonCount: number): Payment {
     createdAt: timestamp
   };
 }
+
+describe("hasExactLessonDuplicate", () => {
+  test("matches same time, duration, type, and students", () => {
+    const alice = createStudentRecord("Alice");
+    const bob = createStudentRecord("Bob");
+    const db = createEmptyDatabase({ students: [alice, bob] });
+    const startsAt = futureDate(7, 18, 0);
+    db.lessons.push(createLessonRecord({ db, startsAt, studentIds: [alice.id, bob.id], lessonType: "group" }));
+
+    expect(
+      hasExactLessonDuplicate(db, {
+        startsAt,
+        durationMinutes: 90,
+        lessonType: "group",
+        studentIds: [bob.id, alice.id]
+      })
+    ).toBe(true);
+  });
+
+  test("does not match same time with different students", () => {
+    const alice = createStudentRecord("Alice");
+    const bob = createStudentRecord("Bob");
+    const db = createEmptyDatabase({ students: [alice, bob] });
+    const startsAt = futureDate(7, 18, 0);
+    db.lessons.push(createLessonRecord({ db, startsAt, studentIds: [alice.id] }));
+
+    expect(
+      hasExactLessonDuplicate(db, {
+        startsAt,
+        durationMinutes: 60,
+        lessonType: "individual",
+        studentIds: [bob.id]
+      })
+    ).toBe(false);
+  });
+
+  test("ignores teacher-cancelled lessons", () => {
+    const alice = createStudentRecord("Alice");
+    const db = createEmptyDatabase({ students: [alice] });
+    const startsAt = futureDate(7, 18, 0);
+    const cancelledLesson = createLessonRecord({ db, startsAt, studentIds: [alice.id] });
+    cancelledLesson.status = "cancelled_by_teacher";
+    db.lessons.push(cancelledLesson);
+
+    expect(
+      hasExactLessonDuplicate(db, {
+        startsAt,
+        durationMinutes: 60,
+        lessonType: "individual",
+        studentIds: [alice.id]
+      })
+    ).toBe(false);
+  });
+});
 
 describe("getStudentBalance", () => {
   test("adds new payment to remaining balance when previous lessons are not used up", () => {

@@ -7,8 +7,7 @@ export function lessonOccurrenceKey(lesson: Lesson): string {
     return `schedule:${lesson.recurringScheduleId}:${startsAt}`;
   }
 
-  const studentIds = [...lesson.participants.map((participant) => participant.studentId)].sort().join(",");
-  return `lesson:${startsAt}:${lesson.durationMinutes}:${studentIds}`;
+  return `lesson:${lesson.id}`;
 }
 
 function pickPreferredLesson(existing: Lesson, candidate: Lesson): Lesson {

@@ -89,6 +89,7 @@ import {
   buildRecurringSchedule,
   createTelegramBindToken,
   getStudentBalance,
+  hasExactLessonDuplicate,
   materializeRecurringLessons,
   mustFind,
   now,
@@ -100,6 +101,16 @@ import {
 } from "./store-logic";
 
 export { parseReminderMinutes, PlanLimitError };
+
+export class StoreValidationError extends Error {
+  code: string;
+
+  constructor(code: string, message = code) {
+    super(message);
+    this.name = "StoreValidationError";
+    this.code = code;
+  }
+}
 
 export class Store {
   async initialize(): Promise<void> {
@@ -499,6 +510,16 @@ export class Store {
     const startsAt = new Date(input.startsAt).toISOString();
     if (lessonOverlapsVacation(startsAt, durationMinutes, db.vacationPeriods)) {
       throw new Error("Cannot schedule a lesson during vacation");
+    }
+    if (
+      hasExactLessonDuplicate(db, {
+        startsAt,
+        durationMinutes,
+        lessonType: input.lessonType,
+        studentIds: uniqueStudentIds
+      })
+    ) {
+      throw new StoreValidationError("duplicate_lesson");
     }
 
     let recurringScheduleId: string | undefined;

@@ -7,6 +7,12 @@ import {
 } from "@/screens/dashboard/constants";
 import type { CalendarRange, ScheduleView } from "@/screens/dashboard/types";
 
+export type LessonLayout = {
+  lesson: Lesson;
+  lane: number;
+  lanes: number;
+};
+
 export function getWeekDays(baseDate: Date): Date[] {
   const monday = startOfDay(baseDate);
   const day = baseDate.getDay() || 7;
@@ -173,4 +179,66 @@ export function getLessonPosition(lesson: Lesson, calendarRange: CalendarRange) 
 export function formatTimeRange(start: Date, durationMinutes: number): string {
   const end = new Date(start.getTime() + durationMinutes * 60_000);
   return `${formatTime(start)} – ${formatTime(end)}`;
+}
+
+function getLessonTimeRange(lesson: Lesson): { start: number; end: number } {
+  const start = new Date(lesson.startsAt).getTime();
+  return {
+    start,
+    end: start + lesson.durationMinutes * 60_000
+  };
+}
+
+function lessonsOverlap(first: Lesson, second: Lesson): boolean {
+  const firstRange = getLessonTimeRange(first);
+  const secondRange = getLessonTimeRange(second);
+  return firstRange.start < secondRange.end && firstRange.end > secondRange.start;
+}
+
+export function getLessonLayouts(lessons: Lesson[]): LessonLayout[] {
+  const sortedLessons = [...lessons].sort((first, second) => {
+    const firstRange = getLessonTimeRange(first);
+    const secondRange = getLessonTimeRange(second);
+    return firstRange.start - secondRange.start || firstRange.end - secondRange.end;
+  });
+  const layouts: LessonLayout[] = [];
+  let activeCluster: LessonLayout[] = [];
+  let activeClusterEnd = 0;
+
+  const flushCluster = () => {
+    if (activeCluster.length === 0) {
+      return;
+    }
+
+    const lanes = Math.max(...activeCluster.map((item) => item.lane)) + 1;
+    activeCluster.forEach((item) => {
+      item.lanes = lanes;
+    });
+    activeCluster = [];
+    activeClusterEnd = 0;
+  };
+
+  for (const lesson of sortedLessons) {
+    const range = getLessonTimeRange(lesson);
+    if (activeCluster.length > 0 && range.start >= activeClusterEnd) {
+      flushCluster();
+    }
+
+    const usedLanes = new Set(
+      activeCluster.filter((item) => lessonsOverlap(item.lesson, lesson)).map((item) => item.lane)
+    );
+    let lane = 0;
+    while (usedLanes.has(lane)) {
+      lane += 1;
+    }
+
+    const layout = { lesson, lane, lanes: 1 };
+    layouts.push(layout);
+    activeCluster.push(layout);
+    activeClusterEnd = Math.max(activeClusterEnd, range.end);
+  }
+
+  flushCluster();
+
+  return layouts;
 }

@@ -57,4 +57,15 @@ describe("dedupeLessonsByOccurrence", () => {
     expect(lessonOccurrenceKey(lessons[0]!)).not.toBe(lessonOccurrenceKey(lessons[1]!));
     expect(dedupeLessonsByOccurrence(lessons)).toHaveLength(2);
   });
+
+  test("keeps separate non-recurring lessons with the same occurrence details", () => {
+    const startsAt = "2026-07-07T13:30:00.000Z";
+    const lessons = [
+      createLesson({ id: "l1", startsAt }),
+      createLesson({ id: "l2", startsAt })
+    ];
+
+    expect(lessonOccurrenceKey(lessons[0]!)).not.toBe(lessonOccurrenceKey(lessons[1]!));
+    expect(dedupeLessonsByOccurrence(lessons)).toHaveLength(2);
+  });
 });
