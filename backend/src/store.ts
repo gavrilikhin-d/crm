@@ -566,6 +566,7 @@ export class Store {
     lessonId: string,
     input: {
       startsAt?: string;
+      durationMinutes?: number;
     }
   ): Promise<Lesson> {
     const db = await loadAccountDatabase(ctx.accountId);
@@ -575,24 +576,29 @@ export class Store {
       throw new StoreValidationError("lesson_not_editable", "Cannot reschedule cancelled lesson");
     }
 
-    const startsAt = input.startsAt ? new Date(input.startsAt) : null;
-    if (!startsAt || Number.isNaN(startsAt.getTime())) {
+    const startsAt = input.startsAt ? new Date(input.startsAt) : new Date(lesson.startsAt);
+    if (Number.isNaN(startsAt.getTime())) {
       throw new StoreValidationError("invalid_lesson_time", "Invalid lesson start time");
+    }
+    const durationMinutes =
+      input.durationMinutes === undefined ? lesson.durationMinutes : Math.trunc(input.durationMinutes);
+    if (!Number.isFinite(durationMinutes) || durationMinutes < 15) {
+      throw new StoreValidationError("invalid_lesson_duration", "Invalid lesson duration");
     }
 
     const normalizedStartsAt = startsAt.toISOString();
-    if (new Date(lesson.startsAt).getTime() === startsAt.getTime()) {
+    if (new Date(lesson.startsAt).getTime() === startsAt.getTime() && lesson.durationMinutes === durationMinutes) {
       return lesson;
     }
 
-    if (lessonOverlapsVacation(normalizedStartsAt, lesson.durationMinutes, db.vacationPeriods)) {
+    if (lessonOverlapsVacation(normalizedStartsAt, durationMinutes, db.vacationPeriods)) {
       throw new Error("Cannot schedule a lesson during vacation");
     }
 
     if (
       hasExactLessonDuplicate(db, {
         startsAt: normalizedStartsAt,
-        durationMinutes: lesson.durationMinutes,
+        durationMinutes,
         lessonType: lesson.originalType,
         studentIds: lesson.participants.map((participant) => participant.studentId),
         excludeLessonId: lesson.id
@@ -621,6 +627,7 @@ export class Store {
 
     const schedule = lesson.recurringScheduleId ? skipRecurringOccurrence(db, lesson) : null;
     lesson.startsAt = normalizedStartsAt;
+    lesson.durationMinutes = durationMinutes;
     lesson.recurringScheduleId = undefined;
     lesson.updatedAt = now();
     finalizePastLesson(db, lesson);

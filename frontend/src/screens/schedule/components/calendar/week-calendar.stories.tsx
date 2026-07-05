@@ -18,7 +18,7 @@ export const CurrentWeek = meta.story({
     vacationPeriods,
     getStudent,
     onSelectLesson: fn(),
-    onLessonTimeChange: fn()
+    onLessonUpdate: fn()
   },
   parameters: {
     chromatic: {

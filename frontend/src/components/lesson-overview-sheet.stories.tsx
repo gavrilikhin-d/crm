@@ -20,7 +20,7 @@ export const GroupLesson = meta.story({
     onAddParticipant: asyncNoop,
     onRemoveParticipant: asyncNoop,
     onSetParticipantStatus: asyncNoop,
-    onUpdateLessonTime: asyncNoop,
+    onUpdateLesson: asyncNoop,
     onDeleteLesson: asyncNoop
   }
 });
@@ -35,7 +35,7 @@ export const CompletedLesson = meta.story({
     onAddParticipant: asyncNoop,
     onRemoveParticipant: asyncNoop,
     onSetParticipantStatus: asyncNoop,
-    onUpdateLessonTime: asyncNoop,
+    onUpdateLesson: asyncNoop,
     onDeleteLesson: asyncNoop
   }
 });

@@ -19,7 +19,7 @@ export function DayCalendar({
   vacationPeriods,
   getStudent,
   onSelectLesson,
-  onLessonTimeChange
+  onLessonUpdate
 }: {
   day: Date;
   calendarRange: CalendarRange;
@@ -28,7 +28,7 @@ export function DayCalendar({
   vacationPeriods: VacationPeriod[];
   getStudent: (studentId: string) => Student | undefined;
   onSelectLesson: (lesson: Lesson) => void;
-  onLessonTimeChange: (lesson: Lesson, startsAt: string) => Promise<void>;
+  onLessonUpdate: (lesson: Lesson, patch: { startsAt?: string; durationMinutes?: number }) => Promise<void>;
 }) {
   const [draggedLesson, setDraggedLesson] = useState<DraggedLesson | null>(null);
   const isToday = currentTime ? sameDate(day, currentTime) : false;
@@ -67,7 +67,7 @@ export function DayCalendar({
         onSelectLesson={onSelectLesson}
         onLessonDragStart={(lesson, offsetY) => setDraggedLesson({ lesson, offsetY })}
         onLessonDragEnd={() => setDraggedLesson(null)}
-        onLessonTimeChange={onLessonTimeChange}
+        onLessonUpdate={onLessonUpdate}
       />
     </div>
   );

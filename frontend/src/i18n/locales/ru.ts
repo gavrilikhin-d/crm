@@ -146,6 +146,7 @@ const ru = {
     fullName: "ФИО",
     fullNameRequired: "Укажите ФИО.",
     dateTime: "Дата и время",
+    durationMinutes: "Длительность, мин",
     students: "Ученики",
     addStudent: "Добавить ученика",
     repeatWeekly: "Повторять еженедельно",

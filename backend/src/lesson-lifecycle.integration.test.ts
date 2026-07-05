@@ -39,6 +39,12 @@ describe.skipIf(!databaseAvailable)("lesson lifecycle integration", () => {
     return date.toISOString();
   }
 
+  function datePart(value: string): string {
+    const date = new Date(value);
+    const pad = (part: number) => String(part).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  }
+
   test("deletes one-off lesson when the last participant is removed", async () => {
     const { ctx, cleanup: localCleanup } = await setupAccount();
 
@@ -215,6 +221,81 @@ describe.skipIf(!databaseAvailable)("lesson lifecycle integration", () => {
     }
   });
 
+  test("updates one-off lesson duration", async () => {
+    const { ctx, cleanup: localCleanup } = await setupAccount();
+
+    try {
+      const alice = await store.createStudent(ctx, { fullName: "Alice Duration Update" });
+      const lesson = await store.createLesson(ctx, {
+        startsAt: futureDate(10, 18, 0),
+        lessonType: "individual",
+        studentIds: [alice.id]
+      });
+
+      const updated = await store.updateLesson(ctx, lesson.id, { durationMinutes: 75 });
+
+      expect(updated.startsAt).toBe(lesson.startsAt);
+      expect(updated.durationMinutes).toBe(75);
+    } finally {
+      await localCleanup();
+    }
+  });
+
+  test("rejects creating an exact duplicate after duration edits", async () => {
+    const { ctx, cleanup: localCleanup } = await setupAccount();
+
+    try {
+      const alice = await store.createStudent(ctx, { fullName: "Alice Duration Duplicate" });
+      const firstStartsAt = futureDate(10, 18, 0);
+      const secondStartsAt = futureDate(11, 18, 0);
+      const first = await store.createLesson(ctx, {
+        startsAt: firstStartsAt,
+        lessonType: "individual",
+        studentIds: [alice.id]
+      });
+      const second = await store.createLesson(ctx, {
+        startsAt: secondStartsAt,
+        lessonType: "individual",
+        studentIds: [alice.id]
+      });
+      await store.updateLesson(ctx, first.id, { durationMinutes: 75 });
+      await store.updateLesson(ctx, second.id, { durationMinutes: 75 });
+
+      await expect(store.updateLesson(ctx, second.id, { startsAt: firstStartsAt })).rejects.toMatchObject({
+        code: "duplicate_lesson"
+      });
+    } finally {
+      await localCleanup();
+    }
+  });
+
+  test("rejects duration update that overlaps vacation", async () => {
+    const { ctx, cleanup: localCleanup } = await setupAccount();
+
+    try {
+      const alice = await store.createStudent(ctx, { fullName: "Alice Duration Vacation" });
+      const startsAt = futureDate(10, 10, 0);
+      await store.createVacationPeriod(ctx, {
+        startsOn: datePart(startsAt),
+        endsOn: datePart(startsAt),
+        startsAtTime: "11:00",
+        endsAtTime: "12:00"
+      });
+      const lesson = await store.createLesson(ctx, {
+        startsAt,
+        durationMinutes: 60,
+        lessonType: "individual",
+        studentIds: [alice.id]
+      });
+
+      await expect(store.updateLesson(ctx, lesson.id, { durationMinutes: 90 })).rejects.toThrow(
+        "Cannot schedule a lesson during vacation"
+      );
+    } finally {
+      await localCleanup();
+    }
+  });
+
   test("enforces free plan active student limit", async () => {
     const { ctx, cleanup: localCleanup } = await setupFreeAccount();
 
@@ -302,7 +383,10 @@ describe.skipIf(!databaseAvailable)("lesson lifecycle integration", () => {
       });
 
       await expect(
-        store.updateLesson(ctx, outsideMonthLesson.id, { startsAt: currentMonthDate(60) })
+        store.updateLesson(ctx, outsideMonthLesson.id, {
+          startsAt: currentMonthDate(60),
+          durationMinutes: 75
+        })
       ).rejects.toMatchObject({ code: "lesson_limit" });
     } finally {
       await localCleanup();
@@ -530,6 +614,51 @@ describe.skipIf(!databaseAvailable)("lesson lifecycle integration", () => {
       expect(snapshot.lessons.some((item) => item.id === lesson.id && item.recurringScheduleId === undefined)).toBe(
         true
       );
+    } finally {
+      await localCleanup();
+    }
+  });
+
+  test("updates one recurring occurrence duration as a one-off exception", async () => {
+    const { ctx, cleanup: localCleanup } = await setupAccount();
+
+    try {
+      const alice = await store.createStudent(ctx, { fullName: "Alice Recurring Duration" });
+      const startsAt = futureDate(14, 18, 0);
+      const lesson = await store.createLesson(ctx, {
+        startsAt,
+        lessonType: "individual",
+        studentIds: [alice.id],
+        repeatWeekly: true
+      });
+
+      const updated = await store.updateLesson(ctx, lesson.id, { durationMinutes: 75 });
+
+      expect(updated.recurringScheduleId).toBeUndefined();
+      expect(updated.durationMinutes).toBe(75);
+      expect(new Date(updated.startsAt).getTime()).toBe(new Date(startsAt).getTime());
+
+      const db = await loadAccountDatabase(ctx.accountId);
+      const schedule = db.recurringSchedules.find((item) => item.id === lesson.recurringScheduleId);
+      expect(schedule).toBeDefined();
+      expect(isOccurrenceSkipped(schedule!, startsAt)).toBe(true);
+
+      const snapshot = await store.getSnapshot(ctx);
+      expect(
+        snapshot.lessons.some(
+          (item) =>
+            item.recurringScheduleId === lesson.recurringScheduleId &&
+            new Date(item.startsAt).getTime() === new Date(startsAt).getTime()
+        )
+      ).toBe(false);
+      expect(
+        snapshot.lessons.some(
+          (item) =>
+            item.id === lesson.id &&
+            item.recurringScheduleId === undefined &&
+            item.durationMinutes === 75
+        )
+      ).toBe(true);
     } finally {
       await localCleanup();
     }

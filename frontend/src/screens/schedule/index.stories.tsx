@@ -47,7 +47,7 @@ const baseArgs = {
   onGoToToday: fn(),
   getStudent,
   onSelectLesson: fn(),
-  onLessonTimeChange: fn(),
+  onLessonUpdate: fn(),
   onLessonSubmit: fn()
 };
 

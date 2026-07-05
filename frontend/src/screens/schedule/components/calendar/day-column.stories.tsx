@@ -16,7 +16,7 @@ export const WithLessons = meta.story({
     lessons: lessons.filter((lesson) => lesson.startsAt.startsWith("2024-04-01")),
     getStudent,
     onSelectLesson: fn(),
-    onLessonTimeChange: fn()
+    onLessonUpdate: fn()
   }
 });
 
@@ -67,7 +67,7 @@ export const ConflictingLessons = meta.story({
     ],
     getStudent,
     onSelectLesson: fn(),
-    onLessonTimeChange: fn()
+    onLessonUpdate: fn()
   }
 });
 
@@ -80,6 +80,6 @@ export const Vacation = meta.story({
     vacationPeriod: vacationPeriods[0],
     getStudent,
     onSelectLesson: fn(),
-    onLessonTimeChange: fn()
+    onLessonUpdate: fn()
   }
 });

@@ -18,7 +18,8 @@ export function CalendarLesson({
   getStudent,
   onSelect,
   onDragStart,
-  onDragEnd
+  onDragEnd,
+  onResizeStart
 }: {
   lesson: Lesson;
   calendarRange: CalendarRange;
@@ -28,6 +29,7 @@ export function CalendarLesson({
   onSelect: () => void;
   onDragStart?: (offsetY: number) => void;
   onDragEnd?: () => void;
+  onResizeStart?: (edge: "top" | "bottom", clientY: number) => void;
 }) {
   const { t } = useI18n();
   const suppressClickRef = useRef(false);
@@ -107,6 +109,32 @@ export function CalendarLesson({
         }, 0);
       }}
     >
+      {onResizeStart ? (
+        <>
+          <span
+            aria-hidden="true"
+            draggable={false}
+            className="absolute inset-x-2 top-0 z-20 h-2 cursor-ns-resize rounded-full border-t border-dashed border-stone-400/80 opacity-0 transition-opacity hover:opacity-100"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              suppressClickRef.current = true;
+              onResizeStart("top", event.clientY);
+            }}
+          />
+          <span
+            aria-hidden="true"
+            draggable={false}
+            className="absolute inset-x-2 bottom-0 z-20 h-2 cursor-ns-resize rounded-full border-b border-dashed border-stone-400/80 opacity-0 transition-opacity hover:opacity-100"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              suppressClickRef.current = true;
+              onResizeStart("bottom", event.clientY);
+            }}
+          />
+        </>
+      ) : null}
       <div className="flex items-start justify-between gap-1">
         <span className="shrink-0 text-[0.68rem] font-semibold tabular-nums leading-tight">
           {formatTimeRange(startsAt, lesson.durationMinutes)}

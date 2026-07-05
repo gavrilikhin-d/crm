@@ -434,8 +434,11 @@ async function createLesson(request: IncomingMessage, response: ServerResponse, 
 
 async function updateLesson(request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray, ctx?: AuthContext) {
   const body = await readJson(request);
-  requireFields(body, ["startsAt"]);
-  const lesson = await store.updateLesson(ctx!, match[1], body as { startsAt: string });
+  if (body.startsAt === undefined && body.durationMinutes === undefined) {
+    jsonError(response, new Error("startsAt or durationMinutes is required"), 400);
+    return;
+  }
+  const lesson = await store.updateLesson(ctx!, match[1], body as { startsAt?: string; durationMinutes?: number });
   jsonOk(response, lesson);
   broadcastSnapshotMessage(ctx!, { type: "calendar:invalidate" });
 }

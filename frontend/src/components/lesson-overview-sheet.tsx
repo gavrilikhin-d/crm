@@ -41,7 +41,7 @@ function LessonOverviewSheet({
   onAddParticipant,
   onRemoveParticipant,
   onSetParticipantStatus,
-  onUpdateLessonTime,
+  onUpdateLesson,
   onDeleteLesson
 }: {
   lesson: Lesson | null;
@@ -57,7 +57,7 @@ function LessonOverviewSheet({
     studentId: string,
     status: TeacherParticipantStatus
   ) => Promise<void>;
-  onUpdateLessonTime: (lesson: Lesson, startsAt: string) => Promise<void>;
+  onUpdateLesson: (lesson: Lesson, patch: { startsAt?: string; durationMinutes?: number }) => Promise<void>;
   onDeleteLesson: (lesson: Lesson, scope: RecurringDeleteScope) => Promise<void>;
 }) {
   const { t } = useI18n();
@@ -107,20 +107,25 @@ function LessonOverviewSheet({
     }
   }
 
-  async function handleTimeSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleLessonUpdateSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canChangeTime) {
       return;
     }
 
-    const startsAt = String(new FormData(event.currentTarget).get("startsAt") ?? "");
-    if (!startsAt) {
+    const formData = new FormData(event.currentTarget);
+    const startsAt = String(formData.get("startsAt") ?? "");
+    const durationMinutes = Number(formData.get("durationMinutes"));
+    if (!startsAt || !Number.isFinite(durationMinutes)) {
       return;
     }
 
     setSavingTime(true);
     try {
-      await onUpdateLessonTime(currentLesson, startsAt);
+      await onUpdateLesson(currentLesson, {
+        startsAt,
+        durationMinutes
+      });
     } finally {
       setSavingTime(false);
     }
@@ -157,7 +162,7 @@ function LessonOverviewSheet({
           </div>
 
           {canChangeTime ? (
-            <form key={`${lesson.id}-${lesson.startsAt}`} onSubmit={handleTimeSubmit}>
+            <form key={`${lesson.id}-${lesson.startsAt}-${lesson.durationMinutes}`} onSubmit={handleLessonUpdateSubmit}>
               <FieldGroup className="gap-3 rounded-lg border p-3">
                 <Field>
                   <FieldLabel htmlFor="lesson-edit-starts-at">{t("form.dateTime")}</FieldLabel>
@@ -166,6 +171,18 @@ function LessonOverviewSheet({
                     type="datetime-local"
                     name="startsAt"
                     defaultValue={formatDateTimeLocal(startsAt)}
+                    required
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="lesson-edit-duration">{t("form.durationMinutes")}</FieldLabel>
+                  <Input
+                    id="lesson-edit-duration"
+                    type="number"
+                    name="durationMinutes"
+                    min={15}
+                    step={5}
+                    defaultValue={lesson.durationMinutes}
                     required
                   />
                 </Field>

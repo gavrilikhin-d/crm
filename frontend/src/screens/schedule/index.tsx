@@ -51,7 +51,7 @@ export function ScheduleScreen({
   onGoToToday,
   getStudent,
   onSelectLesson,
-  onLessonTimeChange,
+  onLessonUpdate,
   onLessonSubmit
 }: {
   scheduleView: ScheduleView;
@@ -82,7 +82,7 @@ export function ScheduleScreen({
   onGoToToday: () => void;
   getStudent: (studentId: string) => Student | undefined;
   onSelectLesson: (lesson: Lesson) => void;
-  onLessonTimeChange: (lesson: Lesson, startsAt: string) => Promise<void>;
+  onLessonUpdate: (lesson: Lesson, patch: { startsAt?: string; durationMinutes?: number }) => Promise<void>;
   onLessonSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   const { t } = useI18n();
@@ -185,7 +185,7 @@ export function ScheduleScreen({
               vacationPeriods={vacationPeriods}
               getStudent={getStudent}
               onSelectLesson={onSelectLesson}
-              onLessonTimeChange={onLessonTimeChange}
+              onLessonUpdate={onLessonUpdate}
             />
           </CalendarScrollArea>
         ) : null}
@@ -206,7 +206,7 @@ export function ScheduleScreen({
               vacationPeriods={vacationPeriods}
               getStudent={getStudent}
               onSelectLesson={onSelectLesson}
-              onLessonTimeChange={onLessonTimeChange}
+              onLessonUpdate={onLessonUpdate}
             />
           </CalendarScrollArea>
         ) : null}
