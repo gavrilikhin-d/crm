@@ -104,6 +104,24 @@ export const DraggingGhost = meta.story({
   }
 });
 
+export const ExtendingTimeGhost = meta.story({
+  args: {
+    day: selectedDate,
+    calendarRange,
+    currentTime: storyNow,
+    lessons: lessons.filter((lesson) => lesson.startsAt.startsWith("2024-04-01")),
+    resizePreview: {
+      startsAt: "2024-04-01T10:00:00.000Z",
+      durationMinutes: 105,
+      top: 150,
+      height: 131.25
+    },
+    getStudent,
+    onSelectLesson: fn(),
+    onLessonUpdate: fn()
+  }
+});
+
 export const Vacation = meta.story({
   args: {
     day: new Date("2024-04-08T00:00:00.000Z"),

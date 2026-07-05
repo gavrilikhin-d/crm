@@ -24,6 +24,13 @@ export type DraggedLesson = {
   offsetY: number;
 };
 
+export type LessonResizePreview = {
+  startsAt: string;
+  durationMinutes: number;
+  top: number;
+  height: number;
+};
+
 type ResizeEdge = "top" | "bottom";
 
 type ResizingLesson = {
@@ -34,13 +41,6 @@ type ResizingLesson = {
   durationMinutes: number;
 };
 
-type ResizePreview = {
-  startsAt: string;
-  durationMinutes: number;
-  top: number;
-  height: number;
-};
-
 export function DayColumn({
   day,
   calendarRange,
@@ -48,6 +48,7 @@ export function DayColumn({
   lessons,
   vacationPeriod,
   draggedLesson,
+  resizePreview: resizePreviewProp,
   getStudent,
   onSelectLesson,
   onLessonDragStart,
@@ -60,6 +61,7 @@ export function DayColumn({
   lessons: Lesson[];
   vacationPeriod?: VacationPeriod;
   draggedLesson?: DraggedLesson | null;
+  resizePreview?: LessonResizePreview | null;
   getStudent: (studentId: string) => Student | undefined;
   onSelectLesson: (lesson: Lesson) => void;
   onLessonDragStart?: (lesson: Lesson, offsetY: number) => void;
@@ -70,8 +72,8 @@ export function DayColumn({
   const columnRef = useRef<HTMLDivElement>(null);
   const [dropPreview, setDropPreview] = useState<{ startsAt: string; top: number; height: number } | null>(null);
   const [resizingLesson, setResizingLesson] = useState<ResizingLesson | null>(null);
-  const [resizePreview, setResizePreview] = useState<ResizePreview | null>(null);
-  const resizePreviewRef = useRef<ResizePreview | null>(null);
+  const [resizePreviewState, setResizePreviewState] = useState<LessonResizePreview | null>(null);
+  const resizePreviewRef = useRef<LessonResizePreview | null>(null);
   const isToday = currentTime ? sameDate(day, currentTime) : false;
   const currentTimeOffset = currentTime && isToday ? getCurrentTimeOffset(currentTime, calendarRange) : null;
   const columnHeight = calendarRange.hours.length * hourHeight;
@@ -100,7 +102,7 @@ export function DayColumn({
     return formatDateTimeLocal(startsAt);
   }, [day]);
 
-  const calculateResizePreview = useCallback((state: ResizingLesson, clientY: number): ResizePreview => {
+  const calculateResizePreview = useCallback((state: ResizingLesson, clientY: number): LessonResizePreview => {
     const snapMinutes = 5;
     const minDurationMinutes = 15;
     const deltaMinutes = Math.round((((clientY - state.startY) / hourHeight) * 60) / snapMinutes) * snapMinutes;
@@ -141,13 +143,13 @@ export function DayColumn({
     function handlePointerMove(event: PointerEvent) {
       const preview = calculateResizePreview(activeResize, event.clientY);
       resizePreviewRef.current = preview;
-      setResizePreview(preview);
+      setResizePreviewState(preview);
     }
 
     function handlePointerUp() {
       const preview = resizePreviewRef.current;
       setResizingLesson(null);
-      setResizePreview(null);
+      setResizePreviewState(null);
       resizePreviewRef.current = null;
       if (preview) {
         void updateLesson(activeResize.lesson, {
@@ -164,6 +166,8 @@ export function DayColumn({
       window.removeEventListener("pointerup", handlePointerUp);
     };
   }, [calculateResizePreview, onLessonUpdate, resizingLesson]);
+
+  const resizePreview = resizePreviewState ?? resizePreviewProp ?? null;
 
   return (
     <div
@@ -315,7 +319,7 @@ export function DayColumn({
                   };
                   const preview = calculateResizePreview(previewState, clientY);
                   resizePreviewRef.current = preview;
-                  setResizePreview(preview);
+                  setResizePreviewState(preview);
                   setResizingLesson(previewState);
                 }
           }
