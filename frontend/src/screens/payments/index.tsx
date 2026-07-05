@@ -22,7 +22,7 @@ export function PaymentsView({
   getStudent: (studentId: string) => Student | undefined;
   onAddPayment: () => void;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
 
   return (
     <section className={pageSectionClass}>
@@ -62,8 +62,8 @@ export function PaymentsView({
                     )}
                   </p>
                   <p className="truncate text-xs text-muted-foreground sm:text-sm">
-                    <span className="sm:hidden">{formatDateTime(payment.paidAt)}</span>
-                    <span className="hidden sm:inline">{formatFullDate(payment.paidAt)}</span>
+                    <span className="sm:hidden">{formatDateTime(payment.paidAt, locale)}</span>
+                    <span className="hidden sm:inline">{formatFullDate(payment.paidAt, locale)}</span>
                     {" · "}
                     {t("common.lessonsCount", { count: payment.lessonCount })}
                   </p>

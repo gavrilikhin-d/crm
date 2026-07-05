@@ -1,4 +1,5 @@
 import { formatTime } from "@/i18n/format";
+import type { Locale } from "@/i18n/locale";
 import type { Lesson } from "@crm/shared";
 import {
   defaultCalendarEndHour,
@@ -193,9 +194,9 @@ export function getLessonStartsAtFromOffset(
   return formatDateTimeLocal(startsAt);
 }
 
-export function formatTimeRange(start: Date, durationMinutes: number): string {
+export function formatTimeRange(start: Date, durationMinutes: number, locale?: Locale): string {
   const end = new Date(start.getTime() + durationMinutes * 60_000);
-  return `${formatTime(start)} – ${formatTime(end)}`;
+  return `${formatTime(start, locale)} – ${formatTime(end, locale)}`;
 }
 
 function getLessonTimeRange(lesson: Lesson): { start: number; end: number } {

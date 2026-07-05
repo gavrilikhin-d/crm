@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useI18n } from "@/i18n/context";
+import { SUPPORTED_LOCALES, type Locale } from "@/i18n/locale";
 import type { AccountInfo, AppSettings } from "@crm/shared";
 import { CURRENCIES, type CurrencyCode } from "@crm/shared/currency";
 import { PLAN_META } from "@crm/shared/plans";
@@ -53,7 +54,7 @@ export function SettingsView({
   onLessonReminderMinutesChange: (minutes: number[]) => Promise<void>;
   onRefresh: () => Promise<void>;
 }) {
-  const { t } = useI18n();
+  const { locale, setLocale, t } = useI18n();
   const plan = accountInfo?.account.plan ?? "free";
   const accountEmail = accountInfo?.account.email ?? "";
   const [selectedReminderMinutes, setSelectedReminderMinutes] = useState<string[] | null>(null);
@@ -117,13 +118,44 @@ export function SettingsView({
     setCustomReminderText("");
   }
 
+  function formatReminderMinutes(minutes: number): string {
+    if (minutes % 1440 === 0) {
+      const days = minutes / 1440;
+      if (days === 1) {
+        return t("settings.lessonReminders.units.twentyFourHours");
+      }
+      return t("settings.lessonReminders.units.days", { count: days });
+    }
+    if (minutes % 60 === 0) {
+      return t("settings.lessonReminders.units.hours", { count: minutes / 60 });
+    }
+    return t("settings.lessonReminders.units.minutes", { count: minutes });
+  }
+
   return (
     <section className={pageSectionClass} id="settings">
       <div className="grid max-w-6xl gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.85fr)]">
         <div className="grid content-start gap-3">
           <Card size="sm" className="gap-3 py-3">
             <CardContent className="px-3">
-              <FieldGroup>
+              <FieldGroup className="grid gap-3 sm:grid-cols-2">
+                <Field>
+                  <FieldLabel htmlFor="settings-language">{t("settings.language")}</FieldLabel>
+                  <Select value={locale} onValueChange={(value) => setLocale(value as Locale)}>
+                    <SelectTrigger id="settings-language" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {SUPPORTED_LOCALES.map((item) => (
+                          <SelectItem key={item} value={item}>
+                            {t(`settings.languages.${item}`)}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
                 <Field>
                   <FieldLabel htmlFor="settings-currency">{t("settings.currency")}</FieldLabel>
                   <Select value={currency} onValueChange={(value) => onCurrencyChange(value as CurrencyCode)}>
@@ -134,7 +166,7 @@ export function SettingsView({
                       <SelectGroup>
                         {CURRENCIES.map((item) => (
                           <SelectItem key={item.code} value={item.code}>
-                            {item.label} ({item.code})
+                            {t(`settings.currencies.${item.code}`)} ({item.code})
                           </SelectItem>
                         ))}
                       </SelectGroup>
@@ -316,17 +348,6 @@ export function SettingsView({
       </div>
     </section>
   );
-}
-
-function formatReminderMinutes(minutes: number): string {
-  if (minutes % 1440 === 0) {
-    const days = minutes / 1440;
-    return days === 1 ? "24 ч" : `${days} д`;
-  }
-  if (minutes % 60 === 0) {
-    return `${minutes / 60} ч`;
-  }
-  return `${minutes} мин`;
 }
 
 function parseReminderMinutesInput(value: string): number[] {

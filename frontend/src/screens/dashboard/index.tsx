@@ -142,7 +142,7 @@ function parseDateOnly(value: string): Date {
 }
 
 export default function Home() {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const isMobile = useIsMobile();
   const hasMobileScheduleDefault = useRef(false);
   const hasBaseSnapshotRef = useRef(false);
@@ -621,7 +621,7 @@ export default function Home() {
       }
 
       const student = students.find((item) => item.id === studentIds[0]);
-      const name = student?.fullName ?? "Ученик";
+      const name = student?.fullName ?? t("lessonOverview.deletedStudent");
 
       if (wasIndividual) {
         return t("toast.participantAddedGroup", { name });
@@ -655,7 +655,7 @@ export default function Home() {
 
   async function handleDeleteLessonFromSheet(lesson: Lesson, scope: RecurringDeleteScope) {
     if (!lesson.recurringScheduleId) {
-      if (!window.confirm(t("confirm.deleteLesson", { date: formatFullDate(lesson.startsAt) }))) {
+      if (!window.confirm(t("confirm.deleteLesson", { date: formatFullDate(lesson.startsAt, locale) }))) {
         return;
       }
     }

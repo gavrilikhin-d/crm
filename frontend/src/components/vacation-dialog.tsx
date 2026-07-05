@@ -10,6 +10,7 @@ import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from "@
 import { Input } from "@/components/ui/input";
 import { useI18n } from "@/i18n/context";
 import { formatLongDate } from "@/i18n/format";
+import type { Locale } from "@/i18n/locale";
 import { api } from "@/lib/api";
 import { toLocalDateKey } from "@crm/shared/vacation";
 import type { VacationPeriod } from "@crm/shared";
@@ -20,15 +21,15 @@ type VacationDialogProps = {
   onChanged?: () => Promise<void>;
 };
 
-function formatVacationDate(dateKey: string): string {
-  return formatLongDate(`${dateKey}T12:00:00`);
+function formatVacationDate(dateKey: string, locale?: Locale): string {
+  return formatLongDate(`${dateKey}T12:00:00`, locale);
 }
 
-function formatVacationRange(period: VacationPeriod): string {
+function formatVacationRange(period: VacationPeriod, locale?: Locale): string {
   const datePart =
     period.startsOn === period.endsOn
-      ? formatVacationDate(period.startsOn)
-      : `${formatVacationDate(period.startsOn)} – ${formatVacationDate(period.endsOn)}`;
+      ? formatVacationDate(period.startsOn, locale)
+      : `${formatVacationDate(period.startsOn, locale)} – ${formatVacationDate(period.endsOn, locale)}`;
 
   if (!period.startsAtTime && !period.endsAtTime) {
     return datePart;
@@ -40,7 +41,7 @@ function formatVacationRange(period: VacationPeriod): string {
 }
 
 export function VacationDialog({ vacationPeriods, defaultDate, onChanged }: VacationDialogProps) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const [open, setOpen] = useState(false);
   const [startsOn, setStartsOn] = useState("");
   const [endsOn, setEndsOn] = useState("");
@@ -219,7 +220,7 @@ export function VacationDialog({ vacationPeriods, defaultDate, onChanged }: Vaca
                 className="flex items-start justify-between gap-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2"
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-sky-900">{formatVacationRange(period)}</p>
+                  <p className="text-sm font-medium text-sky-900">{formatVacationRange(period, locale)}</p>
                   {period.label ? <p className="text-sm text-sky-700/80">{period.label}</p> : null}
                 </div>
                 <Button

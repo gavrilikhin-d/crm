@@ -36,7 +36,7 @@ export function CalendarLesson({
   onResizeStart?: (edge: "top" | "bottom", clientY: number) => void;
   dragPreview?: boolean;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const suppressClickRef = useRef(false);
   const dragImageRef = useRef<HTMLElement | null>(null);
   const startsAt = new Date(lesson.startsAt);
@@ -137,7 +137,7 @@ export function CalendarLesson({
       ) : null}
       <div className="flex items-start justify-between gap-1">
         <span className="shrink-0 text-[0.68rem] font-semibold tabular-nums leading-tight">
-          {formatTimeRange(startsAt, lesson.durationMinutes)}
+          {formatTimeRange(startsAt, lesson.durationMinutes, locale)}
         </span>
         <LessonParticipantSummary participants={lesson.participants} compact={compact} />
       </div>

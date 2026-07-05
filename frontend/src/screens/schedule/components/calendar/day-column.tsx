@@ -68,7 +68,7 @@ export function DayColumn({
   onLessonDragEnd?: () => void;
   onLessonUpdate?: (lesson: Lesson, patch: { startsAt?: string; durationMinutes?: number }) => Promise<void>;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const columnRef = useRef<HTMLDivElement>(null);
   const [dropPreview, setDropPreview] = useState<{ startsAt: string; top: number; height: number } | null>(null);
   const [resizingLesson, setResizingLesson] = useState<ResizingLesson | null>(null);
@@ -243,7 +243,7 @@ export function DayColumn({
                   : Math.min(dropPreview.top + dropPreview.height + 4, columnHeight - 24)
             }}
           >
-            {formatDateTime(dropPreview.startsAt)}
+            {formatDateTime(dropPreview.startsAt, locale)}
           </span>
         </>
       ) : null}
@@ -262,7 +262,7 @@ export function DayColumn({
                   : Math.min(resizePreview.top + resizePreview.height + 4, columnHeight - 24)
             }}
           >
-            {formatTimeRange(new Date(resizePreview.startsAt), resizePreview.durationMinutes)}
+            {formatTimeRange(new Date(resizePreview.startsAt), resizePreview.durationMinutes, locale)}
           </span>
         </>
       ) : null}

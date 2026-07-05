@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useI18n } from "@/i18n/context";
 import { formatWeekday } from "@/i18n/format";
 import type { Lesson, Student, VacationPeriod } from "@crm/shared";
 import { getVacationPeriodForDate } from "@crm/shared/vacation";
@@ -30,6 +31,7 @@ export function DayCalendar({
   onSelectLesson: (lesson: Lesson) => void;
   onLessonUpdate: (lesson: Lesson, patch: { startsAt?: string; durationMinutes?: number }) => Promise<void>;
 }) {
+  const { locale } = useI18n();
   const [draggedLesson, setDraggedLesson] = useState<DraggedLesson | null>(null);
   const isToday = currentTime ? sameDate(day, currentTime) : false;
   const vacationPeriod = getVacationPeriodForDate(day, vacationPeriods);
@@ -45,7 +47,7 @@ export function DayCalendar({
           vacationPeriod && "bg-sky-50 dark:bg-sky-950"
         )}
       >
-        <strong className="text-xs uppercase text-stone-900">{formatWeekday(day)}</strong>
+        <strong className="text-xs uppercase text-stone-900">{formatWeekday(day, locale)}</strong>
         <span
           className={cn(
             "flex items-center justify-center text-[0.68rem] font-bold",

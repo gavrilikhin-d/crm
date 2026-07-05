@@ -20,7 +20,7 @@ function SnapshotRefreshControl({
   lastRefreshedAt: Date | null;
   onRefresh: () => void;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
 
   return (
     <div className="flex items-center gap-2">
@@ -47,7 +47,7 @@ function SnapshotRefreshControl({
             </span>
             {lastRefreshedAt ? (
               <span className="text-background/80">
-                {t("calendar.lastRefreshed", { time: formatTime(lastRefreshedAt) })}
+                {t("calendar.lastRefreshed", { time: formatTime(lastRefreshedAt, locale) })}
               </span>
             ) : null}
           </div>

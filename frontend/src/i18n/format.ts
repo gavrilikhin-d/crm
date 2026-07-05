@@ -1,25 +1,29 @@
-import { LOCALE_TAG } from "@/i18n/locale";
+import { DEFAULT_LOCALE, LOCALE_TAG_BY_LOCALE, type Locale } from "@/i18n/locale";
 
-function formatDate(value: string | Date, options?: Intl.DateTimeFormatOptions): string {
-  return new Intl.DateTimeFormat(LOCALE_TAG, options).format(new Date(value));
+function getLocaleTag(locale: Locale = DEFAULT_LOCALE): string {
+  return LOCALE_TAG_BY_LOCALE[locale];
 }
 
-function formatTime(value: Date): string {
-  return new Intl.DateTimeFormat(LOCALE_TAG, {
+function formatDate(value: string | Date, options?: Intl.DateTimeFormatOptions, locale?: Locale): string {
+  return new Intl.DateTimeFormat(getLocaleTag(locale), options).format(new Date(value));
+}
+
+function formatTime(value: Date, locale?: Locale): string {
+  return new Intl.DateTimeFormat(getLocaleTag(locale), {
     hour: "numeric",
     minute: "2-digit"
   }).format(value);
 }
 
-function formatFullDate(value: string | Date): string {
-  return new Intl.DateTimeFormat(LOCALE_TAG, {
+function formatFullDate(value: string | Date, locale?: Locale): string {
+  return new Intl.DateTimeFormat(getLocaleTag(locale), {
     dateStyle: "medium",
     timeStyle: "short"
   }).format(new Date(value));
 }
 
-function formatDateTime(value: string | Date): string {
-  return new Intl.DateTimeFormat(LOCALE_TAG, {
+function formatDateTime(value: string | Date, locale?: Locale): string {
+  return new Intl.DateTimeFormat(getLocaleTag(locale), {
     day: "numeric",
     month: "short",
     hour: "numeric",
@@ -27,24 +31,24 @@ function formatDateTime(value: string | Date): string {
   }).format(new Date(value));
 }
 
-function formatDay(value: Date): string {
-  return new Intl.DateTimeFormat(LOCALE_TAG, { month: "short", day: "numeric" }).format(value);
+function formatDay(value: Date, locale?: Locale): string {
+  return new Intl.DateTimeFormat(getLocaleTag(locale), { month: "short", day: "numeric" }).format(value);
 }
 
-function formatWeekday(value: Date): string {
-  return new Intl.DateTimeFormat(LOCALE_TAG, { weekday: "short" }).format(value);
+function formatWeekday(value: Date, locale?: Locale): string {
+  return new Intl.DateTimeFormat(getLocaleTag(locale), { weekday: "short" }).format(value);
 }
 
-function formatMonth(value: Date): string {
-  return new Intl.DateTimeFormat(LOCALE_TAG, { month: "long", year: "numeric" }).format(value);
+function formatMonth(value: Date, locale?: Locale): string {
+  return new Intl.DateTimeFormat(getLocaleTag(locale), { month: "long", year: "numeric" }).format(value);
 }
 
-function formatLongDate(value: string | Date): string {
-  return new Intl.DateTimeFormat(LOCALE_TAG, { dateStyle: "long" }).format(new Date(value));
+function formatLongDate(value: string | Date, locale?: Locale): string {
+  return new Intl.DateTimeFormat(getLocaleTag(locale), { dateStyle: "long" }).format(new Date(value));
 }
 
-function formatWeekRange(days: Date[]): string {
-  return `${formatDay(days[0])} - ${formatDay(days[6])}`;
+function formatWeekRange(days: Date[], locale?: Locale): string {
+  return `${formatDay(days[0], locale)} - ${formatDay(days[6], locale)}`;
 }
 
 export {

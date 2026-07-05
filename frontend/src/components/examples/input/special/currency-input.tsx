@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Input } from "@/components/ui/input";
+import { useI18n } from "@/i18n/context";
 import { cn } from "@/lib/utils";
 import { CURRENCIES, getCurrencySymbol, type CurrencyCode } from "@crm/shared/currency";
 
@@ -16,6 +17,7 @@ function CurrencyInput({
   currencyName?: string;
   onCurrencyChange?: (currency: CurrencyCode) => void;
 }) {
+  const { t } = useI18n();
   const symbol = getCurrencySymbol(currency);
   const interactive = Boolean(onCurrencyChange);
 
@@ -29,7 +31,7 @@ function CurrencyInput({
       </span>
       {interactive ? (
         <select
-          aria-label="Валюта"
+          aria-label={t("form.currency")}
           name={currencyName}
           value={currency}
           onChange={(event) => onCurrencyChange?.(event.target.value as CurrencyCode)}
