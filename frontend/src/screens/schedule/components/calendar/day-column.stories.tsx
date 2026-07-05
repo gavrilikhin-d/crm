@@ -50,7 +50,19 @@ export const ConflictingLessons = meta.story({
             studentId: "student-maria"
           }
         ]
-      }
+      },
+      {
+        ...lessons[0],
+        id: "lesson-conflict-3",
+        startsAt: "2024-04-01T09:55:00.000Z",
+        participants: [
+          {
+            ...lessons[0].participants[0],
+            id: "participant-conflict-3",
+            studentId: "student-ivan"
+          }
+        ]
+      },
     ],
     getStudent,
     onSelectLesson: fn()
