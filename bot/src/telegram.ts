@@ -101,13 +101,15 @@ export function getTelegramBot(): Telegraf | null {
               "Напоминания и команды будут работать в этом чате для вас лично.",
               "",
               "Расписание: /schedule (7 дней) или /schedule 14",
-              "Баланс: /balance"
+              "Баланс: /balance",
+              "Напоминания: /notifications или /notifications 45, 120"
             ]
           : [
               `${student.fullName}, Telegram подключен. Теперь сюда будут приходить напоминания о занятиях.`,
               "",
               "Спросить расписание: /schedule (7 дней) или /schedule 14",
               "Спросить баланс: /balance",
+              "Настроить напоминания: /notifications или /notifications 45, 120",
               "Ответ по занятию: /attend 1 или /decline 1"
             ];
 
