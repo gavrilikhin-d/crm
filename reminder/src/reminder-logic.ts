@@ -33,6 +33,10 @@ function isLessonReminderDue(input: {
   return scheduledForMs <= input.nowMs && input.lessonStartsAtMs > input.nowMs;
 }
 
+function getStudentLessonReminderMinutes(student: Student, settings: Database["settings"]): number[] {
+  return student.lessonReminderMinutes?.length ? student.lessonReminderMinutes : settings.lessonReminderMinutes;
+}
+
 function collectPendingLessonReminders(workerSnapshots: WorkerSnapshot[], nowMs: number): PendingLessonReminder[] {
   const results: PendingLessonReminder[] = [];
 
@@ -45,22 +49,22 @@ function collectPendingLessonReminders(workerSnapshots: WorkerSnapshot[], nowMs:
       }
 
       const startsAtMs = new Date(lesson.startsAt).getTime();
-      for (const leadMinutes of worker.settings.lessonReminderMinutes) {
-        if (!isLessonReminderDue({ nowMs, lessonStartsAtMs: startsAtMs, leadMinutes })) {
+      for (const participant of lesson.participants) {
+        if (isSkippedParticipantStatus(participant.status)) {
           continue;
         }
 
-        const scheduledFor = new Date(startsAtMs - leadMinutes * MINUTE_MS).toISOString();
-        for (const participant of lesson.participants) {
-          if (isSkippedParticipantStatus(participant.status)) {
+        const student = db.students.find((candidate) => candidate.id === participant.studentId);
+        if (!student) {
+          continue;
+        }
+
+        for (const leadMinutes of getStudentLessonReminderMinutes(student, worker.settings)) {
+          if (!isLessonReminderDue({ nowMs, lessonStartsAtMs: startsAtMs, leadMinutes })) {
             continue;
           }
 
-          const student = db.students.find((candidate) => candidate.id === participant.studentId);
-          if (!student) {
-            continue;
-          }
-
+          const scheduledFor = new Date(startsAtMs - leadMinutes * MINUTE_MS).toISOString();
           results.push({
             accountId: worker.accountId,
             student,
@@ -98,6 +102,7 @@ function shouldSendManualPaymentReminder(input: {
 export {
   MINUTE_MS,
   collectPendingLessonReminders,
+  getStudentLessonReminderMinutes,
   isLessonReminderDue,
   isSkippedLessonStatus,
   isSkippedParticipantStatus,

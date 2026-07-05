@@ -5,6 +5,7 @@ import { formatBalanceMessage, formatNotLinkedMessage, formatScheduleMessage } f
 function createProfile(input?: Partial<TelegramStudentProfile>): TelegramStudentProfile {
   return {
     student: { id: "s1", fullName: "Alice <Test>" },
+    settings: input?.settings ?? { lessonReminderMinutes: [1440, 120] },
     balance: {
       studentId: "s1",
       paidLessons: 2,

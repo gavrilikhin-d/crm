@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { Database, Lesson, Student } from "@crm/shared";
 import {
   collectPendingLessonReminders,
+  getStudentLessonReminderMinutes,
   isLessonReminderDue,
   isSkippedLessonStatus,
   isSkippedParticipantStatus,
@@ -183,6 +184,32 @@ describe("collectPendingLessonReminders", () => {
     const pending = collectPendingLessonReminders(snapshots, nowMs);
 
     expect(pending.map((item) => item.dedupeKey)).toEqual(["lesson:l1:s1:1440", "lesson:l1:s1:60"]);
+  });
+
+  test("uses student reminder lead-time override before account defaults", () => {
+    const student: Student = { ...createStudent("s1"), lessonReminderMinutes: [30] };
+    const startsAt = "2026-06-30T18:00:00.000Z";
+    const nowMs = Date.parse("2026-06-30T17:35:00.000Z");
+    const snapshots = createSnapshot({
+      students: [student],
+      lessons: [createLesson({ id: "l1", startsAt, studentIds: ["s1"] })],
+      leadMinutes: [60]
+    });
+
+    const pending = collectPendingLessonReminders(snapshots, nowMs);
+
+    expect(pending.map((item) => item.dedupeKey)).toEqual(["lesson:l1:s1:30"]);
+  });
+
+  test("falls back to account defaults when student override is empty", () => {
+    const student: Student = { ...createStudent("s1"), lessonReminderMinutes: null };
+    const snapshots = createSnapshot({
+      students: [student],
+      lessons: [],
+      leadMinutes: [120, 60]
+    });
+
+    expect(getStudentLessonReminderMinutes(student, snapshots[0]!.settings)).toEqual([120, 60]);
   });
 });
 

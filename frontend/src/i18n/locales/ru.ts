@@ -204,6 +204,19 @@ const ru = {
     selectCurrency: "Выберите валюту",
     currencyHint:
       "Суммы в оплатах и пакетах отображаются в выбранной валюте. По умолчанию — белорусский рубль.",
+    lessonReminders: {
+      title: "Напоминания о занятиях",
+      description: "Когда ученикам приходят Telegram-напоминания по умолчанию.",
+      leadTimes: "Отправлять за",
+      hint: "Ученики могут выбрать свои интервалы через бота. Если они не выбрали, используется эта настройка.",
+      customLabel: "Свой интервал",
+      customPlaceholder: "Например: 45, 180",
+      customHint: "Укажите минуты до занятия. Можно добавить несколько значений через запятую или пробел.",
+      customAdd: "Добавить",
+      customInvalid: "Укажите положительное число минут.",
+      save: "Сохранить напоминания",
+      saving: "Сохраняем..."
+    },
     googleCalendar: {
       title: "Google Calendar",
       description: "Синхронизация занятий с вашим Google-календарём.",
@@ -227,7 +240,8 @@ const ru = {
       confirmLabel: "Email аккаунта",
       confirmHint: "Кнопка удаления станет активной только после точного совпадения.",
       confirm: "Удалить аккаунт",
-      deleting: "Удаляем..."
+      deleting: "Удаляем...",
+      loading: "Данные аккаунта загружаются. Удаление станет доступно после загрузки."
     }
   },
   toast: {
@@ -244,6 +258,7 @@ const ru = {
     paymentAdded: "Оплата добавлена.",
     packageAdded: "Пакет добавлен.",
     currencyUpdated: "Валюта обновлена.",
+    lessonReminderMinutesUpdated: "Время напоминаний обновлено.",
     googleCalendarConnected: "Google Calendar подключён.",
     googleCalendarConnectFailed: "Не удалось подключить Google Calendar.",
     googleCalendarDisconnected: "Google Calendar отключён.",

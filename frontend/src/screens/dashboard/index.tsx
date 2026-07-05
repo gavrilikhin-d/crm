@@ -193,6 +193,7 @@ export default function Home() {
     [snapshot?.payments]
   );
   const currency = resolveCurrency(snapshot?.settings.currency);
+  const lessonReminderMinutes = snapshot?.settings.lessonReminderMinutes ?? [1440, 120];
   const recurringSchedules = useMemo(() => snapshot?.recurringSchedules ?? [], [snapshot?.recurringSchedules]);
   const vacationPeriods = useMemo(() => snapshot?.vacationPeriods ?? [], [snapshot?.vacationPeriods]);
   const selectedLesson = useMemo(
@@ -540,6 +541,16 @@ export default function Home() {
     });
   }
 
+  async function handleLessonReminderMinutesChange(nextMinutes: number[]) {
+    await withRefresh(async () => {
+      await api<AppSettings>("/api/settings", {
+        method: "PATCH",
+        body: { lessonReminderMinutes: nextMinutes }
+      });
+      return t("toast.lessonReminderMinutesUpdated");
+    });
+  }
+
   async function handleDeleteStudent(student: Student) {
     if (!window.confirm(t("confirm.deleteStudent", { name: student.fullName }))) {
       return;
@@ -787,7 +798,9 @@ export default function Home() {
           <SettingsView
             accountInfo={snapshot?.account ?? null}
             currency={currency}
+            lessonReminderMinutes={lessonReminderMinutes}
             onCurrencyChange={handleCurrencyChange}
+            onLessonReminderMinutesChange={handleLessonReminderMinutesChange}
             onRefresh={() => refreshNow()}
           />
         ) : null}

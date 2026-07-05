@@ -27,31 +27,48 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useI18n } from "@/i18n/context";
-import type { AccountInfo } from "@crm/shared";
+import type { AccountInfo, AppSettings } from "@crm/shared";
 import { CURRENCIES, type CurrencyCode } from "@crm/shared/currency";
 import { PLAN_META } from "@crm/shared/plans";
 import { pageSectionClass } from "@/screens/dashboard/constants";
 import { api } from "@/lib/api";
 import { PlanUsageRow } from "./components/plan-usage-row";
 
+const reminderMinutePresets = [15, 60, 120, 1440];
+
 export function SettingsView({
   accountInfo,
   currency,
+  lessonReminderMinutes,
   onCurrencyChange,
+  onLessonReminderMinutesChange,
   onRefresh
 }: {
   accountInfo: AccountInfo | null;
   currency: CurrencyCode;
+  lessonReminderMinutes: AppSettings["lessonReminderMinutes"];
   onCurrencyChange: (currency: CurrencyCode) => void;
+  onLessonReminderMinutesChange: (minutes: number[]) => Promise<void>;
   onRefresh: () => Promise<void>;
 }) {
   const { t } = useI18n();
   const plan = accountInfo?.account.plan ?? "free";
   const accountEmail = accountInfo?.account.email ?? "";
+  const [selectedReminderMinutes, setSelectedReminderMinutes] = useState<string[] | null>(null);
+  const [customReminderText, setCustomReminderText] = useState("");
+  const [savingReminderMinutes, setSavingReminderMinutes] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const selectedReminderMinuteValues = selectedReminderMinutes ?? lessonReminderMinutes.map(String);
+  const reminderValues = selectedReminderMinuteValues
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value > 0)
+    .sort((a, b) => b - a);
+  const reminderValuesChanged = reminderValues.join(",") !== lessonReminderMinutes.join(",");
+  const customReminderMinutes = reminderValues.filter((value) => !reminderMinutePresets.includes(value));
 
   async function handleDeleteAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -70,85 +87,180 @@ export function SettingsView({
     }
   }
 
+  async function handleReminderMinutesSave() {
+    if (!reminderValues.length || !reminderValuesChanged) {
+      return;
+    }
+
+    setSavingReminderMinutes(true);
+    try {
+      await onLessonReminderMinutesChange(reminderValues);
+      setSelectedReminderMinutes(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("toast.saveFailed"));
+    } finally {
+      setSavingReminderMinutes(false);
+    }
+  }
+
+  function handleAddCustomReminderMinutes() {
+    const customValues = parseReminderMinutesInput(customReminderText);
+    if (!customValues.length) {
+      toast.error(t("settings.lessonReminders.customInvalid"));
+      return;
+    }
+
+    const nextValues = [...new Set([...reminderValues, ...customValues])]
+      .sort((a, b) => b - a)
+      .map(String);
+    setSelectedReminderMinutes(nextValues);
+    setCustomReminderText("");
+  }
+
   return (
     <section className={pageSectionClass} id="settings">
-      <div className="grid max-w-xl gap-4">
-        {accountInfo ? (
-          <Card size="sm" className="gap-2 py-3 sm:gap-4 sm:py-4">
-            <CardHeader className="pb-0">
-              <CardTitle className="flex flex-wrap items-center gap-2">
-                {t("plan.current")}
-                <Badge variant="secondary">{t(`plan.${plan}`)}</Badge>
-                {PLAN_META[plan].hasPrioritySupport ? (
-                  <Badge variant="outline">{t("plan.prioritySupport")}</Badge>
-                ) : null}
-              </CardTitle>
-              <CardDescription>{t("plan.usageDescription")}</CardDescription>
+      <div className="grid max-w-6xl gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.85fr)]">
+        <div className="grid gap-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("settings.title")}</CardTitle>
+              <CardDescription>{t("settings.description")}</CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-2 px-3 sm:px-4">
-              <PlanUsageRow
-                label={t("plan.usage.students")}
-                used={accountInfo.usage.students}
-                limit={accountInfo.limits.maxStudents}
-              />
-              <PlanUsageRow
-                label={t("plan.usage.lessonsThisMonth")}
-                used={accountInfo.usage.lessonsThisMonth}
-                limit={accountInfo.limits.maxLessonsPerMonth}
-              />
-              <PlanUsageRow
-                label={t("plan.usage.packages")}
-                used={accountInfo.usage.packages}
-                limit={accountInfo.limits.maxPackages}
-              />
-              <PlanUsageRow
-                label={t("plan.usage.recurringSchedules")}
-                used={accountInfo.usage.recurringSchedules}
-                limit={accountInfo.limits.maxRecurringSchedules}
-              />
-              <p className="text-sm text-muted-foreground">
-                {accountInfo.limits.recurringEnabled ? t("plan.recurringEnabled") : t("plan.recurringDisabled")}
-              </p>
-              <Button type="button" disabled className="mt-2 w-full sm:w-auto">
-                {t("plan.upgradeSoon")}
-              </Button>
+            <CardContent>
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor="settings-currency">{t("settings.currency")}</FieldLabel>
+                  <Select value={currency} onValueChange={(value) => onCurrencyChange(value as CurrencyCode)}>
+                    <SelectTrigger id="settings-currency" className="w-full">
+                      <SelectValue placeholder={t("settings.selectCurrency")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {CURRENCIES.map((item) => (
+                          <SelectItem key={item.code} value={item.code}>
+                            {item.label} ({item.code})
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  <FieldDescription>{t("settings.currencyHint")}</FieldDescription>
+                </Field>
+              </FieldGroup>
             </CardContent>
           </Card>
-        ) : null}
 
-        <Card className="max-w-xl">
-          <CardHeader>
-            <CardTitle>{t("settings.title")}</CardTitle>
-            <CardDescription>{t("settings.description")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor="settings-currency">{t("settings.currency")}</FieldLabel>
-                <Select value={currency} onValueChange={(value) => onCurrencyChange(value as CurrencyCode)}>
-                  <SelectTrigger id="settings-currency" className="w-full">
-                    <SelectValue placeholder={t("settings.selectCurrency")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {CURRENCIES.map((item) => (
-                        <SelectItem key={item.code} value={item.code}>
-                          {item.label} ({item.code})
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                <FieldDescription>{t("settings.currencyHint")}</FieldDescription>
-              </Field>
-            </FieldGroup>
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("settings.lessonReminders.title")}</CardTitle>
+              <CardDescription>{t("settings.lessonReminders.description")}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <FieldGroup>
+                <Field>
+                  <FieldLabel>{t("settings.lessonReminders.leadTimes")}</FieldLabel>
+                  <ToggleGroup
+                    type="multiple"
+                    value={selectedReminderMinuteValues}
+                    onValueChange={(values) => {
+                      if (values.length) {
+                        setSelectedReminderMinutes(values);
+                      }
+                    }}
+                    variant="outline"
+                    className="flex-wrap"
+                  >
+                    {reminderMinutePresets.map((minutes) => (
+                      <ToggleGroupItem key={minutes} value={String(minutes)}>
+                        {formatReminderMinutes(minutes)}
+                      </ToggleGroupItem>
+                    ))}
+                    {customReminderMinutes.map((minutes) => (
+                      <ToggleGroupItem key={minutes} value={String(minutes)}>
+                        {formatReminderMinutes(minutes)}
+                      </ToggleGroupItem>
+                    ))}
+                  </ToggleGroup>
+                  <FieldDescription>{t("settings.lessonReminders.hint")}</FieldDescription>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="settings-custom-reminder-minutes">
+                    {t("settings.lessonReminders.customLabel")}
+                  </FieldLabel>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Input
+                      id="settings-custom-reminder-minutes"
+                      value={customReminderText}
+                      onChange={(event) => setCustomReminderText(event.target.value)}
+                      placeholder={t("settings.lessonReminders.customPlaceholder")}
+                      inputMode="numeric"
+                    />
+                    <Button type="button" variant="outline" onClick={handleAddCustomReminderMinutes}>
+                      {t("settings.lessonReminders.customAdd")}
+                    </Button>
+                  </div>
+                  <FieldDescription>{t("settings.lessonReminders.customHint")}</FieldDescription>
+                </Field>
+                <Button
+                  type="button"
+                  className="w-full sm:w-auto"
+                  disabled={!reminderValues.length || !reminderValuesChanged || savingReminderMinutes}
+                  onClick={handleReminderMinutesSave}
+                >
+                  {savingReminderMinutes ? t("settings.lessonReminders.saving") : t("settings.lessonReminders.save")}
+                </Button>
+              </FieldGroup>
+            </CardContent>
+          </Card>
 
-        <GoogleCalendarSettings onChanged={onRefresh} />
+          <GoogleCalendarSettings onChanged={onRefresh} />
+        </div>
 
-        {accountInfo ? (
-          <Card className="max-w-xl border-destructive/30">
+        <aside className="grid content-start gap-4">
+          {accountInfo ? (
+            <Card size="sm" className="gap-2 py-3 sm:gap-4 sm:py-4">
+              <CardHeader className="pb-0">
+                <CardTitle className="flex flex-wrap items-center gap-2">
+                  {t("plan.current")}
+                  <Badge variant="secondary">{t(`plan.${plan}`)}</Badge>
+                  {PLAN_META[plan].hasPrioritySupport ? (
+                    <Badge variant="outline">{t("plan.prioritySupport")}</Badge>
+                  ) : null}
+                </CardTitle>
+                <CardDescription>{t("plan.usageDescription")}</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-2 px-3 sm:px-4">
+                <PlanUsageRow
+                  label={t("plan.usage.students")}
+                  used={accountInfo.usage.students}
+                  limit={accountInfo.limits.maxStudents}
+                />
+                <PlanUsageRow
+                  label={t("plan.usage.lessonsThisMonth")}
+                  used={accountInfo.usage.lessonsThisMonth}
+                  limit={accountInfo.limits.maxLessonsPerMonth}
+                />
+                <PlanUsageRow
+                  label={t("plan.usage.packages")}
+                  used={accountInfo.usage.packages}
+                  limit={accountInfo.limits.maxPackages}
+                />
+                <PlanUsageRow
+                  label={t("plan.usage.recurringSchedules")}
+                  used={accountInfo.usage.recurringSchedules}
+                  limit={accountInfo.limits.maxRecurringSchedules}
+                />
+                <p className="text-sm text-muted-foreground">
+                  {accountInfo.limits.recurringEnabled ? t("plan.recurringEnabled") : t("plan.recurringDisabled")}
+                </p>
+                <Button type="button" disabled className="mt-2 w-full sm:w-auto">
+                  {t("plan.upgradeSoon")}
+                </Button>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          <Card className="border-destructive/30">
             <CardHeader>
               <CardTitle>{t("settings.accountDeletion.title")}</CardTitle>
               <CardDescription>{t("settings.accountDeletion.description")}</CardDescription>
@@ -164,7 +276,7 @@ export function SettingsView({
                 }}
               >
                 <DialogTrigger asChild>
-                  <Button type="button" variant="destructive">
+                  <Button type="button" variant="destructive" disabled={!accountInfo}>
                     {t("settings.accountDeletion.open")}
                   </Button>
                 </DialogTrigger>
@@ -207,10 +319,30 @@ export function SettingsView({
                   </form>
                 </DialogContent>
               </Dialog>
+              {!accountInfo ? (
+                <p className="mt-2 text-sm text-muted-foreground">{t("settings.accountDeletion.loading")}</p>
+              ) : null}
             </CardContent>
           </Card>
-        ) : null}
+        </aside>
       </div>
     </section>
   );
+}
+
+function formatReminderMinutes(minutes: number): string {
+  if (minutes % 1440 === 0) {
+    const days = minutes / 1440;
+    return days === 1 ? "24 ч" : `${days} д`;
+  }
+  if (minutes % 60 === 0) {
+    return `${minutes / 60} ч`;
+  }
+  return `${minutes} мин`;
+}
+
+function parseReminderMinutesInput(value: string): number[] {
+  return [...new Set(value.split(/[,\s]+/).map(Number).filter((item) => Number.isInteger(item) && item > 0))]
+    .sort((a, b) => b - a)
+    .slice(0, 8);
 }

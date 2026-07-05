@@ -58,6 +58,7 @@ export interface Student {
   telegramUserId?: string;
   telegramChatId?: string;
   telegramBindToken: string;
+  lessonReminderMinutes?: number[] | null;
   status: StudentStatus;
   defaultLessonPrice: number;
   createdAt: string;
@@ -201,7 +202,9 @@ export interface TelegramStudentProfile {
   student: {
     id: string;
     fullName: string;
+    lessonReminderMinutes?: number[] | null;
   };
+  settings: Pick<AppSettings, "lessonReminderMinutes">;
   balance: StudentBalance;
   upcomingLessons: Lesson[];
   scheduleDays: number;

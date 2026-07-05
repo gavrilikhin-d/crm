@@ -11,6 +11,7 @@ import {
 function createProfile(lessons: Lesson[]): TelegramStudentProfile {
   return {
     student: { id: "s1", fullName: "Alice" },
+    settings: { lessonReminderMinutes: [1440, 120] },
     balance: {
       studentId: "s1",
       paidLessons: 1,
