@@ -45,3 +45,21 @@ export const SettingsActive = meta.story({
     }
   }
 });
+
+export const Minimized = meta.story({
+  args: {
+    activeSection: "settings",
+    onSectionChange: fn()
+  },
+  render: (args) => (
+    <SidebarProvider defaultOpen={false}>
+      <DashboardSidebar {...args} />
+      <main className="min-h-96 flex-1 p-4">Контент</main>
+    </SidebarProvider>
+  ),
+  parameters: {
+    chromatic: {
+      viewports: responsiveViewports
+    }
+  }
+});
