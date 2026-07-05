@@ -39,6 +39,16 @@ export async function getTelegramStudentProfile(
   return api<TelegramStudentProfile>(`/internal/telegram/profile?${params.toString()}`);
 }
 
+export async function updateTelegramStudentPreferences(input: {
+  userId: number | string;
+  lessonReminderMinutes: number[] | null;
+}): Promise<TelegramStudentProfile> {
+  return api<TelegramStudentProfile>("/internal/telegram/preferences", {
+    method: "PATCH",
+    body: input
+  });
+}
+
 export async function setParticipantStatus(input: {
   lessonId: string;
   studentId: string;

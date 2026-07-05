@@ -2,10 +2,15 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { Telegraf } from "telegraf";
 import type { InlineKeyboardMarkup } from "@telegraf/types";
 import type { Context } from "telegraf";
-import type { Lesson, Student } from "@crm/shared";
+import type { Lesson, Student, TelegramStudentProfile } from "@crm/shared";
 import { withSentrySpan } from "@crm/shared/sentry-tracing";
 import { lessonReminderKeyboard, parseLessonCallback } from "@crm/shared/lesson-callback";
-import { bindTelegramChat, getTelegramStudentProfile, setParticipantStatus } from "./backend-client";
+import {
+  bindTelegramChat,
+  getTelegramStudentProfile,
+  setParticipantStatus,
+  updateTelegramStudentPreferences
+} from "./backend-client";
 import {
   ATTEND_COMMANDS,
   DECLINE_COMMANDS,
@@ -29,6 +34,7 @@ import {
 
 const DEFAULT_BOT_PORT = 4002;
 const WEBHOOK_PREFIX = "/telegram/webhook";
+const notificationMinutePresets = [15, 60, 120, 1440];
 
 let bot: Telegraf | null = null;
 
@@ -95,13 +101,15 @@ export function getTelegramBot(): Telegraf | null {
               "Напоминания и команды будут работать в этом чате для вас лично.",
               "",
               "Расписание: /schedule (7 дней) или /schedule 14",
-              "Баланс: /balance"
+              "Баланс: /balance",
+              "Напоминания: /notifications или /notifications 45, 120"
             ]
           : [
               `${student.fullName}, Telegram подключен. Теперь сюда будут приходить напоминания о занятиях.`,
               "",
               "Спросить расписание: /schedule (7 дней) или /schedule 14",
               "Спросить баланс: /balance",
+              "Настроить напоминания: /notifications или /notifications 45, 120",
               "Ответ по занятию: /attend 1 или /decline 1"
             ];
 
@@ -149,6 +157,27 @@ export function getTelegramBot(): Telegraf | null {
 
     try {
       await replyWithProfile(ctx, interaction, formatBalanceMessage);
+    } finally {
+      interaction.flush();
+    }
+  });
+
+  bot.command(["notifications", "reminders", "напоминания"], async (ctx) => {
+    const interaction = new BotInteraction("command:notifications", ctx);
+
+    try {
+      if (!isPrivateChat(ctx)) {
+        interaction.outcome = "skipped";
+        await replyToUser(ctx, interaction, "Настройки напоминаний доступны в личном чате с ботом.");
+        return;
+      }
+
+      if (ctx.payload?.trim()) {
+        await updateNotificationSettingsFromPayload(ctx, interaction, ctx.payload);
+        return;
+      }
+
+      await replyWithNotificationSettings(ctx, interaction);
     } finally {
       interaction.flush();
     }
@@ -264,6 +293,95 @@ export function getTelegramBot(): Telegraf | null {
       }
 
       await replyWithProfile(ctx, interaction, formatBalanceMessage);
+    } finally {
+      interaction.flush();
+    }
+  });
+
+  bot.hears(/^(напоминания|уведомления)$/i, async (ctx) => {
+    const interaction = new BotInteraction("hears:notifications", ctx);
+
+    try {
+      if (!isPrivateChat(ctx)) {
+        interaction.outcome = "skipped";
+        return;
+      }
+
+      await replyWithNotificationSettings(ctx, interaction);
+    } finally {
+      interaction.flush();
+    }
+  });
+
+  bot.hears(/^(?:напоминания|уведомления)\s+(.+)$/i, async (ctx) => {
+    const interaction = new BotInteraction("hears:notifications:set", ctx);
+
+    try {
+      if (!isPrivateChat(ctx)) {
+        interaction.outcome = "skipped";
+        return;
+      }
+
+      await updateNotificationSettingsFromPayload(ctx, interaction, ctx.match[1]);
+    } finally {
+      interaction.flush();
+    }
+  });
+
+  bot.action(/^nt:(?:t:\d+|r)$/, async (ctx) => {
+    const interaction = new BotInteraction("callback:notifications", ctx);
+
+    try {
+      const userId = ctx.from?.id;
+      if (!userId) {
+        interaction.outcome = "validation_error";
+        await answerCallback(ctx, interaction, "Не удалось определить пользователя.", { show_alert: true });
+        return;
+      }
+
+      const callbackData =
+        "data" in ctx.callbackQuery && typeof ctx.callbackQuery.data === "string"
+          ? ctx.callbackQuery.data
+          : "";
+      const profile = await getTelegramStudentProfile(userId);
+      const nextMinutes = resolveNextNotificationMinutes(profile, callbackData);
+
+      if (nextMinutes === "empty") {
+        interaction.outcome = "validation_error";
+        await answerCallback(ctx, interaction, "Оставьте хотя бы одно напоминание.", { show_alert: true });
+        return;
+      }
+
+      const updatedProfile = await updateTelegramStudentPreferences({
+        userId,
+        lessonReminderMinutes: nextMinutes
+      });
+      await answerCallback(ctx, interaction, "Настройки обновлены.");
+      await ctx
+        .editMessageText(formatNotificationSettingsMessage(updatedProfile), {
+          reply_markup: notificationSettingsKeyboard(updatedProfile)
+        })
+        .catch(() => undefined);
+      interaction.noteMessageKind("plain_text");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown notification settings error";
+      if (message.includes("not found")) {
+        interaction.outcome = "not_linked";
+        await answerCallback(ctx, interaction, "Сначала подключите Telegram по ссылке от преподавателя.", {
+          show_alert: true
+        });
+        return;
+      }
+      interaction.outcome = "error";
+      log.error("Telegram notification settings callback failed", {
+        err: error,
+        handler: interaction.handler,
+        userId: interaction.userId,
+        chatId: interaction.chatId
+      });
+      await answerCallback(ctx, interaction, "Не удалось обновить настройки. Попробуйте позже.", {
+        show_alert: true
+      });
     } finally {
       interaction.flush();
     }
@@ -463,6 +581,82 @@ async function replyWithProfile(
   }
 }
 
+async function replyWithNotificationSettings(ctx: Context, interaction: BotInteraction): Promise<void> {
+  const userId = ctx.from?.id;
+  if (!userId) {
+    interaction.outcome = "skipped";
+    return;
+  }
+
+  try {
+    const profile = await getTelegramStudentProfile(userId);
+    await ctx.reply(formatNotificationSettingsMessage(profile), {
+      reply_markup: notificationSettingsKeyboard(profile)
+    });
+    interaction.noteMessageKind("plain_text");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown profile error";
+    if (message.includes("not found")) {
+      interaction.outcome = "not_linked";
+      await replyToUser(ctx, interaction, formatNotLinkedMessage());
+      return;
+    }
+    interaction.outcome = "error";
+    log.error("Telegram notification settings query failed", {
+      err: error,
+      handler: interaction.handler,
+      userId: interaction.userId,
+      chatId: interaction.chatId
+    });
+    await replyToUser(ctx, interaction, "Не удалось получить настройки напоминаний. Попробуйте позже.");
+  }
+}
+
+async function updateNotificationSettingsFromPayload(
+  ctx: Context,
+  interaction: BotInteraction,
+  payload: string
+): Promise<void> {
+  const userId = ctx.from?.id;
+  if (!userId) {
+    interaction.outcome = "skipped";
+    return;
+  }
+
+  const minutes = parseNotificationMinutesPayload(payload);
+  if (!minutes.length) {
+    interaction.outcome = "validation_error";
+    await replyToUser(ctx, interaction, "Укажите минуты до занятия, например: /notifications 45, 120");
+    return;
+  }
+
+  try {
+    const profile = await updateTelegramStudentPreferences({
+      userId,
+      lessonReminderMinutes: minutes
+    });
+    await ctx.reply(formatNotificationSettingsMessage(profile), {
+      reply_markup: notificationSettingsKeyboard(profile)
+    });
+    interaction.noteMessageKind("plain_text");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown profile error";
+    if (message.includes("not found")) {
+      interaction.outcome = "not_linked";
+      await replyToUser(ctx, interaction, formatNotLinkedMessage());
+      return;
+    }
+    interaction.outcome = "error";
+    log.error("Telegram notification settings update failed", {
+      err: error,
+      handler: interaction.handler,
+      userId: interaction.userId,
+      chatId: interaction.chatId
+    });
+    await replyToUser(ctx, interaction, "Не удалось обновить настройки напоминаний. Попробуйте позже.");
+  }
+}
+
 async function replyWithAttendance(
   ctx: Context,
   interaction: BotInteraction,
@@ -557,6 +751,89 @@ function isPrivateChat(ctx: Context): boolean {
 
 function lessonKeyboard(lessonId: string, studentId: string): InlineKeyboardMarkup {
   return lessonReminderKeyboard(lessonId, studentId);
+}
+
+function resolveActiveNotificationMinutes(profile: TelegramStudentProfile): number[] {
+  return profile.student.lessonReminderMinutes?.length
+    ? profile.student.lessonReminderMinutes
+    : profile.settings.lessonReminderMinutes;
+}
+
+function resolveNextNotificationMinutes(
+  profile: TelegramStudentProfile,
+  callbackData: string
+): number[] | null | "empty" {
+  if (callbackData === "nt:r") {
+    return null;
+  }
+
+  const match = callbackData.match(/^nt:t:(\d+)$/);
+  if (!match) {
+    return profile.student.lessonReminderMinutes ?? null;
+  }
+
+  const minutes = Number(match[1]);
+  const current = new Set(resolveActiveNotificationMinutes(profile));
+  if (current.has(minutes)) {
+    current.delete(minutes);
+  } else {
+    current.add(minutes);
+  }
+
+  if (!current.size) {
+    return "empty";
+  }
+
+  return [...current].sort((a, b) => b - a);
+}
+
+function notificationSettingsKeyboard(profile: TelegramStudentProfile): InlineKeyboardMarkup {
+  const active = new Set(resolveActiveNotificationMinutes(profile));
+  const rows = notificationMinutePresets.map((minutes) => [
+    {
+      text: `${active.has(minutes) ? "✓ " : ""}${formatReminderMinutes(minutes)}`,
+      callback_data: `nt:t:${minutes}`
+    }
+  ]);
+  rows.push([{ text: "Сбросить к настройкам преподавателя", callback_data: "nt:r" }]);
+  return { inline_keyboard: rows };
+}
+
+function formatNotificationSettingsMessage(profile: TelegramStudentProfile): string {
+  const isCustom = Boolean(profile.student.lessonReminderMinutes?.length);
+  const active = resolveActiveNotificationMinutes(profile);
+  const inheritedLine = isCustom
+    ? "Сейчас используются ваши личные настройки."
+    : "Сейчас используются настройки преподавателя.";
+
+  return [
+    "Напоминания о занятиях",
+    inheritedLine,
+    `Отправлять за: ${formatReminderMinutesList(active)}.`,
+    "",
+    "Нажмите на интервал, чтобы включить или выключить его."
+  ].join("\n");
+}
+
+function formatReminderMinutesList(minutes: number[]): string {
+  return minutes.map(formatReminderMinutes).join(", ");
+}
+
+function formatReminderMinutes(minutes: number): string {
+  if (minutes % 1440 === 0) {
+    const days = minutes / 1440;
+    return days === 1 ? "24 часа" : `${days} дн.`;
+  }
+  if (minutes % 60 === 0) {
+    return `${minutes / 60} ч`;
+  }
+  return `${minutes} мин`;
+}
+
+function parseNotificationMinutesPayload(payload: string): number[] {
+  return [...new Set(payload.split(/[,\s]+/).map(Number).filter((item) => Number.isInteger(item) && item > 0))]
+    .sort((a, b) => b - a)
+    .slice(0, 8);
 }
 
 function getStartPayload(message: unknown): string | undefined {

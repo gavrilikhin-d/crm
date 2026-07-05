@@ -20,17 +20,25 @@ export const RECURRING_HORIZON_WEEKS = 52;
 
 export const now = () => new Date().toISOString();
 
-export function parseReminderMinutes(value?: string): number[] {
-  if (!value) {
-    return [1440, 120];
+export function normalizeReminderMinutes(value: unknown, fallback?: number[]): number[] {
+  const values = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split(/[,\s]+/).map((item) => Number(item.trim()))
+      : [];
+  const normalized = [...new Set(values.map((item) => Number(item)).filter((item) => Number.isInteger(item) && item > 0))]
+    .sort((a, b) => b - a)
+    .slice(0, 8);
+
+  if (normalized.length > 0) {
+    return normalized;
   }
 
-  const parsed = value
-    .split(",")
-    .map((item) => Number(item.trim()))
-    .filter((item) => Number.isFinite(item) && item > 0);
+  return fallback ?? [1440, 120];
+}
 
-  return parsed.length > 0 ? parsed : [1440, 120];
+export function parseReminderMinutes(value?: string): number[] {
+  return normalizeReminderMinutes(value);
 }
 
 export function createDefaultSettings(): AppSettings {

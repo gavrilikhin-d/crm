@@ -13,7 +13,9 @@ export const PremiumAccount = meta.story({
   args: {
     accountInfo,
     currency: storybookCurrency,
+    lessonReminderMinutes: [1440, 120],
     onCurrencyChange: fn(),
+    onLessonReminderMinutesChange: async () => {},
     onRefresh: async () => {}
   },
   parameters: {
@@ -31,7 +33,9 @@ export const WithoutAccountInfo = meta.story({
   args: {
     accountInfo: null,
     currency: storybookCurrency,
+    lessonReminderMinutes: [1440, 120],
     onCurrencyChange: fn(),
+    onLessonReminderMinutesChange: async () => {},
     onRefresh: async () => {}
   }
 });

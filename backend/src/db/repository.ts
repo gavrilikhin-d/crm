@@ -397,6 +397,7 @@ export async function insertStudent(accountId: string, student: Student): Promis
     telegramUserId: student.telegramUserId ?? null,
     telegramChatId: student.telegramChatId ?? null,
     telegramBindToken: student.telegramBindToken,
+    lessonReminderMinutes: student.lessonReminderMinutes ?? null,
     status: student.status,
     defaultLessonPrice: student.defaultLessonPrice,
     createdAt: student.createdAt,
@@ -430,11 +431,29 @@ export async function updateStudentRecord(student: Student): Promise<void> {
       telegramUserId: student.telegramUserId ?? null,
       telegramChatId: student.telegramChatId ?? null,
       telegramBindToken: student.telegramBindToken,
+      lessonReminderMinutes: student.lessonReminderMinutes ?? null,
       status: student.status,
       defaultLessonPrice: student.defaultLessonPrice,
       updatedAt: student.updatedAt
     })
     .where(eq(students.id, student.id));
+}
+
+export async function updateStudentReminderMinutes(
+  studentId: string,
+  lessonReminderMinutes: number[] | null
+): Promise<Student | null> {
+  const timestamp = new Date().toISOString();
+  const rows = await db
+    .update(students)
+    .set({
+      lessonReminderMinutes,
+      updatedAt: timestamp
+    })
+    .where(eq(students.id, studentId))
+    .returning();
+
+  return rows[0] ? mapStudent(rows[0]) : null;
 }
 
 export async function deleteStudentRecords(studentId: string): Promise<void> {
@@ -703,6 +722,7 @@ function mapStudent(row: typeof students.$inferSelect): Student {
     telegramUserId: row.telegramUserId ?? undefined,
     telegramChatId: row.telegramChatId ?? undefined,
     telegramBindToken: row.telegramBindToken,
+    lessonReminderMinutes: row.lessonReminderMinutes ?? null,
     status: row.status as Student["status"],
     defaultLessonPrice: row.defaultLessonPrice,
     createdAt: row.createdAt,

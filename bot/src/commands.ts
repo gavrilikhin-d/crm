@@ -5,6 +5,7 @@ const botCommands: BotCommand[] = [
   { command: "start", description: "Подключить Telegram и открыть меню" },
   { command: "schedule", description: "Занятия на 7 дней (/schedule 14)" },
   { command: "balance", description: "Сколько занятий осталось" },
+  { command: "notifications", description: "Настроить напоминания (/notifications 45, 120)" },
   { command: "attend", description: "Подтвердить занятие (/attend 1)" },
   { command: "decline", description: "Отказаться от занятия (/decline 1)" },
   { command: "help", description: "Список команд" }
@@ -16,6 +17,7 @@ function formatHelpMessage(isGroup = false): string {
     ...botCommands.map((item) => `/${item.command} — ${item.description}`),
     "",
     "Расписание: /schedule или /schedule 14 — на 14 дней.",
+    "Напоминания: /notifications — выбрать интервалы, /notifications 45, 120 — задать свои минуты.",
     "Работает и /shedule (с опечаткой).",
     "Ответ по занятию: /attend 1 или /decline 1 — без нового напоминания."
   ];

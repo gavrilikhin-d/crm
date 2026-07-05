@@ -57,6 +57,7 @@ import {
   replaceParticipantDebtFlags,
   updateRecurringScheduleRecord,
   updateReminderRecord,
+  updateStudentReminderMinutes,
   updateStudentRecord,
   updateAppSettings,
   upsertAccountByGoogle
@@ -93,6 +94,7 @@ import {
   hasExactLessonDuplicate,
   materializeRecurringLessons,
   mustFind,
+  normalizeReminderMinutes,
   now,
   optional,
   parseReminderMinutes,
@@ -270,11 +272,41 @@ export class Store {
       .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
 
     return {
-      student: { id: student.id, fullName: student.fullName },
+      student: {
+        id: student.id,
+        fullName: student.fullName,
+        lessonReminderMinutes: student.lessonReminderMinutes ?? null
+      },
+      settings: {
+        lessonReminderMinutes: db.settings.lessonReminderMinutes
+      },
       balance,
       upcomingLessons,
       scheduleDays: days
     };
+  }
+
+  async updateTelegramStudentPreferences(
+    userId: string | number,
+    input: { lessonReminderMinutes?: unknown }
+  ): Promise<TelegramStudentProfile> {
+    const linked = await findStudentByTelegramUser(String(userId));
+    if (!linked) {
+      throw new Error("Student not found");
+    }
+
+    const db = await loadAccountDatabase(linked.accountId);
+    const nextLessonReminderMinutes =
+      input.lessonReminderMinutes === null
+        ? null
+        : normalizeReminderMinutes(input.lessonReminderMinutes, db.settings.lessonReminderMinutes);
+
+    const updated = await updateStudentReminderMinutes(linked.id, nextLessonReminderMinutes);
+    if (!updated) {
+      throw new Error("Student not found");
+    }
+
+    return this.getTelegramStudentProfile(userId);
   }
 
   async updateStudent(
@@ -418,7 +450,9 @@ export class Store {
 
   async updateSettings(
     ctx: AuthContext,
-    input: Partial<Pick<AppSettings, "currency">> & { googleCalendarSyncEnabled?: boolean }
+    input: Partial<Pick<AppSettings, "currency" | "lessonReminderMinutes">> & {
+      googleCalendarSyncEnabled?: boolean;
+    }
   ): Promise<AppSettings> {
     const db = await loadAccountDatabase(ctx.accountId);
     if (input.currency !== undefined && !isSupportedCurrency(input.currency)) {
@@ -431,7 +465,10 @@ export class Store {
 
     const settings: AppSettings = {
       ...db.settings,
-      ...(input.currency !== undefined ? { currency: input.currency } : {})
+      ...(input.currency !== undefined ? { currency: input.currency } : {}),
+      ...(input.lessonReminderMinutes !== undefined
+        ? { lessonReminderMinutes: normalizeReminderMinutes(input.lessonReminderMinutes) }
+        : {})
     };
     await updateAppSettings(ctx.accountId, settings);
     return settings;

@@ -109,6 +109,7 @@ const internalRoutes: Array<{ method: string; pattern: RegExp; handler: Handler 
   route("POST", /^\/internal\/lessons\/([^/]+)\/participants\/([^/]+)\/status$/, setParticipantStatusInternal),
   route("POST", /^\/internal\/telegram\/bind$/, bindTelegram),
   route("GET", /^\/internal\/telegram\/profile$/, getTelegramProfile),
+  route("PATCH", /^\/internal\/telegram\/preferences$/, updateTelegramPreferences),
   route("POST", /^\/internal\/reminders$/, upsertReminder),
   route("PATCH", /^\/internal\/reminders\/([^/]+)$/, updateReminder)
 ];
@@ -710,6 +711,20 @@ async function getTelegramProfile(request: IncomingMessage, response: ServerResp
   }
 
   jsonOk(response, await store.getTelegramStudentProfile(userId, { days: parseScheduleDaysParam(url.searchParams.get("days")) }));
+}
+
+async function updateTelegramPreferences(request: IncomingMessage, response: ServerResponse) {
+  const body = await readJson(request);
+  requireFields(body, ["userId"]);
+  if (!("lessonReminderMinutes" in body)) {
+    throw new Error("Missing required field: lessonReminderMinutes");
+  }
+  jsonOk(
+    response,
+    await store.updateTelegramStudentPreferences(String(body.userId), {
+      lessonReminderMinutes: body.lessonReminderMinutes
+    })
+  );
 }
 
 function parseScheduleDaysParam(value: string | null): number | undefined {

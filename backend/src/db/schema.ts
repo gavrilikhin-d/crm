@@ -32,6 +32,7 @@ export const students = pgTable(
     telegramUserId: text("telegram_user_id"),
     telegramChatId: text("telegram_chat_id"),
     telegramBindToken: text("telegram_bind_token").notNull(),
+    lessonReminderMinutes: jsonb("lesson_reminder_minutes").$type<number[] | null>(),
     status: text("status").notNull(),
     defaultLessonPrice: integer("default_lesson_price").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull(),
