@@ -8,7 +8,8 @@ const meta = preview.meta({
 
 export const Default = meta.story({
   args: {
-    top: 120
+    top: 120,
+    currentTime: new Date("2024-04-01T09:30:00")
   },
   render: (args) => (
     <div className="relative h-60 w-80 rounded-lg border">
