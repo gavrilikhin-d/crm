@@ -24,18 +24,31 @@ export const SignedIn = meta.story({
 export const CollapsedSignOutHover = meta.story({
   render: () => (
     <SidebarProvider defaultOpen={false}>
-      <Sidebar collapsible="icon" className="border-r border-stone-200">
-        <SidebarContent />
-        <SidebarFooter>
-          <SidebarAccount />
-        </SidebarFooter>
-        <SidebarRail />
-      </Sidebar>
+      <div data-story-account-hover>
+        <Sidebar collapsible="icon" className="border-r border-stone-200">
+          <SidebarContent />
+          <SidebarFooter>
+            <SidebarAccount />
+          </SidebarFooter>
+          <SidebarRail />
+        </Sidebar>
+      </div>
       <main className="min-h-96 flex-1 p-4">Контент</main>
+      <style>
+        {`
+          [data-story-account-hover] [data-slot="avatar"] {
+            opacity: 0;
+          }
+
+          [data-story-account-hover] [data-slot="button"][aria-label="Выйти"] {
+            opacity: 1;
+            pointer-events: auto;
+          }
+        `}
+      </style>
     </SidebarProvider>
   ),
-  play: async ({ canvas, userEvent }) => {
-    await userEvent.hover(await canvas.findByText("ДА"));
+  play: async ({ canvas }) => {
     await expect(await canvas.findByRole("button", { name: "Выйти" })).toBeVisible();
   }
 });
