@@ -13,26 +13,9 @@ import { getStudentInitials } from "@crm/shared/student-initials";
 export function SidebarAccount() {
   const { t } = useI18n();
   const { data: session, status } = useSession();
-  const [showSkeleton, setShowSkeleton] = useState(false);
-
-  useEffect(() => {
-    if (status !== "loading") {
-      setShowSkeleton(false);
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => setShowSkeleton(true), 100);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [status]);
 
   if (status === "loading") {
-    return (
-      <SidebarAccountSkeleton
-        signOutLabel={t("auth.signOut")}
-        showPlaceholders={showSkeleton}
-      />
-    );
+    return <DelayedSidebarAccountSkeleton signOutLabel={t("auth.signOut")} />;
   }
 
   const sessionUser = session?.user;
@@ -74,6 +57,18 @@ export function SidebarAccount() {
       </SidebarMenu>
     </>
   );
+}
+
+function DelayedSidebarAccountSkeleton({ signOutLabel }: { signOutLabel: string }) {
+  const [showPlaceholders, setShowPlaceholders] = useState(false);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setShowPlaceholders(true), 100);
+
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
+  return <SidebarAccountSkeleton signOutLabel={signOutLabel} showPlaceholders={showPlaceholders} />;
 }
 
 function SidebarAccountSkeleton({
