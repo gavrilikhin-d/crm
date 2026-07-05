@@ -2,6 +2,7 @@ import preview from "../../../../../.storybook/preview";
 import { fn } from "storybook/test";
 import { calendarRange, getStudent, lessons, selectedDate, storyNow, vacationPeriods } from "../../../../../.storybook/fixtures";
 import { DayColumn } from "./day-column";
+import { CalendarLesson } from "./calendar-lesson";
 
 const meta = preview.meta({
   component: DayColumn,
@@ -15,7 +16,8 @@ export const WithLessons = meta.story({
     currentTime: storyNow,
     lessons: lessons.filter((lesson) => lesson.startsAt.startsWith("2024-04-01")),
     getStudent,
-    onSelectLesson: fn()
+    onSelectLesson: fn(),
+    onLessonUpdate: fn()
   }
 });
 
@@ -65,7 +67,58 @@ export const ConflictingLessons = meta.story({
       },
     ],
     getStudent,
-    onSelectLesson: fn()
+    onSelectLesson: fn(),
+    onLessonUpdate: fn()
+  }
+});
+
+export const DraggingGhost = meta.story({
+  args: {
+    day: selectedDate,
+    calendarRange,
+    currentTime: storyNow,
+    lessons: lessons.filter((lesson) => lesson.startsAt.startsWith("2024-04-01")),
+    getStudent,
+    onSelectLesson: fn(),
+    onLessonUpdate: fn()
+  },
+  render: (args) => {
+    const ghostLesson = {
+      ...lessons[0],
+      id: "lesson-ghost-preview",
+      startsAt: "2024-04-01T10:35:00.000Z"
+    };
+
+    return (
+      <div className="relative min-h-[680px]">
+        <DayColumn {...args} />
+        <CalendarLesson
+          lesson={ghostLesson}
+          calendarRange={calendarRange}
+          getStudent={getStudent}
+          onSelect={fn()}
+          dragPreview
+        />
+      </div>
+    );
+  }
+});
+
+export const ExtendingTimeGhost = meta.story({
+  args: {
+    day: selectedDate,
+    calendarRange,
+    currentTime: storyNow,
+    lessons: lessons.filter((lesson) => lesson.startsAt.startsWith("2024-04-01")),
+    resizePreview: {
+      startsAt: "2024-04-01T10:00:00.000Z",
+      durationMinutes: 105,
+      top: 150,
+      height: 131.25
+    },
+    getStudent,
+    onSelectLesson: fn(),
+    onLessonUpdate: fn()
   }
 });
 
@@ -77,6 +130,7 @@ export const Vacation = meta.story({
     lessons: [],
     vacationPeriod: vacationPeriods[0],
     getStudent,
-    onSelectLesson: fn()
+    onSelectLesson: fn(),
+    onLessonUpdate: fn()
   }
 });

@@ -74,7 +74,7 @@ export function getDefaultLessonStartsAt(date: Date): string {
   return formatDateTimeLocal(new Date(date.getFullYear(), date.getMonth(), date.getDate(), 10, 0));
 }
 
-function formatDateTimeLocal(value: Date): string {
+export function formatDateTimeLocal(value: Date): string {
   const pad = (part: number) => String(part).padStart(2, "0");
   return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`;
 }
@@ -174,6 +174,23 @@ export function getLessonPosition(lesson: Lesson, calendarRange: CalendarRange) 
   const height = (lesson.durationMinutes / 60) * hourHeight;
 
   return { top, height };
+}
+
+export function getLessonStartsAtFromOffset(
+  day: Date,
+  offset: number,
+  durationMinutes: number,
+  calendarRange: CalendarRange
+): string {
+  const snapMinutes = 5;
+  const offsetMinutes = Math.round(((offset / hourHeight) * 60) / snapMinutes) * snapMinutes;
+  const minMinutes = calendarRange.startHour * 60;
+  const maxMinutes = Math.max(minMinutes, calendarRange.endHour * 60 - durationMinutes);
+  const startsAtMinutes = Math.min(Math.max(minMinutes + offsetMinutes, minMinutes), maxMinutes);
+  const startsAt = new Date(day);
+  startsAt.setHours(0, startsAtMinutes, 0, 0);
+
+  return formatDateTimeLocal(startsAt);
 }
 
 export function formatTimeRange(start: Date, durationMinutes: number): string {

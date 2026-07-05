@@ -68,29 +68,34 @@ function formatNotLinkedMessage(): string {
 
 function formatLessonBlock(index: number, studentId: string, lesson: Lesson, now: Date): string {
   const participant = lesson.participants.find((item) => item.studentId === studentId);
-  const when = formatLessonWhen(new Date(lesson.startsAt), now);
+  const when = formatLessonWhen(new Date(lesson.startsAt), lesson.durationMinutes, now);
   const kind = lesson.effectiveType === "group" ? "Групповое" : "Индивидуальное";
   const tags = formatLessonTags(participant, lesson.status);
 
   return [`<b>${index}. ${escapeHtml(when)}</b>`, `${kind}${tags.length ? `\n${tags.join(" · ")}` : ""}`].join("\n");
 }
 
-function formatLessonWhen(startsAt: Date, now: Date): string {
-  const time = timeFormatter.format(startsAt);
+function formatLessonWhen(startsAt: Date, durationMinutes: number, now: Date): string {
+  const timeRange = formatLessonTimeRange(startsAt, durationMinutes);
 
   if (sameDay(startsAt, now)) {
-    return `Сегодня · ${time}`;
+    return `Сегодня · ${timeRange}`;
   }
 
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
   if (sameDay(startsAt, tomorrow)) {
-    return `Завтра · ${time}`;
+    return `Завтра · ${timeRange}`;
   }
 
   const weekday = capitalize(weekdayFormatter.format(startsAt));
   const dayMonth = dayMonthFormatter.format(startsAt);
-  return `${weekday}, ${dayMonth} · ${time}`;
+  return `${weekday}, ${dayMonth} · ${timeRange}`;
+}
+
+function formatLessonTimeRange(startsAt: Date, durationMinutes: number): string {
+  const endsAt = new Date(startsAt.getTime() + durationMinutes * 60_000);
+  return `${timeFormatter.format(startsAt)}–${timeFormatter.format(endsAt)}`;
 }
 
 function formatLessonTags(

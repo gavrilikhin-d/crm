@@ -18,12 +18,12 @@ function createProfile(input?: Partial<TelegramStudentProfile>): TelegramStudent
   };
 }
 
-function createLesson(startsAt: string): Lesson {
+function createLesson(startsAt: string, durationMinutes = 60): Lesson {
   const timestamp = new Date().toISOString();
   return {
     id: "l1",
     startsAt,
-    durationMinutes: 60,
+    durationMinutes,
     originalType: "individual",
     effectiveType: "individual",
     status: "scheduled",
@@ -110,5 +110,25 @@ describe("formatScheduleMessage", () => {
 
     expect(reply.text).toContain("<b>1.");
     expect(reply.text).toContain("/attend N");
+  });
+
+  test("shows actual lesson time range from duration", () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(18, 0, 0, 0);
+
+    const reply = formatScheduleMessage(
+      createProfile({
+        upcomingLessons: [createLesson(tomorrow.toISOString(), 75)]
+      })
+    );
+
+    if (typeof reply === "string") {
+      throw new Error("expected html reply");
+    }
+
+    const timeFormatter = new Intl.DateTimeFormat("ru-RU", { hour: "numeric", minute: "2-digit" });
+    const endsAt = new Date(tomorrow.getTime() + 75 * 60_000);
+    expect(reply.text).toContain(`${timeFormatter.format(tomorrow)}–${timeFormatter.format(endsAt)}`);
   });
 });

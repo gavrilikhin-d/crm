@@ -619,6 +619,29 @@ export default function Home() {
     });
   }
 
+  async function handleLessonUpdate(
+    lesson: Lesson,
+    patch: {
+      startsAt?: string;
+      durationMinutes?: number;
+    }
+  ) {
+    const sameStartsAt =
+      patch.startsAt === undefined || new Date(lesson.startsAt).getTime() === new Date(patch.startsAt).getTime();
+    const sameDuration = patch.durationMinutes === undefined || lesson.durationMinutes === patch.durationMinutes;
+    if (sameStartsAt && sameDuration) {
+      return;
+    }
+
+    await withRefresh(async () => {
+      await api<Lesson>(`/api/lessons/${lesson.id}`, {
+        method: "PATCH",
+        body: patch
+      });
+      return t("toast.lessonUpdated");
+    });
+  }
+
   async function handleDeleteLessonFromSheet(lesson: Lesson, scope: RecurringDeleteScope) {
     if (!lesson.recurringScheduleId) {
       if (!window.confirm(t("confirm.deleteLesson", { date: formatFullDate(lesson.startsAt) }))) {
@@ -722,6 +745,7 @@ export default function Home() {
             onGoToToday={goToToday}
             getStudent={getStudent}
             onSelectLesson={openLessonOverview}
+            onLessonUpdate={handleLessonUpdate}
             onLessonSubmit={handleLessonSubmit}
           />
         ) : null}
@@ -822,6 +846,7 @@ export default function Home() {
         onAddParticipant={handleAddParticipant}
         onRemoveParticipant={handleRemoveParticipant}
         onSetParticipantStatus={handleSetParticipantStatus}
+        onUpdateLesson={handleLessonUpdate}
         onDeleteLesson={handleDeleteLessonFromSheet}
       />
 
