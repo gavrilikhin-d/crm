@@ -236,6 +236,7 @@ const ru = {
     studentUpdated: "Данные ученика обновлены.",
     selectAtLeastOneStudent: "Выберите хотя бы одного ученика.",
     lessonAdded: "Занятие добавлено.",
+    lessonUpdated: "Занятие обновлено.",
     duplicateLesson: "Такое занятие уже существует.",
     recurringLessonCreated: "Создано повторяющееся занятие.",
     enterLessonCountAndAmount: "Укажите количество занятий и сумму.",

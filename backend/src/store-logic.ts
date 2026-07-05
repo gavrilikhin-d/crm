@@ -93,12 +93,17 @@ export function hasExactLessonDuplicate(
     durationMinutes: number;
     lessonType: Lesson["originalType"];
     studentIds: string[];
+    excludeLessonId?: string;
   }
 ): boolean {
   const startsAt = new Date(input.startsAt).getTime();
   const studentIds = normalizeStudentIds(input.studentIds);
 
   return db.lessons.some((lesson) => {
+    if (lesson.id === input.excludeLessonId) {
+      return false;
+    }
+
     if (lesson.status === "cancelled_by_teacher") {
       return false;
     }

@@ -619,6 +619,20 @@ export default function Home() {
     });
   }
 
+  async function handleLessonTimeChange(lesson: Lesson, startsAt: string) {
+    if (new Date(lesson.startsAt).getTime() === new Date(startsAt).getTime()) {
+      return;
+    }
+
+    await withRefresh(async () => {
+      await api<Lesson>(`/api/lessons/${lesson.id}`, {
+        method: "PATCH",
+        body: { startsAt }
+      });
+      return t("toast.lessonUpdated");
+    });
+  }
+
   async function handleDeleteLessonFromSheet(lesson: Lesson, scope: RecurringDeleteScope) {
     if (!lesson.recurringScheduleId) {
       if (!window.confirm(t("confirm.deleteLesson", { date: formatFullDate(lesson.startsAt) }))) {
@@ -722,6 +736,7 @@ export default function Home() {
             onGoToToday={goToToday}
             getStudent={getStudent}
             onSelectLesson={openLessonOverview}
+            onLessonTimeChange={handleLessonTimeChange}
             onLessonSubmit={handleLessonSubmit}
           />
         ) : null}
@@ -822,6 +837,7 @@ export default function Home() {
         onAddParticipant={handleAddParticipant}
         onRemoveParticipant={handleRemoveParticipant}
         onSetParticipantStatus={handleSetParticipantStatus}
+        onUpdateLessonTime={handleLessonTimeChange}
         onDeleteLesson={handleDeleteLessonFromSheet}
       />
 

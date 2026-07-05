@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { type FormEvent, useState } from "react";
 import type { Lesson, RecurringDeleteScope, RecurringSchedule, Student } from "@crm/shared";
 import type { TeacherParticipantStatus } from "@crm/shared/lesson-attendance";
 import { RefreshCw, Trash2 } from "lucide-react";
@@ -10,7 +10,9 @@ import { StudentAvatar } from "@/components/student-avatar";
 import { ParticipantStatusBadge } from "@/components/participant-status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import {
   Sheet,
   SheetContent,
@@ -22,6 +24,7 @@ import {
 import { useI18n } from "@/i18n/context";
 import { formatFullDate, formatTime } from "@/i18n/format";
 import { getLessonStatusLabel, getLessonTypeLabel, getWeekdayShortLabels } from "@/i18n/labels";
+import { formatDateTimeLocal } from "@/screens/schedule/utils/calendar";
 
 function formatTimeRange(start: Date, durationMinutes: number): string {
   const end = new Date(start.getTime() + durationMinutes * 60_000);
@@ -38,6 +41,7 @@ function LessonOverviewSheet({
   onAddParticipant,
   onRemoveParticipant,
   onSetParticipantStatus,
+  onUpdateLessonTime,
   onDeleteLesson
 }: {
   lesson: Lesson | null;
@@ -53,11 +57,13 @@ function LessonOverviewSheet({
     studentId: string,
     status: TeacherParticipantStatus
   ) => Promise<void>;
+  onUpdateLessonTime: (lesson: Lesson, startsAt: string) => Promise<void>;
   onDeleteLesson: (lesson: Lesson, scope: RecurringDeleteScope) => Promise<void>;
 }) {
   const { t } = useI18n();
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
+  const [savingTime, setSavingTime] = useState(false);
   const [statusUpdatingStudentId, setStatusUpdatingStudentId] = useState<string | null>(null);
   const weekdayLabels = getWeekdayShortLabels("sun");
 
@@ -70,11 +76,13 @@ function LessonOverviewSheet({
     return null;
   }
 
+  const currentLesson = lesson;
   const startsAt = new Date(lesson.startsAt);
   const lessonId = lesson.id;
   const converted = lesson.originalType === "group" && lesson.effectiveType === "individual";
   const canEditParticipants = lesson.status !== "completed" && lesson.status !== "cancelled_by_teacher";
   const canChangeParticipantStatus = lesson.status !== "cancelled_by_teacher";
+  const canChangeTime = lesson.status !== "completed" && lesson.status !== "cancelled_by_teacher";
 
   async function handleAddParticipants() {
     if (!selectedStudentIds.length) {
@@ -96,6 +104,25 @@ function LessonOverviewSheet({
       await onSetParticipantStatus(lessonId, studentId, status);
     } finally {
       setStatusUpdatingStudentId(null);
+    }
+  }
+
+  async function handleTimeSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canChangeTime) {
+      return;
+    }
+
+    const startsAt = String(new FormData(event.currentTarget).get("startsAt") ?? "");
+    if (!startsAt) {
+      return;
+    }
+
+    setSavingTime(true);
+    try {
+      await onUpdateLessonTime(currentLesson, startsAt);
+    } finally {
+      setSavingTime(false);
     }
   }
 
@@ -128,6 +155,26 @@ function LessonOverviewSheet({
               <p className="text-muted-foreground">{t("lessonOverview.oneOff")}</p>
             )}
           </div>
+
+          {canChangeTime ? (
+            <form key={`${lesson.id}-${lesson.startsAt}`} onSubmit={handleTimeSubmit}>
+              <FieldGroup className="gap-3 rounded-lg border p-3">
+                <Field>
+                  <FieldLabel htmlFor="lesson-edit-starts-at">{t("form.dateTime")}</FieldLabel>
+                  <Input
+                    id="lesson-edit-starts-at"
+                    type="datetime-local"
+                    name="startsAt"
+                    defaultValue={formatDateTimeLocal(startsAt)}
+                    required
+                  />
+                </Field>
+                <Button type="submit" disabled={savingTime}>
+                  {t("form.save")}
+                </Button>
+              </FieldGroup>
+            </form>
+          ) : null}
 
           <Separator />
 

@@ -106,6 +106,86 @@ describe.skipIf(!databaseAvailable)("lesson lifecycle integration", () => {
     }
   });
 
+  test("updates one-off lesson start time", async () => {
+    const { ctx, cleanup: localCleanup } = await setupAccount();
+
+    try {
+      const alice = await store.createStudent(ctx, { fullName: "Alice Reschedule OneOff" });
+      const lesson = await store.createLesson(ctx, {
+        startsAt: futureDate(10, 18, 0),
+        lessonType: "individual",
+        studentIds: [alice.id]
+      });
+      const nextStartsAt = futureDate(11, 19, 30);
+
+      const updated = await store.updateLesson(ctx, lesson.id, { startsAt: nextStartsAt });
+
+      expect(new Date(updated.startsAt).getTime()).toBe(new Date(nextStartsAt).getTime());
+
+      const db = await loadAccountDatabase(ctx.accountId);
+      expect(new Date(db.lessons.find((item) => item.id === lesson.id)!.startsAt).getTime()).toBe(
+        new Date(nextStartsAt).getTime()
+      );
+    } finally {
+      await localCleanup();
+    }
+  });
+
+  test("rejects rescheduling a lesson into an exact duplicate", async () => {
+    const { ctx, cleanup: localCleanup } = await setupAccount();
+
+    try {
+      const alice = await store.createStudent(ctx, { fullName: "Alice Reschedule Duplicate" });
+      const firstStartsAt = futureDate(10, 18, 0);
+      const duplicateStartsAt = futureDate(11, 18, 0);
+      const first = await store.createLesson(ctx, {
+        startsAt: firstStartsAt,
+        lessonType: "individual",
+        studentIds: [alice.id]
+      });
+      await store.createLesson(ctx, {
+        startsAt: duplicateStartsAt,
+        lessonType: "individual",
+        studentIds: [alice.id]
+      });
+
+      await expect(store.updateLesson(ctx, first.id, { startsAt: duplicateStartsAt })).rejects.toMatchObject({
+        code: "duplicate_lesson"
+      });
+    } finally {
+      await localCleanup();
+    }
+  });
+
+  test("rejects creating an exact duplicate after a one-off lesson is rescheduled", async () => {
+    const { ctx, cleanup: localCleanup } = await setupAccount();
+
+    try {
+      const alice = await store.createStudent(ctx, { fullName: "Alice Duplicate After Reschedule" });
+      const lesson = await store.createLesson(ctx, {
+        startsAt: futureDate(10, 18, 0),
+        lessonType: "individual",
+        studentIds: [alice.id]
+      });
+      const nextStartsAt = futureDate(11, 19, 30);
+
+      await store.updateLesson(ctx, lesson.id, { startsAt: nextStartsAt });
+
+      await expect(
+        store.createLesson(ctx, {
+          startsAt: nextStartsAt,
+          lessonType: "individual",
+          studentIds: [alice.id]
+        })
+      ).rejects.toMatchObject({ code: "duplicate_lesson" });
+
+      const db = await loadAccountDatabase(ctx.accountId);
+      expect(db.lessons.filter((item) => new Date(item.startsAt).getTime() === new Date(nextStartsAt).getTime())).toHaveLength(1);
+    } finally {
+      await localCleanup();
+    }
+  });
+
   test("enforces free plan active student limit", async () => {
     const { ctx, cleanup: localCleanup } = await setupFreeAccount();
 
@@ -324,6 +404,79 @@ describe.skipIf(!databaseAvailable)("lesson lifecycle integration", () => {
       expect(
         snapshot.lessons.filter((item) => item.recurringScheduleId === lesson.recurringScheduleId).length
       ).toBeGreaterThan(0);
+    } finally {
+      await localCleanup();
+    }
+  });
+
+  test("reschedules one recurring occurrence as a one-off exception", async () => {
+    const { ctx, cleanup: localCleanup } = await setupAccount();
+
+    try {
+      const alice = await store.createStudent(ctx, { fullName: "Alice Recurring Reschedule" });
+      const startsAt = futureDate(14, 18, 0);
+      const lesson = await store.createLesson(ctx, {
+        startsAt,
+        lessonType: "individual",
+        studentIds: [alice.id],
+        repeatWeekly: true
+      });
+      const nextStartsAt = futureDate(15, 19, 30);
+
+      const updated = await store.updateLesson(ctx, lesson.id, { startsAt: nextStartsAt });
+
+      expect(updated.recurringScheduleId).toBeUndefined();
+      expect(new Date(updated.startsAt).getTime()).toBe(new Date(nextStartsAt).getTime());
+
+      const db = await loadAccountDatabase(ctx.accountId);
+      const schedule = db.recurringSchedules.find((item) => item.id === lesson.recurringScheduleId);
+      expect(schedule).toBeDefined();
+      expect(isOccurrenceSkipped(schedule!, startsAt)).toBe(true);
+
+      const snapshot = await store.getSnapshot(ctx);
+      expect(
+        snapshot.lessons.some(
+          (item) =>
+            item.recurringScheduleId === lesson.recurringScheduleId &&
+            new Date(item.startsAt).getTime() === new Date(startsAt).getTime()
+        )
+      ).toBe(false);
+      expect(snapshot.lessons.some((item) => item.id === lesson.id && item.recurringScheduleId === undefined)).toBe(
+        true
+      );
+    } finally {
+      await localCleanup();
+    }
+  });
+
+  test("rejects creating an exact duplicate of a rescheduled recurring occurrence", async () => {
+    const { ctx, cleanup: localCleanup } = await setupAccount();
+
+    try {
+      const alice = await store.createStudent(ctx, { fullName: "Alice Recurring Duplicate After Reschedule" });
+      const startsAt = futureDate(14, 18, 0);
+      const lesson = await store.createLesson(ctx, {
+        startsAt,
+        lessonType: "individual",
+        studentIds: [alice.id],
+        repeatWeekly: true
+      });
+      const nextStartsAt = futureDate(15, 19, 30);
+
+      await store.updateLesson(ctx, lesson.id, { startsAt: nextStartsAt });
+
+      await expect(
+        store.createLesson(ctx, {
+          startsAt: nextStartsAt,
+          lessonType: "individual",
+          studentIds: [alice.id]
+        })
+      ).rejects.toMatchObject({ code: "duplicate_lesson" });
+
+      const snapshot = await store.getSnapshot(ctx);
+      expect(
+        snapshot.lessons.filter((item) => new Date(item.startsAt).getTime() === new Date(nextStartsAt).getTime())
+      ).toHaveLength(1);
     } finally {
       await localCleanup();
     }

@@ -92,6 +92,7 @@ const protectedRoutes: Array<{ method: string; pattern: RegExp; handler: Handler
   route("DELETE", /^\/api\/lesson-packages\/([^/]+)$/, deleteLessonPackage),
 
   route("POST", /^\/api\/lessons$/, createLesson),
+  route("PATCH", /^\/api\/lessons\/([^/]+)$/, updateLesson),
   route("DELETE", /^\/api\/lessons\/([^/]+)$/, deleteLesson),
   route("POST", /^\/api\/lessons\/([^/]+)\/cancel$/, cancelLesson),
   route("POST", /^\/api\/lessons\/([^/]+)\/complete$/, completeLesson),
@@ -429,6 +430,14 @@ async function createLesson(request: IncomingMessage, response: ServerResponse, 
     ctx!,
     body.repeatWeekly ? { type: "calendar:invalidate" } : { type: "lesson:upsert", payload: lesson }
   );
+}
+
+async function updateLesson(request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray, ctx?: AuthContext) {
+  const body = await readJson(request);
+  requireFields(body, ["startsAt"]);
+  const lesson = await store.updateLesson(ctx!, match[1], body as { startsAt: string });
+  jsonOk(response, lesson);
+  broadcastSnapshotMessage(ctx!, { type: "calendar:invalidate" });
 }
 
 async function deleteLesson(request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray, ctx?: AuthContext) {

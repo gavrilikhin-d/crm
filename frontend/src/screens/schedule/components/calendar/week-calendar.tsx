@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import { getWeekdayShortLabels } from "@/i18n/labels";
 import type { Lesson, Student, VacationPeriod } from "@crm/shared";
 import { getVacationPeriodForDate } from "@crm/shared/vacation";
@@ -5,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { calendarStickyHeaderClass } from "@/screens/dashboard/constants";
 import type { CalendarRange } from "@/screens/dashboard/types";
 import { sameDate } from "@/screens/schedule/utils/calendar";
-import { DayColumn } from "./day-column";
+import { DayColumn, type DraggedLesson } from "./day-column";
 import { TimeAxis } from "./time-axis";
 
 export function WeekCalendar({
@@ -15,7 +18,8 @@ export function WeekCalendar({
   lessons,
   vacationPeriods,
   getStudent,
-  onSelectLesson
+  onSelectLesson,
+  onLessonTimeChange
 }: {
   weekDays: Date[];
   calendarRange: CalendarRange;
@@ -24,7 +28,9 @@ export function WeekCalendar({
   vacationPeriods: VacationPeriod[];
   getStudent: (studentId: string) => Student | undefined;
   onSelectLesson: (lesson: Lesson) => void;
+  onLessonTimeChange: (lesson: Lesson, startsAt: string) => Promise<void>;
 }) {
+  const [draggedLesson, setDraggedLesson] = useState<DraggedLesson | null>(null);
   const weekDayLabels = getWeekdayShortLabels("mon");
 
   return (
@@ -64,8 +70,12 @@ export function WeekCalendar({
           currentTime={currentTime}
           lessons={lessons.filter((lesson) => sameDate(new Date(lesson.startsAt), day))}
           vacationPeriod={getVacationPeriodForDate(day, vacationPeriods)}
+          draggedLesson={draggedLesson}
           getStudent={getStudent}
           onSelectLesson={onSelectLesson}
+          onLessonDragStart={(lesson, offsetY) => setDraggedLesson({ lesson, offsetY })}
+          onLessonDragEnd={() => setDraggedLesson(null)}
+          onLessonTimeChange={onLessonTimeChange}
         />
       ))}
     </div>

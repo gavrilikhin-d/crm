@@ -17,7 +17,8 @@ export const Today = meta.story({
     lessons: lessons.filter((lesson) => lesson.startsAt.startsWith("2024-04-01")),
     vacationPeriods,
     getStudent,
-    onSelectLesson: fn()
+    onSelectLesson: fn(),
+    onLessonTimeChange: fn()
   },
   parameters: {
     chromatic: {
