@@ -1,4 +1,5 @@
 import type { Lesson, Student } from "@crm/shared";
+import { captureSentryLog } from "@crm/shared/sentry-node";
 import { withSentrySpan } from "@crm/shared/sentry-tracing";
 import * as Sentry from "@sentry/node";
 import {
@@ -13,6 +14,21 @@ import { buildGoogleCalendarEvent, shouldSyncLessonToGoogleCalendar } from "./ev
 
 function studentsById(students: Student[]): Map<string, Student> {
   return new Map(students.map((student) => [student.id, student]));
+}
+
+function reportGoogleCalendarSyncError(
+  message: string,
+  error: unknown,
+  context: Record<string, string | number>
+): void {
+  captureSentryLog("backend", "error", message, {
+    err: error,
+    ...context
+  });
+  console.error(message, {
+    ...context,
+    error: error instanceof Error ? error.message : String(error)
+  });
 }
 
 async function isSyncEnabled(accountId: string): Promise<boolean> {
@@ -119,10 +135,9 @@ export async function syncLessonsToGoogleCalendar(accountId: string, lessons: Le
             await removeLessonFromGoogleCalendar(accountId, lesson);
           }
         } catch (error) {
-          console.error("[google-calendar] Failed to sync lesson", {
+          reportGoogleCalendarSyncError("[google-calendar] Failed to sync lesson", error, {
             accountId,
-            lessonId: lesson.id,
-            error: error instanceof Error ? error.message : String(error)
+            lessonId: lesson.id
           });
         }
       }
@@ -154,10 +169,9 @@ export async function syncAllLessonsToGoogleCalendar(ctx: AuthContext): Promise<
           synced += 1;
         } catch (error) {
           failed += 1;
-          console.error("[google-calendar] Failed to sync lesson", {
+          reportGoogleCalendarSyncError("[google-calendar] Failed to sync lesson", error, {
             accountId: ctx.accountId,
-            lessonId: lesson.id,
-            error: error instanceof Error ? error.message : String(error)
+            lessonId: lesson.id
           });
         }
       }
@@ -178,9 +192,6 @@ export function scheduleGoogleCalendarSync(accountId: string, lessons: Lesson[])
       { forceTransaction: true }
     )
   ).catch((error) => {
-    console.error("[google-calendar] Background sync failed", {
-      accountId,
-      error: error instanceof Error ? error.message : String(error)
-    });
+    reportGoogleCalendarSyncError("[google-calendar] Background sync failed", error, { accountId });
   });
 }
