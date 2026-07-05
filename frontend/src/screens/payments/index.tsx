@@ -9,18 +9,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useI18n } from "@/i18n/context";
 import { formatDateTime, formatFullDate } from "@/i18n/format";
 import type { Student } from "@crm/shared";
-import { formatMoney, type CurrencyCode } from "@crm/shared/currency";
+import { formatMoney } from "@crm/shared/currency";
 import { pageSectionClass } from "@/screens/dashboard/constants";
 import type { Snapshot } from "@/screens/dashboard/types";
 
 export function PaymentsView({
   payments,
-  currency,
   getStudent,
   onAddPayment
 }: {
   payments: Snapshot["payments"];
-  currency: CurrencyCode;
   getStudent: (studentId: string) => Student | undefined;
   onAddPayment: () => void;
 }) {
@@ -71,7 +69,7 @@ export function PaymentsView({
                   </p>
                 </div>
                 <p className="shrink-0 text-right text-sm font-bold sm:text-base">
-                  {formatMoney(payment.amount, currency)}
+                  {formatMoney(payment.amount, payment.currency)}
                 </p>
               </div>
             );

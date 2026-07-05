@@ -51,6 +51,7 @@ export const lessonPackages = pgTable("lesson_packages", {
   name: text("name").notNull(),
   lessonCount: integer("lesson_count").notNull(),
   price: integer("price").notNull(),
+  currency: text("currency").notNull().default("BYN"),
   active: boolean("active").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" }).notNull()
@@ -148,6 +149,7 @@ export const payments = pgTable("payments", {
     .notNull()
     .references(() => students.id, { onDelete: "cascade" }),
   amount: integer("amount").notNull(),
+  currency: text("currency").notNull().default("BYN"),
   paidAt: timestamp("paid_at", { withTimezone: true, mode: "string" }).notNull(),
   method: text("method").notNull(),
   packageId: text("package_id").references(() => lessonPackages.id, { onDelete: "set null" }),

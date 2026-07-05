@@ -1,6 +1,6 @@
 import preview from "../../../.storybook/preview";
 import { expect, fn } from "storybook/test";
-import { lessonPackages, responsiveViewports, storybookCurrency } from "../../../.storybook/fixtures";
+import { lessonPackages, responsiveViewports } from "../../../.storybook/fixtures";
 import { SessionsView } from "./index";
 
 const meta = preview.meta({
@@ -12,7 +12,6 @@ const meta = preview.meta({
 export const WithPackages = meta.story({
   args: {
     lessonPackages,
-    currency: storybookCurrency,
     onAddPackage: fn(),
     onDeletePackage: fn()
   },
@@ -29,7 +28,6 @@ export const WithPackages = meta.story({
 export const Empty = meta.story({
   args: {
     lessonPackages: [],
-    currency: storybookCurrency,
     onAddPackage: fn(),
     onDeletePackage: fn()
   }

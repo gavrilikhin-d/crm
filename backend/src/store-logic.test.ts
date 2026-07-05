@@ -30,6 +30,7 @@ function createPayment(studentId: string, lessonCount: number): Payment {
     id: nanoid(),
     studentId,
     amount: lessonCount * 1000,
+    currency: "BYN",
     paidAt: timestamp,
     method: "cash",
     lessonCount,

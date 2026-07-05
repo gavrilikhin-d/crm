@@ -27,7 +27,9 @@ export function PaymentForm({
   const { t } = useI18n();
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [selectedPackageId, setSelectedPackageId] = useState("");
+  const [selectedCurrency, setSelectedCurrency] = useState(currency);
   const selectedPackage = lessonPackages.find((item) => item.id === selectedPackageId);
+  const paymentCurrency = selectedPackage?.currency ?? selectedCurrency;
   const activeStudents = students.filter((student) => student.status === "active");
 
   function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
@@ -67,7 +69,7 @@ export function PaymentForm({
               .filter((item) => item.active)
               .map((item) => (
                 <NativeSelectOption key={item.id} value={item.id}>
-                  {item.name}: {item.lessonCount} / {formatMoney(item.price, currency)}
+                  {item.name}: {item.lessonCount} / {formatMoney(item.price, item.currency)}
                 </NativeSelectOption>
               ))}
           </NativeSelect>
@@ -75,11 +77,12 @@ export function PaymentForm({
             <FieldDescription>
               {t("packages.summary", {
                 count: selectedPackage.lessonCount,
-                price: formatMoney(selectedPackage.price, currency)
+                price: formatMoney(selectedPackage.price, selectedPackage.currency)
               })}
             </FieldDescription>
           ) : null}
         </Field>
+        {selectedPackageId ? <input type="hidden" name="currency" value={paymentCurrency} /> : null}
         {!selectedPackageId ? (
           <FieldGroup className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field>
@@ -88,7 +91,15 @@ export function PaymentForm({
             </Field>
             <Field>
               <FieldLabel htmlFor="payment-amount">{t("form.amount")}</FieldLabel>
-              <CurrencyInput id="payment-amount" name="amount" currency={currency} placeholder="0" required />
+              <CurrencyInput
+                id="payment-amount"
+                name="amount"
+                currencyName="currency"
+                currency={paymentCurrency}
+                onCurrencyChange={setSelectedCurrency}
+                placeholder="0"
+                required
+              />
             </Field>
           </FieldGroup>
         ) : null}

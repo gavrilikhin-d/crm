@@ -1,12 +1,12 @@
 "use client";
 
-import { type FormEvent } from "react";
+import { type FormEvent, useState } from "react";
 import { CurrencyInput } from "@/components/examples/input/special/currency-input";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { useI18n } from "@/i18n/context";
-import type { CurrencyCode } from "@crm/shared/currency";
+import { type CurrencyCode } from "@crm/shared/currency";
 
 export function PackageForm({
   currency,
@@ -16,6 +16,7 @@ export function PackageForm({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   const { t } = useI18n();
+  const [selectedCurrency, setSelectedCurrency] = useState(currency);
 
   return (
     <form onSubmit={onSubmit}>
@@ -31,7 +32,15 @@ export function PackageForm({
           </Field>
           <Field>
             <FieldLabel htmlFor="package-price">{t("form.price")}</FieldLabel>
-            <CurrencyInput id="package-price" name="price" currency={currency} placeholder="0" required />
+            <CurrencyInput
+              id="package-price"
+              name="price"
+              currencyName="currency"
+              currency={selectedCurrency}
+              onCurrencyChange={setSelectedCurrency}
+              placeholder="0"
+              required
+            />
           </Field>
         </FieldGroup>
         <Button type="submit">{t("form.addPackage")}</Button>

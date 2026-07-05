@@ -56,6 +56,7 @@ const lessonPackages: LessonPackage[] = [
     name: "Абонемент 4 занятия",
     lessonCount: 4,
     price: 12000,
+    currency: "BYN",
     active: true,
     createdAt: timestamp,
     updatedAt: timestamp
@@ -65,6 +66,7 @@ const lessonPackages: LessonPackage[] = [
     name: "Абонемент 8 занятий",
     lessonCount: 8,
     price: 22000,
+    currency: "BYN",
     active: true,
     createdAt: timestamp,
     updatedAt: timestamp
@@ -158,6 +160,7 @@ const payments: Payment[] = [
     id: "payment-1",
     studentId: "student-anna",
     amount: 12000,
+    currency: "BYN",
     paidAt: "2024-03-28T09:00:00.000Z",
     method: "transfer",
     packageId: "package-basic",
@@ -168,6 +171,7 @@ const payments: Payment[] = [
     id: "payment-2",
     studentId: "student-deleted",
     amount: 3500,
+    currency: "BYN",
     paidAt: "2024-03-30T09:00:00.000Z",
     method: "cash",
     lessonCount: 1,
