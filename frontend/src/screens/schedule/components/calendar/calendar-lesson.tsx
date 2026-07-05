@@ -12,11 +12,15 @@ import { formatTimeRange, getLessonPosition } from "@/screens/schedule/utils/cal
 export function CalendarLesson({
   lesson,
   calendarRange,
+  lane = 0,
+  lanes = 1,
   getStudent,
   onSelect
 }: {
   lesson: Lesson;
   calendarRange: CalendarRange;
+  lane?: number;
+  lanes?: number;
   getStudent: (studentId: string) => Student | undefined;
   onSelect: () => void;
 }) {
@@ -24,12 +28,24 @@ export function CalendarLesson({
   const startsAt = new Date(lesson.startsAt);
   const { top, height } = getLessonPosition(lesson, calendarRange);
   const compact = height < 52;
+  const groupPaddingRem = 0.75;
+  const laneGapRem = lanes > 1 ? 0.125 : 0;
+  const totalGapRem = laneGapRem * (lanes - 1);
+  const laneWidthPercent = 100 / lanes;
+  const laneWidthRem = (groupPaddingRem + totalGapRem) / lanes;
+  const laneOffsetPercent = lane * laneWidthPercent;
+  const laneOffsetRem = 0.375 + lane * laneGapRem - lane * laneWidthRem;
 
   return (
     <button
       type="button"
-      className="absolute inset-x-1.5 z-10 flex cursor-pointer flex-col gap-1 overflow-hidden rounded-lg border bg-card p-1.5 text-left shadow-sm transition-shadow hover:shadow-md"
-      style={{ top, height }}
+      className="absolute z-10 flex cursor-pointer flex-col gap-1 overflow-hidden rounded-lg border bg-card p-1.5 text-left shadow-sm transition-shadow hover:z-20 hover:shadow-md"
+      style={{
+        top,
+        height,
+        left: `calc(${laneOffsetPercent}% + ${laneOffsetRem}rem)`,
+        width: `calc(${laneWidthPercent}% - ${laneWidthRem}rem)`
+      }}
       onClick={onSelect}
     >
       <div className="flex items-start justify-between gap-1">

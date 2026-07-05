@@ -54,6 +54,58 @@ describe.skipIf(!databaseAvailable)("lesson lifecycle integration", () => {
     }
   });
 
+  test("rejects exact duplicate lessons", async () => {
+    const { ctx, cleanup: localCleanup } = await setupAccount();
+
+    try {
+      const alice = await store.createStudent(ctx, { fullName: "Alice Duplicate" });
+      const startsAt = futureDate(10, 18, 0);
+      await store.createLesson(ctx, {
+        startsAt,
+        lessonType: "individual",
+        studentIds: [alice.id]
+      });
+
+      await expect(
+        store.createLesson(ctx, {
+          startsAt,
+          lessonType: "individual",
+          studentIds: [alice.id]
+        })
+      ).rejects.toMatchObject({ code: "duplicate_lesson" });
+
+      const db = await loadAccountDatabase(ctx.accountId);
+      expect(db.lessons.filter((lesson) => new Date(lesson.startsAt).getTime() === new Date(startsAt).getTime())).toHaveLength(1);
+    } finally {
+      await localCleanup();
+    }
+  });
+
+  test("allows conflicting lessons with different students", async () => {
+    const { ctx, cleanup: localCleanup } = await setupAccount();
+
+    try {
+      const alice = await store.createStudent(ctx, { fullName: "Alice Conflict" });
+      const bob = await store.createStudent(ctx, { fullName: "Bob Conflict" });
+      const startsAt = futureDate(10, 18, 0);
+      await store.createLesson(ctx, {
+        startsAt,
+        lessonType: "individual",
+        studentIds: [alice.id]
+      });
+      await store.createLesson(ctx, {
+        startsAt,
+        lessonType: "individual",
+        studentIds: [bob.id]
+      });
+
+      const db = await loadAccountDatabase(ctx.accountId);
+      expect(db.lessons.filter((lesson) => new Date(lesson.startsAt).getTime() === new Date(startsAt).getTime())).toHaveLength(2);
+    } finally {
+      await localCleanup();
+    }
+  });
+
   test("enforces free plan active student limit", async () => {
     const { ctx, cleanup: localCleanup } = await setupFreeAccount();
 

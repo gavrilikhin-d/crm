@@ -8,7 +8,7 @@ import type { CalendarRange } from "@/screens/dashboard/types";
 import { hourHeight } from "@/screens/dashboard/constants";
 import { CalendarLesson } from "./calendar-lesson";
 import { CurrentTimeMarker } from "./current-time-marker";
-import { getCurrentTimeOffset, sameDate } from "@/screens/schedule/utils/calendar";
+import { getCurrentTimeOffset, getLessonLayouts, sameDate } from "@/screens/schedule/utils/calendar";
 
 export function DayColumn({
   day,
@@ -32,6 +32,7 @@ export function DayColumn({
   const currentTimeOffset = currentTime && isToday ? getCurrentTimeOffset(currentTime, calendarRange) : null;
   const columnHeight = calendarRange.hours.length * hourHeight;
   const vacationOverlay = vacationPeriod ? getVacationDayOverlay(day, vacationPeriod) : null;
+  const lessonLayouts = getLessonLayouts(lessons);
   const vacationTop =
     vacationOverlay !== null
       ? ((Math.max(vacationOverlay.topMinutes, calendarRange.startHour * 60) - calendarRange.startHour * 60) /
@@ -69,7 +70,7 @@ export function DayColumn({
       {vacationOverlay ? (
         <div
           className={cn(
-            "pointer-events-none absolute inset-x-1 z-[5] flex justify-center bg-[repeating-linear-gradient(-45deg,rgba(14,165,233,0.08),rgba(14,165,233,0.08)_8px,transparent_8px,transparent_16px)]",
+            "pointer-events-none absolute inset-x-1 z-5 flex justify-center bg-[repeating-linear-gradient(-45deg,rgba(14,165,233,0.08),rgba(14,165,233,0.08)_8px,transparent_8px,transparent_16px)]",
             vacationOverlay.isFullDay ? "inset-0 items-start pt-3" : "items-center rounded-md border border-sky-200/80"
           )}
           style={
@@ -89,11 +90,13 @@ export function DayColumn({
       {currentTimeOffset !== null && currentTime ? (
         <CurrentTimeMarker top={currentTimeOffset} currentTime={currentTime} />
       ) : null}
-      {lessons.map((lesson) => (
+      {lessonLayouts.map(({ lesson, lane, lanes }) => (
         <CalendarLesson
           key={lesson.id}
           lesson={lesson}
           calendarRange={calendarRange}
+          lane={lane}
+          lanes={lanes}
           getStudent={getStudent}
           onSelect={() => onSelectLesson(lesson)}
         />

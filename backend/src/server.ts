@@ -22,7 +22,7 @@ import {
   type AuthContext
 } from "./auth";
 import { getAccountById, getLessonAccountId, getReminderAccountId, listAccountIds } from "./db/repository";
-import { PlanLimitError, store } from "./store";
+import { PlanLimitError, StoreValidationError, store } from "./store";
 import { verifyGoogleCalendarOAuthState } from "./google-calendar/oauth-state";
 
 type Handler = (
@@ -169,6 +169,10 @@ async function startServer() {
       } catch (error) {
         if (error instanceof PlanLimitError) {
           jsonError(response, error, 403, { code: error.code });
+          return;
+        }
+        if (error instanceof StoreValidationError) {
+          jsonError(response, error, 400, { code: error.code });
           return;
         }
         const message = error instanceof Error ? error.message : "Unexpected error";
