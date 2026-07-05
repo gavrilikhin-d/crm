@@ -776,7 +776,6 @@ export default function Home() {
         {activeSection === "payments" ? (
           <PaymentsView
             payments={payments}
-            currency={currency}
             getStudent={getStudent}
             onAddPayment={() => {
               setPaymentFormKey((key) => key + 1);
@@ -788,7 +787,6 @@ export default function Home() {
         {activeSection === "sessions" ? (
           <SessionsView
             lessonPackages={lessonPackages}
-            currency={currency}
             onAddPackage={() => setActiveModal("package")}
             onDeletePackage={handleDeletePackage}
           />

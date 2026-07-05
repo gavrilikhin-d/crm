@@ -34,7 +34,14 @@
       "idx": 4,
       "version": "7",
       "when": 1783269636938,
-      "tag": "0004_rare_tombstone",
+      "tag": "0004_student_reminder_minutes",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1783271045294,
+      "tag": "0005_record_currencies",
       "breakpoints": true
     }
   ]

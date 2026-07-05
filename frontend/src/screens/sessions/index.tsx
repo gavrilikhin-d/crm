@@ -6,17 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useI18n } from "@/i18n/context";
 import type { LessonPackage } from "@crm/shared";
-import { formatMoney, type CurrencyCode } from "@crm/shared/currency";
+import { formatMoney } from "@crm/shared/currency";
 import { pageSectionClass } from "@/screens/dashboard/constants";
 
 export function SessionsView({
   lessonPackages,
-  currency,
   onAddPackage,
   onDeletePackage
 }: {
   lessonPackages: LessonPackage[];
-  currency: CurrencyCode;
   onAddPackage: () => void;
   onDeletePackage: (lessonPackage: LessonPackage) => void;
 }) {
@@ -44,9 +42,9 @@ export function SessionsView({
               >
                 <p className="truncate text-sm font-medium sm:text-lg">{lessonPackage.name}</p>
                 <div className="text-right">
-                  <p className="text-sm font-bold text-primary sm:text-xl">{formatMoney(lessonPackage.price, currency)}</p>
+                  <p className="text-sm font-bold text-primary sm:text-xl">{formatMoney(lessonPackage.price, lessonPackage.currency)}</p>
                   <p className="text-[0.6875rem] text-muted-foreground sm:text-sm">
-                    {formatMoney(unitPrice, currency)}
+                    {formatMoney(unitPrice, lessonPackage.currency)}
                     {t("packages.perLesson")}
                   </p>
                 </div>

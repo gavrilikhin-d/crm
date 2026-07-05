@@ -400,7 +400,7 @@ async function createLessonPackage(request: IncomingMessage, response: ServerRes
   requireFields(body, ["name", "lessonCount", "price"]);
   jsonOk(
     response,
-    await store.createLessonPackage(ctx!, body as { name: string; lessonCount: number; price: number }),
+    await store.createLessonPackage(ctx!, body as { name: string; lessonCount: number; price: number; currency?: string }),
     201
   );
   broadcastSnapshotMessage(ctx!, { type: "snapshot:stale" });
@@ -517,6 +517,7 @@ async function createPayment(request: IncomingMessage, response: ServerResponse,
     await store.createPayment(ctx!, body as {
       studentId: string;
       amount?: number;
+      currency?: string;
       paidAt?: string;
       method: PaymentMethod;
       packageId?: string;

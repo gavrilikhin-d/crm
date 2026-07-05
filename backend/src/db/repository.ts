@@ -467,6 +467,7 @@ export async function insertLessonPackage(accountId: string, lessonPackage: Less
     name: lessonPackage.name,
     lessonCount: lessonPackage.lessonCount,
     price: lessonPackage.price,
+    currency: lessonPackage.currency ?? "BYN",
     active: lessonPackage.active,
     createdAt: lessonPackage.createdAt,
     updatedAt: lessonPackage.updatedAt
@@ -590,6 +591,7 @@ export async function insertPayment(accountId: string, payment: Payment): Promis
     accountId,
     studentId: payment.studentId,
     amount: payment.amount,
+    currency: payment.currency ?? "BYN",
     paidAt: payment.paidAt,
     method: payment.method,
     packageId: payment.packageId ?? null,
@@ -736,6 +738,7 @@ function mapLessonPackage(row: typeof lessonPackages.$inferSelect): LessonPackag
     name: row.name,
     lessonCount: row.lessonCount,
     price: row.price,
+    currency: row.currency ?? "BYN",
     active: row.active,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt
@@ -783,6 +786,7 @@ function mapPayment(row: typeof payments.$inferSelect): Payment {
     id: row.id,
     studentId: row.studentId,
     amount: row.amount,
+    currency: row.currency ?? "BYN",
     paidAt: row.paidAt,
     method: row.method as Payment["method"],
     packageId: row.packageId ?? undefined,

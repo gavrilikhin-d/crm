@@ -157,6 +157,7 @@ const ru = {
     noPackage: "Без пакета",
     lessonCount: "Занятий",
     amount: "Сумма",
+    currency: "Валюта",
     paymentMethod: "Способ оплаты",
     addPayment: "Добавить оплату",
     packageName: "Название пакета",

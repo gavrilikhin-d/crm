@@ -425,15 +425,21 @@ export class Store {
 
   async createLessonPackage(
     ctx: AuthContext,
-    input: { name: string; lessonCount: number; price: number }
+    input: { name: string; lessonCount: number; price: number; currency?: string }
   ): Promise<LessonPackage> {
     await assertCanCreatePackage(ctx.accountId, ctx.plan);
+    const db = await loadAccountDatabase(ctx.accountId);
+    const currency = input.currency ?? db.settings.currency;
+    if (!isSupportedCurrency(currency)) {
+      throw new Error("Unsupported currency");
+    }
     const timestamp = now();
     const lessonPackage: LessonPackage = {
       id: nanoid(),
       name: input.name.trim(),
       lessonCount: Math.max(1, Math.trunc(input.lessonCount)),
       price: Math.max(0, input.price),
+      currency,
       active: true,
       createdAt: timestamp,
       updatedAt: timestamp
@@ -898,6 +904,7 @@ export class Store {
     input: {
       studentId: string;
       amount?: number;
+      currency?: string;
       paidAt?: string;
       method: PaymentMethod;
       packageId?: string;
@@ -923,6 +930,10 @@ export class Store {
     }
 
     const lessonCount = lessonPackage?.lessonCount ?? Math.max(1, Math.trunc(input.lessonCount ?? 1));
+    const currency = lessonPackage?.currency ?? input.currency ?? db.settings.currency;
+    if (!isSupportedCurrency(currency)) {
+      throw new Error("Unsupported currency");
+    }
     const amount =
       lessonPackage?.price ??
       input.amount ??
@@ -932,6 +943,7 @@ export class Store {
       id: nanoid(),
       studentId: input.studentId,
       amount,
+      currency,
       paidAt: input.paidAt ? new Date(input.paidAt).toISOString() : now(),
       method: input.method,
       packageId: lessonPackage?.id,

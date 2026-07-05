@@ -1,6 +1,6 @@
 import preview from "../../../.storybook/preview";
 import { expect, fn } from "storybook/test";
-import { getStudent, payments, responsiveViewports, storybookCurrency } from "../../../.storybook/fixtures";
+import { getStudent, payments, responsiveViewports } from "../../../.storybook/fixtures";
 import { PaymentsView } from "./index";
 
 const meta = preview.meta({
@@ -12,7 +12,6 @@ const meta = preview.meta({
 export const WithPayments = meta.story({
   args: {
     payments,
-    currency: storybookCurrency,
     getStudent,
     onAddPayment: fn()
   },
@@ -29,7 +28,6 @@ export const WithPayments = meta.story({
 export const Empty = meta.story({
   args: {
     payments: [],
-    currency: storybookCurrency,
     getStudent,
     onAddPayment: fn()
   }

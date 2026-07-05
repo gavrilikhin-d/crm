@@ -70,6 +70,7 @@ export interface LessonPackage {
   name: string;
   lessonCount: number;
   price: number;
+  currency: string;
   active: boolean;
   createdAt: string;
   updatedAt: string;
@@ -121,6 +122,7 @@ export interface Payment {
   id: string;
   studentId: string;
   amount: number;
+  currency: string;
   paidAt: string;
   method: PaymentMethod;
   packageId?: string;
