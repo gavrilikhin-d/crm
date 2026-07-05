@@ -86,7 +86,9 @@ export function DayColumn({
           </span>
         </div>
       ) : null}
-      {currentTimeOffset !== null ? <CurrentTimeMarker top={currentTimeOffset} /> : null}
+      {currentTimeOffset !== null && currentTime ? (
+        <CurrentTimeMarker top={currentTimeOffset} currentTime={currentTime} />
+      ) : null}
       {lessons.map((lesson) => (
         <CalendarLesson
           key={lesson.id}
