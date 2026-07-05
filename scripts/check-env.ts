@@ -12,6 +12,13 @@ type EnvSpec = {
 const rootDir = resolve(import.meta.dir, "..");
 const envFile = resolve(rootDir, ".env");
 const exampleFile = resolve(rootDir, ".env.example");
+const sentryHints = {
+  NEXT_PUBLIC_SENTRY_DSN: "browser DSN from Sentry project settings",
+  SENTRY_DSN: "Next.js server DSN from Sentry project settings",
+  BACKEND_SENTRY_DSN: "backend API DSN from Sentry project settings",
+  BOT_SENTRY_DSN: "Telegram bot DSN from Sentry project settings",
+  REMINDER_SENTRY_DSN: "reminder service DSN from Sentry project settings"
+} satisfies Record<string, string>;
 
 const profiles: Record<
   Profile,
@@ -30,6 +37,11 @@ const profiles: Record<
       { key: "AUTH_SYNC_SECRET", hint: "optional; falls back to AUTH_SECRET" },
       { key: "BACKEND_INTERNAL_URL", hint: "http://localhost:4000" },
       { key: "REMINDER_INTERNAL_URL", hint: "http://localhost:4001" },
+      { key: "NEXT_PUBLIC_SENTRY_DSN", hint: sentryHints.NEXT_PUBLIC_SENTRY_DSN },
+      { key: "SENTRY_DSN", hint: sentryHints.SENTRY_DSN },
+      { key: "BACKEND_SENTRY_DSN", hint: sentryHints.BACKEND_SENTRY_DSN },
+      { key: "BOT_SENTRY_DSN", hint: sentryHints.BOT_SENTRY_DSN },
+      { key: "REMINDER_SENTRY_DSN", hint: sentryHints.REMINDER_SENTRY_DSN },
       { key: "TELEGRAM_DEV_BOT_TOKEN", hint: "optional; local test bot token for bun dev:all" },
       { key: "TELEGRAM_DEV_WEBHOOK_BASE_URL", hint: "required when TELEGRAM_DEV_BOT_TOKEN is set" },
       { key: "TELEGRAM_DEV_WEBHOOK_SECRET", hint: "required when TELEGRAM_DEV_BOT_TOKEN is set" }
@@ -42,7 +54,11 @@ const profiles: Record<
       { key: "AUTH_GOOGLE_ID", hint: "Google Cloud OAuth client ID" },
       { key: "AUTH_GOOGLE_SECRET", hint: "Google Cloud OAuth client secret" }
     ],
-    recommended: [{ key: "AUTH_URL", hint: "http://localhost:3000" }]
+    recommended: [
+      { key: "AUTH_URL", hint: "http://localhost:3000" },
+      { key: "NEXT_PUBLIC_SENTRY_DSN", hint: sentryHints.NEXT_PUBLIC_SENTRY_DSN },
+      { key: "SENTRY_DSN", hint: sentryHints.SENTRY_DSN }
+    ]
   },
   backend: {
     required: [
@@ -50,11 +66,13 @@ const profiles: Record<
       { key: "AUTH_SECRET", hint: "generate with: openssl rand -base64 32" },
       { key: "INTERNAL_API_TOKEN", hint: "generate with: openssl rand -base64 32" }
     ],
+    recommended: [{ key: "BACKEND_SENTRY_DSN", hint: sentryHints.BACKEND_SENTRY_DSN }],
     checkPostgres: true
   },
   bot: {
     required: [{ key: "INTERNAL_API_TOKEN", hint: "generate with: openssl rand -base64 32" }],
     recommended: [
+      { key: "BOT_SENTRY_DSN", hint: sentryHints.BOT_SENTRY_DSN },
       { key: "TELEGRAM_BOT_TOKEN", hint: "optional; bot skips Telegram without it" },
       { key: "TELEGRAM_DEV_BOT_TOKEN", hint: "optional; local test bot token" },
       { key: "TELEGRAM_DEV_WEBHOOK_BASE_URL", hint: "required when TELEGRAM_DEV_BOT_TOKEN is set" },
@@ -66,6 +84,7 @@ const profiles: Record<
   reminder: {
     required: [{ key: "INTERNAL_API_TOKEN", hint: "generate with: openssl rand -base64 32" }],
     recommended: [
+      { key: "REMINDER_SENTRY_DSN", hint: sentryHints.REMINDER_SENTRY_DSN },
       { key: "TELEGRAM_BOT_TOKEN", hint: "optional; reminders skip Telegram without it" },
       { key: "TELEGRAM_DEV_BOT_TOKEN", hint: "optional; local test bot token" }
     ]

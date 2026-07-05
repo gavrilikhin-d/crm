@@ -1,5 +1,5 @@
 import "./load-env.js";
-import { initSentryNode, suppressSentryTracing } from "@crm/shared/sentry-node";
+import { captureSentryLog, initSentryNode, suppressSentryTracing } from "@crm/shared/sentry-node";
 import { parameterizePath, withIncomingHttpSpan } from "@crm/shared/sentry-tracing";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { Duplex } from "node:stream";
@@ -115,6 +115,7 @@ const internalRoutes: Array<{ method: string; pattern: RegExp; handler: Handler 
 ];
 
 void startServer().catch((error) => {
+  captureSentryLog("backend", "error", "Backend API failed to start", { err: error });
   console.error("Backend API failed to start:", error);
   process.exitCode = 1;
 });
@@ -182,7 +183,13 @@ async function startServer() {
           jsonError(response, error, 401);
           return;
         }
-        jsonError(response, error);
+        captureSentryLog("backend", "error", "Unhandled backend request failed", {
+          err: error,
+          method: request.method ?? "GET",
+          route: routeName,
+          path: url.pathname
+        });
+        jsonError(response, error, 500);
       }
     };
 
