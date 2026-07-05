@@ -10,6 +10,9 @@ import type { Lesson, Student } from "@crm/shared";
 import type { CalendarRange } from "@/screens/dashboard/types";
 import { formatTimeRange, getLessonPosition } from "@/screens/schedule/utils/calendar";
 
+export const lessonDragGhostClassName =
+  "border-dashed border-stone-400 bg-white/70 opacity-[0.58] shadow-lg ring-2 ring-stone-300/60";
+
 export function CalendarLesson({
   lesson,
   calendarRange,
@@ -19,7 +22,8 @@ export function CalendarLesson({
   onSelect,
   onDragStart,
   onDragEnd,
-  onResizeStart
+  onResizeStart,
+  dragPreview = false
 }: {
   lesson: Lesson;
   calendarRange: CalendarRange;
@@ -30,6 +34,7 @@ export function CalendarLesson({
   onDragStart?: (offsetY: number) => void;
   onDragEnd?: () => void;
   onResizeStart?: (edge: "top" | "bottom", clientY: number) => void;
+  dragPreview?: boolean;
 }) {
   const { t } = useI18n();
   const suppressClickRef = useRef(false);
@@ -48,7 +53,10 @@ export function CalendarLesson({
   return (
     <button
       type="button"
-      className="absolute z-10 flex cursor-pointer flex-col gap-1 overflow-hidden rounded-lg border bg-card p-1.5 text-left shadow-sm transition-shadow hover:z-20 hover:shadow-md"
+      className={cn(
+        "absolute z-10 flex cursor-pointer flex-col gap-1 overflow-hidden rounded-lg border bg-card p-1.5 text-left shadow-sm transition-shadow hover:z-20 hover:shadow-md",
+        dragPreview && lessonDragGhostClassName
+      )}
       style={{
         top,
         height,
@@ -82,15 +90,7 @@ export function CalendarLesson({
         dragImage.style.width = `${rect.width}px`;
         dragImage.style.height = `${rect.height}px`;
         dragImage.style.pointerEvents = "none";
-        dragImage.style.opacity = "0.58";
-        dragImage.classList.add(
-          "border-dashed",
-          "border-stone-400",
-          "bg-white/70",
-          "shadow-lg",
-          "ring-2",
-          "ring-stone-300/60"
-        );
+        dragImage.className = `${dragImage.className} ${lessonDragGhostClassName}`;
         document.body.appendChild(dragImage);
         dragImageRef.current = dragImage;
 
