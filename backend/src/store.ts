@@ -571,8 +571,8 @@ export class Store {
     const db = await loadAccountDatabase(ctx.accountId);
     const lesson = mustFind(db.lessons, lessonId, "Lesson");
 
-    if (lesson.status === "completed" || lesson.status === "cancelled_by_teacher") {
-      throw new StoreValidationError("lesson_not_editable", "Cannot reschedule completed or cancelled lesson");
+    if (lesson.status === "cancelled_by_teacher") {
+      throw new StoreValidationError("lesson_not_editable", "Cannot reschedule cancelled lesson");
     }
 
     const startsAt = input.startsAt ? new Date(input.startsAt) : null;
@@ -599,6 +599,24 @@ export class Store {
       })
     ) {
       throw new StoreValidationError("duplicate_lesson");
+    }
+
+    const currentMonthStart = new Date();
+    currentMonthStart.setDate(1);
+    currentMonthStart.setHours(0, 0, 0, 0);
+    const currentMonthEnd = new Date(currentMonthStart);
+    currentMonthEnd.setMonth(currentMonthEnd.getMonth() + 1);
+    const nextTime = startsAt.getTime();
+    const currentLessonTime = new Date(lesson.startsAt).getTime();
+    const movesIntoCurrentMonth = nextTime >= currentMonthStart.getTime() && nextTime < currentMonthEnd.getTime();
+    const currentlyCountsTowardCurrentMonth =
+      !lesson.recurringScheduleId &&
+      currentLessonTime >= currentMonthStart.getTime() &&
+      currentLessonTime < currentMonthEnd.getTime();
+    if (movesIntoCurrentMonth && !currentlyCountsTowardCurrentMonth) {
+      await assertCanCreateLesson(ctx.accountId, ctx.plan, {
+        additionalLessonStartsAt: [normalizedStartsAt]
+      });
     }
 
     const schedule = lesson.recurringScheduleId ? skipRecurringOccurrence(db, lesson) : null;

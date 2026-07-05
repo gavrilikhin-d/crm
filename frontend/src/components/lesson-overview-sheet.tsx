@@ -82,7 +82,7 @@ function LessonOverviewSheet({
   const converted = lesson.originalType === "group" && lesson.effectiveType === "individual";
   const canEditParticipants = lesson.status !== "completed" && lesson.status !== "cancelled_by_teacher";
   const canChangeParticipantStatus = lesson.status !== "cancelled_by_teacher";
-  const canChangeTime = lesson.status !== "completed" && lesson.status !== "cancelled_by_teacher";
+  const canChangeTime = lesson.status !== "cancelled_by_teacher";
 
   async function handleAddParticipants() {
     if (!selectedStudentIds.length) {

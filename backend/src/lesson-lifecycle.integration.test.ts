@@ -25,6 +25,13 @@ describe.skipIf(!databaseAvailable)("lesson lifecycle integration", () => {
     return date.toISOString();
   }
 
+  function nextMonthDate(day: number, hour = 18, minute = 0): string {
+    const date = new Date();
+    date.setMonth(date.getMonth() + 1, day);
+    date.setHours(hour, minute, 0, 0);
+    return date.toISOString();
+  }
+
   function daysFromNow(days: number, hour = 18, minute = 0): string {
     const date = new Date();
     date.setDate(date.getDate() + days);
@@ -186,6 +193,28 @@ describe.skipIf(!databaseAvailable)("lesson lifecycle integration", () => {
     }
   });
 
+  test("allows rescheduling a completed past lesson", async () => {
+    const { ctx, cleanup: localCleanup } = await setupAccount();
+
+    try {
+      const alice = await store.createStudent(ctx, { fullName: "Alice Reschedule Completed" });
+      const lesson = await store.createLesson(ctx, {
+        startsAt: daysFromNow(-2, 18, 0),
+        lessonType: "individual",
+        studentIds: [alice.id]
+      });
+      expect(lesson.status).toBe("completed");
+
+      const nextStartsAt = daysFromNow(-1, 19, 30);
+      const updated = await store.updateLesson(ctx, lesson.id, { startsAt: nextStartsAt });
+
+      expect(updated.status).toBe("completed");
+      expect(new Date(updated.startsAt).getTime()).toBe(new Date(nextStartsAt).getTime());
+    } finally {
+      await localCleanup();
+    }
+  });
+
   test("enforces free plan active student limit", async () => {
     const { ctx, cleanup: localCleanup } = await setupFreeAccount();
 
@@ -252,6 +281,34 @@ describe.skipIf(!databaseAvailable)("lesson lifecycle integration", () => {
     }
   });
 
+  test("enforces free plan monthly lesson limit when rescheduling into the current month", async () => {
+    const { ctx, cleanup: localCleanup } = await setupFreeAccount();
+
+    try {
+      const alice = await store.createStudent(ctx, { fullName: "Alice Free Reschedule Limit" });
+
+      for (let index = 0; index < 50; index += 1) {
+        await store.createLesson(ctx, {
+          startsAt: currentMonthDate(index),
+          lessonType: "individual",
+          studentIds: [alice.id]
+        });
+      }
+
+      const outsideMonthLesson = await store.createLesson(ctx, {
+        startsAt: nextMonthDate(10, 18, 0),
+        lessonType: "individual",
+        studentIds: [alice.id]
+      });
+
+      await expect(
+        store.updateLesson(ctx, outsideMonthLesson.id, { startsAt: currentMonthDate(60) })
+      ).rejects.toMatchObject({ code: "lesson_limit" });
+    } finally {
+      await localCleanup();
+    }
+  });
+
   test("does not count materialized recurring lessons toward the free plan monthly lesson limit", async () => {
     const { ctx, cleanup: localCleanup } = await setupFreeAccount();
 
@@ -287,6 +344,35 @@ describe.skipIf(!databaseAvailable)("lesson lifecycle integration", () => {
           lessonType: "individual",
           studentIds: [alice.id]
         })
+      ).rejects.toMatchObject({ code: "lesson_limit" });
+    } finally {
+      await localCleanup();
+    }
+  });
+
+  test("enforces free plan monthly lesson limit when rescheduling recurring occurrence into the current month", async () => {
+    const { ctx, cleanup: localCleanup } = await setupFreeAccount();
+
+    try {
+      const alice = await store.createStudent(ctx, { fullName: "Alice Free Recurring Reschedule Limit" });
+
+      for (let index = 0; index < 50; index += 1) {
+        await store.createLesson(ctx, {
+          startsAt: currentMonthDate(index),
+          lessonType: "individual",
+          studentIds: [alice.id]
+        });
+      }
+
+      const recurringLesson = await store.createLesson(ctx, {
+        startsAt: currentMonthDate(70),
+        lessonType: "individual",
+        studentIds: [alice.id],
+        repeatWeekly: true
+      });
+
+      await expect(
+        store.updateLesson(ctx, recurringLesson.id, { startsAt: currentMonthDate(72) })
       ).rejects.toMatchObject({ code: "lesson_limit" });
     } finally {
       await localCleanup();

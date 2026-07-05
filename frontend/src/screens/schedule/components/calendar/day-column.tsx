@@ -183,7 +183,7 @@ export function DayColumn({
           getStudent={getStudent}
           onSelect={() => onSelectLesson(lesson)}
           onDragStart={
-            !onLessonDragStart || lesson.status === "completed" || lesson.status === "cancelled_by_teacher"
+            !onLessonDragStart || lesson.status === "cancelled_by_teacher"
               ? undefined
               : (offsetY) => onLessonDragStart?.(lesson, offsetY)
           }
