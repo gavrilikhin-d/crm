@@ -1,41 +1,67 @@
-# Мини-CRM преподавателя вокала
+# Vocal Teacher CRM
 
-MVP для преподавателя/репетитора: ученики, индивидуальные и групповые занятия, пакетные оплаты, баланс в занятиях, долги и Telegram-напоминания с кнопками `Буду` / `Не буду`.
+A mini CRM for vocal teachers and private tutors. It manages students, individual and group lessons, recurring schedules, lesson packages, payments, lesson balances, debts, vacations, Telegram notifications, and Google Calendar sync.
 
-## Стек
+## Stack
 
-- Next.js + React + TypeScript
-- `frontend` - Next.js web app
-- `backend` - HTTP API и PostgreSQL через Drizzle ORM
-- `bot` - Telegram webhook service
-- `reminder` - scheduler и ручные payment reminders
-- `shared` - общие TypeScript-типы
-- PostgreSQL + Drizzle ORM
-- Telegraf для Telegram-бота
+- **Frontend:** Next.js, React, TypeScript, shadcn/ui, Storybook.
+- **Backend:** Node.js HTTP API, PostgreSQL, Drizzle ORM.
+- **Bot:** Telegram webhook service built with Telegraf.
+- **Reminder:** background worker for lesson reminders and reminder state.
+- **Shared:** common TypeScript types and business helpers used by all services.
+- **Observability:** optional Loki/Grafana logs and Sentry errors, logs, tracing, and profiling.
 
-## Быстрый старт
+## Repository Layout
+
+```text
+frontend/   Next.js app, UI, auth proxy routes, Storybook
+backend/    API server, Drizzle schema/migrations, store logic
+bot/        Telegram webhook service
+reminder/   Scheduled reminder worker
+shared/     Shared types and helpers
+deploy/     Production Caddy and Helm deployment files
+scripts/    Local environment checks
+```
+
+## Quick Start
+
+Install dependencies and create your environment file:
 
 ```bash
 bun install
 cp .env.example .env
+```
+
+Fill the required local development variables in `.env`:
+
+```bash
+AUTH_SECRET=...          # generate with: openssl rand -base64 32
+AUTH_GOOGLE_ID=...       # Google OAuth client ID
+AUTH_GOOGLE_SECRET=...   # Google OAuth client secret
+INTERNAL_API_TOKEN=...   # generate with: openssl rand -base64 32
+```
+
+Start PostgreSQL, apply the schema, seed demo data, and run the full local stack:
+
+```bash
 docker compose up -d postgres
-bun run db:push
+bun run db:migrate
 bun run seed
 bun run dev:all
 ```
 
-После запуска кабинет будет доступен на `http://localhost:3000`.
+The web app runs at `http://localhost:3000`. The default local database URL is `postgres://crm:crm@localhost:5432/crm`.
 
-PostgreSQL по умолчанию: `postgres://crm:crm@localhost:5432/crm`.
-
-Если у вас есть старый `backend/data/db.json`, импортируйте его:
+For iterative schema work, `bun run db:push` is also available. For committed schema changes, generate a named migration from the backend package:
 
 ```bash
-bun run db:push
-bun run migrate:json
+bun --filter @crm/backend db:generate -- --name=add_student_reminder_minutes
+bun run db:migrate
 ```
 
-Для запуска отдельных процессов:
+Use a short descriptive `--name` for the schema change you are making.
+
+## Running Services Individually
 
 ```bash
 bun run dev:backend
@@ -44,99 +70,69 @@ bun run dev:bot
 bun run dev:reminder
 ```
 
-Для production-сборки:
+Useful checks:
 
 ```bash
-bun run build
-bun run start:backend
-bun start
-bun run start:bot
-bun run start:reminder
+bun run lint
+bun run typecheck
+bun run test
+bun run storybook
 ```
 
-Контейнерный запуск:
+## Docker
+
+Local container stack:
 
 ```bash
 docker compose up --build
 ```
 
-### Логи (Loki + Grafana)
-
-#### Локальная разработка (`bun dev:all`)
-
-Alloy собирает логи только из Docker-контейнеров, поэтому для local dev логи отправляются в Loki напрямую из `bot` и `reminder`:
+Production-style stack:
 
 ```bash
-bun run observability:up
+bun run prod:build
+bun run prod:migrate
+bun run prod:up
 ```
 
-Добавьте в `.env`:
+`docker-compose.prod.yml` runs PostgreSQL, migration job, backend, frontend, bot, reminder, and Caddy. Set `POSTGRES_PASSWORD`, `DOMAIN`, `ACME_EMAIL`, and image registry variables in `.env` before deploying.
 
-```bash
-LOKI_PUSH_URL=http://127.0.0.1:3100/loki/api/v1/push
-```
+## Current Features
 
-Перезапустите `bun dev:all`. Grafana: http://localhost:3030
+- Google OAuth login and per-account data isolation.
+- Student cards with name, avatar, status, Telegram connection token, and detailed student page.
+- Day/week/month calendar with drag-and-drop rescheduling, resize previews, vacations, and live snapshot updates.
+- Individual and group lessons with lesson status and per-participant attendance status.
+- Recurring weekly lessons, represented as generated lesson instances.
+- Vacation periods that cancel scheduled lessons for whole days or specific time ranges.
+- Lesson packages and payments, with currency stored per package/payment.
+- Lesson balances: paid, charged, remaining, and debt counts.
+- Debt handling per student, including group lessons where one student's debt does not affect others.
+- Teacher-wide default lesson reminder lead times in CRM settings.
+- Student-specific reminder preferences through the Telegram bot, including custom minute intervals.
+- Telegram lesson reminders with attendance buttons and `/notifications` preferences.
+- Google Calendar one-way sync from CRM to Calendar.
+- Runtime UI language switching between Russian and English, with browser preference detection and stored locale.
+- Account deletion from settings.
 
-#### Docker (production / полный стек)
+## Settings
 
-Alloy автоматически собирает stdout из контейнеров CRM:
+CRM settings currently include:
 
-```bash
-docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
-```
+- UI language (`ru`, `en`), persisted in local storage and a cookie so SSR uses the selected language.
+- Default currency for newly created payments and lesson packages.
+- Default lesson reminder lead times, including custom intervals.
+- Google Calendar connection and sync toggle.
+- Account deletion.
 
-- **Grafana:** http://localhost:3030 (логин `admin`, пароль из `GRAFANA_ADMIN_PASSWORD`)
-- **Dashboard:** CRM → CRM Logs
+## Telegram Bot
 
-Примеры LogQL:
-
-```logql
-{service="bot"} | json | level="error"
-{service="reminder"} | json | msg=~"backend unreachable"
-{service="bot"} | json | handler=~"command:.*"
-```
-
-Логи `bot` и `reminder` — JSON. `backend` при local dev пока только в терминале (plain text).
-
-### Sentry (ошибки и логи)
-
-Дополнительно к Loki/Grafana можно отправлять ошибки и warn/error-логи в [Sentry](https://sentry.io):
-
-```bash
-NEXT_PUBLIC_SENTRY_DSN=https://...@....ingest.de.sentry.io/...   # Next.js (browser)
-SENTRY_DSN=https://...@....ingest.de.sentry.io/...               # Next.js server
-BACKEND_SENTRY_DSN=https://...@....ingest.de.sentry.io/...       # backend API
-BOT_SENTRY_DSN=https://...@....ingest.de.sentry.io/...           # Telegram bot
-REMINDER_SENTRY_DSN=https://...@....ingest.de.sentry.io/...      # reminder service
-SENTRY_AUTH_TOKEN=...   # для upload source maps при next build
-```
-
-- **Next.js** — errors, tracing, session replay, logs, browser profiling (Chromium), runtime metrics + Node profiling on server
-- **backend** — `BACKEND_SENTRY_DSN` (errors, tracing, logs, runtime metrics, profiling, Postgres spans)
-- **bot** — `BOT_SENTRY_DSN` (errors, tracing, logs, runtime metrics, profiling)
-- **reminder** — `REMINDER_SENTRY_DSN` (errors, tracing, logs, runtime metrics, profiling)
-
-Tunnel route `/monitoring` обходит ad-blockers в браузере.
-
-Telegram-бот опционален. Если токен бота не задан, web app работает, а Telegram service поднимает только health endpoint.
-
-## Google Calendar
-
-Односторонняя синхронизация CRM → Google Calendar: запланированные занятия создаются и обновляются в календаре, отменённые и завершённые — удаляются.
-
-1. В [Google Cloud Console](https://console.cloud.google.com/) включите **Google Calendar API** для того же OAuth-клиента, что используется для входа (`AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`).
-2. Добавьте redirect URI: `{APP_BASE_URL}/api/google-calendar/callback` (для локальной разработки: `http://localhost:3000/api/google-calendar/callback`).
-3. В настройках CRM нажмите **Подключить Google Calendar**, затем включите синхронизацию.
-
-Опционально задайте часовой пояс событий: `APP_TIMEZONE=Europe/Minsk`.
-
-## Telegram
+Telegram is optional. If no bot token is configured, the web app still works and the bot service exposes only its health endpoint.
 
 ### Production
 
-1. Создайте бота через BotFather.
-2. Укажите токен и webhook-настройки в `.env` или Kubernetes Secret:
+1. Create a bot with BotFather.
+2. Set the production bot variables:
 
 ```bash
 TELEGRAM_BOT_TOKEN=123456:token
@@ -145,22 +141,22 @@ TELEGRAM_WEBHOOK_SECRET=replace-with-url-safe-random-value
 NEXT_PUBLIC_TELEGRAM_BOT_USERNAME=VocalLessonBot
 ```
 
-3. Запустите web app и bot service.
-4. В карточке ученика скопируйте ссылку подключения Telegram и отправьте ученику.
-5. Ученик открывает ссылку, бот получает `/start <token>` и сам привязывает `chat id` к ученику.
+3. Run the web app and bot service.
+4. Open a student card, copy the Telegram connection link, and send it to the student.
+5. The student opens the link; the bot receives `/start <token>` and binds the Telegram chat to that student.
 
 ### Local Development
 
-Для `bun dev:all` используйте отдельного тестового бота, чтобы локальная разработка не перерегистрировала webhook production-бота.
+Use a separate test bot so local development does not re-register the production webhook.
 
-1. Создайте тестового бота через BotFather.
-2. Пробросьте локальный bot service наружу через HTTPS tunnel, например:
+1. Create a test bot with BotFather.
+2. Expose the local bot service through an HTTPS tunnel:
 
 ```bash
 ngrok http 4002
 ```
 
-3. Добавьте в `.env`:
+3. Add local bot variables:
 
 ```bash
 TELEGRAM_DEV_BOT_TOKEN=123456:test-token
@@ -170,39 +166,161 @@ NEXT_PUBLIC_TELEGRAM_BOT_USERNAME=YourTestBot
 BOT_PORT=4002
 ```
 
-4. Запустите `bun dev:all`. В local dev `bot` и `reminder` предпочитают `TELEGRAM_DEV_BOT_TOKEN`; в production этот override игнорируется.
+4. Run `bun run dev:all`.
 
-Напоминания о занятиях отправляются по `LESSON_REMINDER_MINUTES`, например `1440,120` означает за 24 часа и за 2 часа.
+Outside `NODE_ENV=production`, `TELEGRAM_DEV_BOT_TOKEN` overrides `TELEGRAM_BOT_TOKEN` for the bot and reminder services.
 
-## Что реализовано
+### Reminder Timing
 
-- Карточки учеников: ФИО, Telegram username/link token, статус, цена разового занятия.
-- Расписание: индивидуальные и групповые занятия, разные длительности, статусы занятий и участников.
-- Групповой сценарий: если в групповом занятии остается один подтвержденный ученик, занятие автоматически считается индивидуальным.
-- Оплаты: разовая оплата или пакет на целое число занятий, например 4 или 8.
-- Баланс: оплачено, использовано, осталось, долг в занятиях.
-- Долги: долг одного ученика не влияет на остальных участников группового занятия.
-- Telegram-кнопки: `Буду` подтверждает участие, `Не буду` отмечает отказ.
-- Напоминания об оплате: ручная отправка из таблицы учеников при долге или нулевом балансе занятий.
+Lesson reminders are resolved in this order:
 
-## Основные API
+1. Student-specific Telegram preferences.
+2. Teacher/account defaults from CRM settings.
+3. Environment fallback from `LESSON_REMINDER_MINUTES`.
 
-- `GET /api/snapshot` - все данные для интерфейса.
-- `GET /api/dashboard` - ближайшие занятия, должники и счетчики.
-- `POST /api/students` - создать ученика.
-- `PATCH /api/students/:id` - обновить ученика.
-- `POST /api/lesson-packages` - создать пакет занятий.
-- `POST /api/lessons` - создать занятие.
-- `POST /api/lessons/:id/participants/:studentId/status` - изменить статус участия.
-- `POST /api/lessons/:id/complete` - провести занятие и списать занятия с балансов.
-- `POST /api/lessons/:id/cancel` - отменить занятие преподавателем.
-- `POST /api/payments` - внести оплату.
-- `POST /api/balance-adjustments` - вручную скорректировать баланс.
-- `POST /api/payment-reminders/:studentId` - отправить напоминание об оплате.
+`LESSON_REMINDER_MINUTES=1440,120` means reminders 24 hours and 2 hours before the lesson.
 
-## Ограничения MVP
+## Google Calendar
 
-- Все занятия считаются офлайн и в одном локальном времени преподавателя.
-- Все ученики считаются совершеннолетними.
-- Нет заметок, комментариев, топов и статистики дохода.
-- Повторяющиеся занятия создаются как серия обычных еженедельных занятий.
+Google Calendar sync is one-way: CRM creates and updates scheduled lessons in Google Calendar, and removes cancelled or completed lessons from the calendar.
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), enable **Google Calendar API** for the same OAuth client used by sign-in (`AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`).
+2. Add the redirect URI: `{APP_BASE_URL}/api/google-calendar/callback`.
+   For local development: `http://localhost:3000/api/google-calendar/callback`.
+3. In CRM settings, click **Connect Google Calendar**, then enable sync.
+
+Optional event timezone:
+
+```bash
+APP_TIMEZONE=Europe/Minsk
+```
+
+## Internationalization
+
+The frontend has a custom typed i18n layer with Russian and English dictionaries. The selected locale is stored in `localStorage` and in a cookie. The cookie allows the first server render to use the selected language; browser preferences are used when no stored locale exists.
+
+When adding UI text:
+
+- Add keys to `frontend/src/i18n/locales/ru.ts`.
+- Add matching English values to `frontend/src/i18n/locales/en.ts`.
+- Use `useI18n()` and `t(...)` in client components.
+- Use locale-aware date/label helpers where dates, statuses, currencies, or weekdays are displayed.
+
+## Observability
+
+### Loki and Grafana
+
+For local development with `bun run dev:all`, the bot and reminder services can push JSON logs directly to Loki:
+
+```bash
+bun run observability:up
+```
+
+Set:
+
+```bash
+LOKI_PUSH_URL=http://127.0.0.1:3100/loki/api/v1/push
+```
+
+Restart `bun run dev:all`, then open Grafana at `http://localhost:3030`.
+
+For a Docker stack, Alloy collects stdout logs from CRM containers:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
+```
+
+- **Grafana:** `http://localhost:3030`
+- **Dashboard:** CRM → CRM Logs
+
+Example LogQL queries:
+
+```logql
+{service="bot"} | json | level="error"
+{service="reminder"} | json | msg=~"backend unreachable"
+{service="bot"} | json | handler=~"command:.*"
+```
+
+Backend logs in local `bun` development are still plain terminal output.
+
+### Sentry
+
+Sentry is optional and can receive errors, warning/error logs, tracing, runtime metrics, and profiling data:
+
+```bash
+NEXT_PUBLIC_SENTRY_DSN=https://...@....ingest.de.sentry.io/...   # Next.js browser
+SENTRY_DSN=https://...@....ingest.de.sentry.io/...               # Next.js server
+BACKEND_SENTRY_DSN=https://...@....ingest.de.sentry.io/...       # backend API
+BOT_SENTRY_DSN=https://...@....ingest.de.sentry.io/...           # Telegram bot
+REMINDER_SENTRY_DSN=https://...@....ingest.de.sentry.io/...      # reminder service
+SENTRY_AUTH_TOKEN=...                                            # source map upload
+```
+
+The frontend uses `/monitoring` as the browser tunnel route to reduce ad-blocker interference.
+
+## Main API Endpoints
+
+Public/backend routes:
+
+- `GET /api/health`
+- `POST /api/auth/sync`
+- `GET /api/google-calendar/callback`
+
+Authenticated CRM routes:
+
+- `GET /api/account`
+- `DELETE /api/account`
+- `GET /api/snapshot`
+- `GET /api/dashboard`
+- `GET /api/balances`
+- `PATCH /api/settings`
+- `POST /api/vacation-periods`
+- `DELETE /api/vacation-periods/:id`
+- `GET /api/google-calendar/status`
+- `GET /api/google-calendar/connect`
+- `POST /api/google-calendar/sync`
+- `DELETE /api/google-calendar/disconnect`
+- `GET /api/students/:id/avatar`
+- `POST /api/students`
+- `PATCH /api/students/:id`
+- `DELETE /api/students/:id`
+- `POST /api/lesson-packages`
+- `DELETE /api/lesson-packages/:id`
+- `POST /api/lessons`
+- `PATCH /api/lessons/:id`
+- `DELETE /api/lessons/:id?scope=single|following|all`
+- `POST /api/lessons/:id/cancel`
+- `POST /api/lessons/:id/complete`
+- `POST /api/lessons/:id/participants`
+- `DELETE /api/lessons/:id/participants/:studentId`
+- `POST /api/lessons/:id/participants/:studentId/status`
+- `POST /api/payments`
+- `POST /api/balance-adjustments`
+
+Internal worker/bot routes are protected by `INTERNAL_API_TOKEN`:
+
+- `GET /internal/worker/snapshots`
+- `POST /internal/lessons/:id/participants/:studentId/status`
+- `POST /internal/telegram/bind`
+- `GET /internal/telegram/profile`
+- `PATCH /internal/telegram/preferences`
+- `POST /internal/reminders`
+- `PATCH /internal/reminders/:id`
+
+## Legacy Data Import
+
+If you still have a legacy JSON database at `backend/data/db.json`, import it after applying the schema:
+
+```bash
+bun run db:migrate
+bun run migrate:json
+```
+
+Set `DATA_FILE_PATH` if the file is elsewhere.
+
+## Known MVP Limits
+
+- Lessons are treated as offline and use the teacher/account timezone.
+- Students are assumed to be adults.
+- There are no student notes, rich analytics, revenue reports, or lesson materials.
+- Recurring lessons are stored as a generated weekly series rather than a fully dynamic recurrence engine.

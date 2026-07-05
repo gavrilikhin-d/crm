@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useI18n } from "@/i18n/context";
 import { getWeekdayShortLabels } from "@/i18n/labels";
 import type { Lesson, Student, VacationPeriod } from "@crm/shared";
 import { getVacationPeriodForDate } from "@crm/shared/vacation";
@@ -30,8 +31,9 @@ export function WeekCalendar({
   onSelectLesson: (lesson: Lesson) => void;
   onLessonUpdate: (lesson: Lesson, patch: { startsAt?: string; durationMinutes?: number }) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [draggedLesson, setDraggedLesson] = useState<DraggedLesson | null>(null);
-  const weekDayLabels = getWeekdayShortLabels("mon");
+  const weekDayLabels = getWeekdayShortLabels("mon", t);
 
   return (
     <div className="grid min-h-[680px] grid-cols-[62px_repeat(7,minmax(86px,1fr))] grid-rows-[58px_auto]">

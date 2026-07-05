@@ -106,9 +106,9 @@ export function PaymentForm({
         <Field>
           <FieldLabel htmlFor="payment-method">{t("form.paymentMethod")}</FieldLabel>
           <NativeSelect id="payment-method" name="method" required defaultValue="transfer" className="w-full">
-            <NativeSelectOption value="transfer">{getPaymentMethodLabel("transfer")}</NativeSelectOption>
-            <NativeSelectOption value="cash">{getPaymentMethodLabel("cash")}</NativeSelectOption>
-            <NativeSelectOption value="other">{getPaymentMethodLabel("other")}</NativeSelectOption>
+            <NativeSelectOption value="transfer">{getPaymentMethodLabel("transfer", t)}</NativeSelectOption>
+            <NativeSelectOption value="cash">{getPaymentMethodLabel("cash", t)}</NativeSelectOption>
+            <NativeSelectOption value="other">{getPaymentMethodLabel("other", t)}</NativeSelectOption>
           </NativeSelect>
         </Field>
         <Button type="submit">{t("form.addPayment")}</Button>

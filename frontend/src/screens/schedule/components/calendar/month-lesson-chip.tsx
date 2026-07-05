@@ -19,7 +19,7 @@ export function MonthLessonChip({
   getStudent: (studentId: string) => Student | undefined;
   onSelect: () => void;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const startsAt = new Date(lesson.startsAt);
 
   if (compact) {
@@ -34,7 +34,7 @@ export function MonthLessonChip({
         onClick={onSelect}
       >
         <span className="shrink-0 text-[0.625rem] font-semibold tabular-nums leading-none">
-          {formatTime(startsAt)}
+          {formatTime(startsAt, locale)}
         </span>
         <span className="min-w-0 flex-1 truncate text-[0.625rem] leading-none text-muted-foreground">
           {firstStudent?.fullName.split(/\s+/)[0] ?? t("calendar.lessonFallback")}
@@ -52,7 +52,7 @@ export function MonthLessonChip({
     >
       <div className="flex min-w-0 items-start justify-between gap-1">
         <span className="truncate text-[0.62rem] font-semibold tabular-nums leading-tight">
-          {formatTimeRange(startsAt, lesson.durationMinutes)}
+          {formatTimeRange(startsAt, lesson.durationMinutes, locale)}
         </span>
         <LessonParticipantSummary participants={lesson.participants} compact />
       </div>

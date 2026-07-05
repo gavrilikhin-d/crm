@@ -38,7 +38,7 @@ function ParticipantStatusBadge({
   if (!interactive || !onStatusChange) {
     return (
       <Badge variant="outline" className={cn(participantStatusBadgeClass[displayStatus], className)}>
-        {getParticipantStatusLabel(displayStatus)}
+        {getParticipantStatusLabel(displayStatus, t)}
       </Badge>
     );
   }
@@ -62,7 +62,7 @@ function ParticipantStatusBadge({
         )}
         onClick={() => onStatusChange(nextTeacherStatus(status))}
       >
-        {getParticipantStatusLabel(displayStatus)}
+        {getParticipantStatusLabel(displayStatus, t)}
       </button>
       <span
         role="tooltip"

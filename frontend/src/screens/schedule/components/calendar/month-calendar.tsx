@@ -28,7 +28,7 @@ export function MonthCalendar({
 }) {
   const { t } = useI18n();
   const isMobile = useIsMobile();
-  const weekDayLabels = getWeekdayShortLabels("mon");
+  const weekDayLabels = getWeekdayShortLabels("mon", t);
   const maxVisibleLessons = isMobile ? 2 : 4;
 
   return (

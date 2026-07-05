@@ -23,12 +23,13 @@ import {
 } from "@/components/ui/sheet";
 import { useI18n } from "@/i18n/context";
 import { formatFullDate, formatTime } from "@/i18n/format";
+import type { Locale } from "@/i18n/locale";
 import { getLessonStatusLabel, getLessonTypeLabel, getWeekdayShortLabels } from "@/i18n/labels";
 import { formatDateTimeLocal } from "@/screens/schedule/utils/calendar";
 
-function formatTimeRange(start: Date, durationMinutes: number): string {
+function formatTimeRange(start: Date, durationMinutes: number, locale?: Locale): string {
   const end = new Date(start.getTime() + durationMinutes * 60_000);
-  return `${formatTime(start)} – ${formatTime(end)}`;
+  return `${formatTime(start, locale)} – ${formatTime(end, locale)}`;
 }
 
 function LessonOverviewSheet({
@@ -60,12 +61,12 @@ function LessonOverviewSheet({
   onUpdateLesson: (lesson: Lesson, patch: { startsAt?: string; durationMinutes?: number }) => Promise<void>;
   onDeleteLesson: (lesson: Lesson, scope: RecurringDeleteScope) => Promise<void>;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
   const [savingTime, setSavingTime] = useState(false);
   const [statusUpdatingStudentId, setStatusUpdatingStudentId] = useState<string | null>(null);
-  const weekdayLabels = getWeekdayShortLabels("sun");
+  const weekdayLabels = getWeekdayShortLabels("sun", t);
 
   function formatRecurringSchedule(schedule: RecurringSchedule): string {
     const weekday = weekdayLabels[schedule.weekday] ?? "—";
@@ -135,21 +136,21 @@ function LessonOverviewSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="flex w-full flex-col sm:max-w-md">
         <SheetHeader>
-          <SheetTitle>{formatFullDate(lesson.startsAt)}</SheetTitle>
-          <SheetDescription>{formatTimeRange(startsAt, lesson.durationMinutes)}</SheetDescription>
+          <SheetTitle>{formatFullDate(lesson.startsAt, locale)}</SheetTitle>
+          <SheetDescription>{formatTimeRange(startsAt, lesson.durationMinutes, locale)}</SheetDescription>
         </SheetHeader>
 
         <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4">
           <div className="flex flex-wrap gap-2">
-            <Badge variant="secondary">{getLessonStatusLabel(lesson.status)}</Badge>
-            <Badge variant="outline">{getLessonTypeLabel(lesson.effectiveType)}</Badge>
+            <Badge variant="secondary">{getLessonStatusLabel(lesson.status, t)}</Badge>
+            <Badge variant="outline">{getLessonTypeLabel(lesson.effectiveType, t)}</Badge>
             {converted ? <Badge variant="outline">{t("lessonOverview.wasGroup")}</Badge> : null}
           </div>
 
           <div className="flex flex-col gap-1 text-sm">
             <p>
               <span className="text-muted-foreground">{t("common.formatLabel")}</span>
-              {getLessonTypeLabel(lesson.effectiveType)}, {t("common.minutes", { count: lesson.durationMinutes })}
+              {getLessonTypeLabel(lesson.effectiveType, t)}, {t("common.minutes", { count: lesson.durationMinutes })}
             </p>
             {recurringSchedule ? (
               <p className="flex items-center gap-1.5">

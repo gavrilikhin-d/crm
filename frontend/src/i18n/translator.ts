@@ -1,8 +1,9 @@
+import { en } from "@/i18n/locales/en";
 import { ru } from "@/i18n/locales/ru";
 import { DEFAULT_LOCALE, type Locale } from "@/i18n/locale";
 import type { TranslationKey, TranslationParams } from "@/i18n/types";
 
-const locales = { ru } as const;
+const locales = { en, ru } as const;
 
 function getNestedValue(obj: Record<string, unknown>, path: string): string {
   const value = path.split(".").reduce<unknown>((current, key) => {

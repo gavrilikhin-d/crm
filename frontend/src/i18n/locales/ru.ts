@@ -201,7 +201,18 @@ const ru = {
   settings: {
     title: "Настройки",
     description: "Параметры приложения.",
+    language: "Язык",
+    languages: {
+      ru: "Русский",
+      en: "English"
+    },
     currency: "Валюта",
+    currencies: {
+      BYN: "Белорусский рубль",
+      RUB: "Российский рубль",
+      USD: "Доллар США",
+      EUR: "Евро"
+    },
     selectCurrency: "Выберите валюту",
     currencyHint: "Валюта оплат и пакетов.",
     lessonReminders: {
@@ -214,6 +225,12 @@ const ru = {
       customHint: "Минуты через запятую или пробел.",
       customAdd: "Добавить",
       customInvalid: "Укажите положительное число минут.",
+      units: {
+        twentyFourHours: "24 ч",
+        days: "{count} д",
+        hours: "{count} ч",
+        minutes: "{count} мин"
+      },
       save: "Сохранить напоминания",
       saving: "Сохраняем..."
     },

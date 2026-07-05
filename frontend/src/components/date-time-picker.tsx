@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { format } from "date-fns"
-import { ru } from "date-fns/locale"
+import { enUS, ru } from "date-fns/locale"
 import { CalendarIcon, ClockIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -46,7 +46,8 @@ type DateTimePickerProps = {
 }
 
 export function DateTimePicker({ id, name, defaultValue, required, className }: DateTimePickerProps) {
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
+  const dateFnsLocale = locale === "en" ? enUS : ru
   const initial = useMemo(() => parseDateTimeLocalValue(defaultValue), [defaultValue])
   const [open, setOpen] = useState(false)
   const [date, setDate] = useState<Date | undefined>(initial.date)
@@ -55,7 +56,7 @@ export function DateTimePicker({ id, name, defaultValue, required, className }: 
   const value = date ? formatDateTimeLocalValue(date, hour, minute) : ""
 
   const label = date
-    ? `${format(date, "d MMMM yyyy", { locale: ru })}, ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`
+    ? `${format(date, "d MMMM yyyy", { locale: dateFnsLocale })}, ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`
     : t("dateTime.placeholder")
 
   return (
@@ -77,7 +78,7 @@ export function DateTimePicker({ id, name, defaultValue, required, className }: 
             mode="single"
             selected={date}
             onSelect={setDate}
-            locale={ru}
+            locale={dateFnsLocale}
             captionLayout="dropdown"
             startMonth={new Date(new Date().getFullYear() - 1, 0)}
             endMonth={new Date(new Date().getFullYear() + 2, 11)}

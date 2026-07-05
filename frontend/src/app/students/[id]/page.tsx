@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import type { Database, Lesson, LessonPackage, RecurringSchedule, Student, StudentBalance } from "@crm/shared";
-import { formatMoney, resolveCurrency } from "@crm/shared/currency";
+import { formatMoney } from "@crm/shared/currency";
 import { TelegramIcon } from "@/components/icons/telegram-icon";
 import { ParticipantStatusBadge } from "@/components/participant-status-badge";
 import { StudentAvatar } from "@/components/student-avatar";
@@ -40,8 +40,8 @@ function getTelegramBindUrl(student: Student): string | undefined {
 
 export default function StudentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { t } = useI18n();
-  const weekdayLabels = getWeekdayShortLabels("sun");
+  const { locale, t } = useI18n();
+  const weekdayLabels = getWeekdayShortLabels("sun", t);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -70,7 +70,6 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
   }, []);
 
   const student = snapshot?.students.find((item) => item.id === id);
-  const currency = resolveCurrency(snapshot?.settings.currency);
   const balance = snapshot?.balances.find((item) => item.studentId === id);
   const payments = useMemo(
     () =>
@@ -164,7 +163,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
     return t("studentPage.recurringSchedule", {
       weekday,
       time: schedule.time,
-      type: getLessonTypeLabel(schedule.lessonType)
+      type: getLessonTypeLabel(schedule.lessonType, t)
     });
   }
 
@@ -201,7 +200,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-xl font-semibold sm:text-2xl">{student.fullName}</h1>
                 <Badge variant={student.status === "active" ? "secondary" : "outline"}>
-                  {getStudentStatusLabel(student.status)}
+                  {getStudentStatusLabel(student.status, t)}
                 </Badge>
                 {balance.debtLessons > 0 ? (
                   <Badge variant="destructive">{t("badge.debtWithCount", { count: balance.debtLessons })}</Badge>
@@ -231,7 +230,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
                 </p>
                 <p>
                   <span className="text-muted-foreground">{t("student.addedAt")}</span>
-                  {formatLongDate(student.createdAt)}
+                  {formatLongDate(student.createdAt, locale)}
                 </p>
               </div>
             </div>
@@ -270,18 +269,18 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-stone-900 sm:text-base">
-                      <span className="sm:hidden">{formatDateTime(payment.paidAt)}</span>
-                      <span className="hidden sm:inline">{formatFullDate(payment.paidAt)}</span>
+                      <span className="sm:hidden">{formatDateTime(payment.paidAt, locale)}</span>
+                      <span className="hidden sm:inline">{formatFullDate(payment.paidAt, locale)}</span>
                     </p>
                     <p className="truncate text-xs text-muted-foreground sm:text-sm">
                       {t("common.lessonsCount", { count: payment.lessonCount })}
                       {" · "}
-                      {getPaymentMethodLabel(payment.method)}
+                      {getPaymentMethodLabel(payment.method, t)}
                       {packageName ? ` · ${packageName}` : ""}
                     </p>
                   </div>
                   <p className="shrink-0 text-right text-sm font-bold sm:text-base">
-                    {formatMoney(payment.amount, currency)}
+                    {formatMoney(payment.amount, payment.currency)}
                   </p>
                 </div>
               );
@@ -303,8 +302,8 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
               <div key={schedule.id} className="rounded-lg border p-3 text-sm">
                 <p className="font-medium">{formatRecurringSchedule(schedule)}</p>
                 <p className="mt-1 text-muted-foreground">
-                  {t("common.fromDate", { date: formatLongDate(schedule.activeFrom) })}
-                  {schedule.activeTo ? t("common.toDate", { date: formatLongDate(schedule.activeTo) }) : ""}
+                  {t("common.fromDate", { date: formatLongDate(schedule.activeFrom, locale) })}
+                  {schedule.activeTo ? t("common.toDate", { date: formatLongDate(schedule.activeTo, locale) }) : ""}
                 </p>
               </div>
             ))
@@ -358,7 +357,7 @@ function LessonSection({
   studentId: string;
   emptyText: string;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
 
   return (
     <Card>
@@ -378,13 +377,13 @@ function LessonSection({
               <div key={lesson.id} className="rounded-lg border p-3">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
-                    <p className="font-medium">{formatFullDate(lesson.startsAt)}</p>
+                    <p className="font-medium">{formatFullDate(lesson.startsAt, locale)}</p>
                     <p className="text-sm text-muted-foreground">
-                      {getLessonTypeLabel(lesson.effectiveType)}, {t("common.minutes", { count: lesson.durationMinutes })}
+                      {getLessonTypeLabel(lesson.effectiveType, t)}, {t("common.minutes", { count: lesson.durationMinutes })}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-1">
-                    <Badge variant="secondary">{getLessonStatusLabel(lesson.status)}</Badge>
+                    <Badge variant="secondary">{getLessonStatusLabel(lesson.status, t)}</Badge>
                     <ParticipantStatusBadge status={participant.status} className="text-[0.65rem]" />
                     {participant.hasDebt ? (
                       <Badge variant="destructive" className="text-[0.65rem]">

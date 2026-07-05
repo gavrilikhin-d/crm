@@ -85,7 +85,7 @@ export function ScheduleScreen({
   onLessonUpdate: (lesson: Lesson, patch: { startsAt?: string; durationMinutes?: number }) => Promise<void>;
   onLessonSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const scheduleViewLabels: Record<ScheduleView, string> = {
     day: t("calendar.view.day"),
     week: t("calendar.view.week"),
@@ -123,9 +123,9 @@ export function ScheduleScreen({
           </ToggleGroup>
 
           <div className="text-center text-xs font-extrabold uppercase tracking-wide text-stone-400 sm:min-w-52">
-            {scheduleView === "day" ? formatFullDate(selectedDate.toISOString()) : null}
-            {scheduleView === "week" ? formatWeekRange(weekDays) : null}
-            {scheduleView === "month" ? formatMonth(selectedDate) : null}
+            {scheduleView === "day" ? formatFullDate(selectedDate.toISOString(), locale) : null}
+            {scheduleView === "week" ? formatWeekRange(weekDays, locale) : null}
+            {scheduleView === "month" ? formatMonth(selectedDate, locale) : null}
           </div>
 
           <div className="flex items-center justify-center gap-2 sm:justify-end">
