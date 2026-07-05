@@ -2,6 +2,7 @@
 
 import { LogOut } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
+import { useEffect, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { SidebarMenu, SidebarMenuItem, SidebarSeparator } from "@/components/ui/sidebar";
@@ -12,9 +13,26 @@ import { getStudentInitials } from "@crm/shared/student-initials";
 export function SidebarAccount() {
   const { t } = useI18n();
   const { data: session, status } = useSession();
+  const [showSkeleton, setShowSkeleton] = useState(false);
+
+  useEffect(() => {
+    if (status !== "loading") {
+      setShowSkeleton(false);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => setShowSkeleton(true), 100);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [status]);
 
   if (status === "loading") {
-    return <SidebarAccountSkeleton signOutLabel={t("auth.signOut")} />;
+    return (
+      <SidebarAccountSkeleton
+        signOutLabel={t("auth.signOut")}
+        showPlaceholders={showSkeleton}
+      />
+    );
   }
 
   const sessionUser = session?.user;
@@ -58,17 +76,23 @@ export function SidebarAccount() {
   );
 }
 
-function SidebarAccountSkeleton({ signOutLabel }: { signOutLabel: string }) {
+function SidebarAccountSkeleton({
+  signOutLabel,
+  showPlaceholders
+}: {
+  signOutLabel: string;
+  showPlaceholders: boolean;
+}) {
   return (
     <>
       <SidebarSeparator className="mx-0" />
       <SidebarMenu>
         <SidebarMenuItem>
           <div className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-0">
-            <Skeleton className="size-8 shrink-0 rounded-full" />
+            <Skeleton className={showPlaceholders ? "size-8 shrink-0 rounded-full" : "invisible size-8 shrink-0"} />
             <div className="flex min-w-0 flex-1 flex-col gap-1 group-data-[collapsible=icon]:hidden">
-              <Skeleton className="h-4 w-24" />
-              <Skeleton className="h-4 w-32" />
+              <Skeleton className={showPlaceholders ? "h-4 w-24" : "invisible h-4 w-24"} />
+              <Skeleton className={showPlaceholders ? "h-4 w-32" : "invisible h-4 w-32"} />
             </div>
             <Button
               type="button"
