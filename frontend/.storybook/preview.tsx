@@ -15,7 +15,7 @@ const preview = definePreview({
   addons: [],
   decorators: [
     (Story) => (
-      <I18nProvider>
+      <I18nProvider locale="ru" resolveBrowserLocale={false}>
         <Providers>
           <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
             <TooltipProvider>

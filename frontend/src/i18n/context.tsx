@@ -55,12 +55,16 @@ function persistLocale(locale: Locale): void {
 
 function I18nProvider({
   children,
-  locale = DEFAULT_LOCALE
+  locale = DEFAULT_LOCALE,
+  resolveBrowserLocale = true
 }: {
   children: ReactNode;
   locale?: Locale;
+  resolveBrowserLocale?: boolean;
 }) {
-  const [currentLocale, setCurrentLocale] = useState(() => resolveInitialClientLocale(locale));
+  const [currentLocale, setCurrentLocale] = useState(() =>
+    resolveBrowserLocale ? resolveInitialClientLocale(locale) : locale
+  );
 
   useEffect(() => {
     persistLocale(currentLocale);
