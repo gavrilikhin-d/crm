@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/context";
 import { formatDateTime } from "@/i18n/format";
@@ -94,13 +94,13 @@ export function DayColumn({
         hourHeight
       : 0;
 
-  function getStartsAtForMinutes(minutes: number): string {
+  const getStartsAtForMinutes = useCallback((minutes: number): string => {
     const startsAt = new Date(day);
     startsAt.setHours(0, minutes, 0, 0);
     return formatDateTimeLocal(startsAt);
-  }
+  }, [day]);
 
-  function calculateResizePreview(state: ResizingLesson, clientY: number): ResizePreview {
+  const calculateResizePreview = useCallback((state: ResizingLesson, clientY: number): ResizePreview => {
     const snapMinutes = 5;
     const minDurationMinutes = 15;
     const deltaMinutes = Math.round((((clientY - state.startY) / hourHeight) * 60) / snapMinutes) * snapMinutes;
@@ -129,7 +129,7 @@ export function DayColumn({
       top: ((startMinutes - calendarStartMinutes) / 60) * hourHeight,
       height: (durationMinutes / 60) * hourHeight
     };
-  }
+  }, [calendarRange.endHour, calendarRange.startHour, getStartsAtForMinutes]);
 
   useEffect(() => {
     if (!resizingLesson || !onLessonUpdate) {
@@ -163,7 +163,7 @@ export function DayColumn({
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
     };
-  }, [calendarRange, day, onLessonUpdate, resizingLesson]);
+  }, [calculateResizePreview, onLessonUpdate, resizingLesson]);
 
   return (
     <div
