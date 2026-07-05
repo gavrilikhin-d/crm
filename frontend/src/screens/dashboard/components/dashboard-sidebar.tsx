@@ -31,10 +31,10 @@ export function DashboardSidebar({
     <Sidebar collapsible="icon" className="border-r border-stone-200">
       <SidebarHeader className="px-3 py-6 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:px-2">
         <div className="flex h-8 items-center overflow-hidden">
-          <span className="text-lg font-black tracking-[0.42em] text-orange-600 group-data-[collapsible=icon]:hidden">
+          <span className="select-none text-lg font-black tracking-[0.42em] text-orange-600 group-data-[collapsible=icon]:hidden">
             VOCAL
           </span>
-          <span className="hidden text-lg font-black text-orange-600 group-data-[collapsible=icon]:block">V</span>
+          <span className="hidden select-none text-lg font-black text-orange-600 group-data-[collapsible=icon]:block">V</span>
         </div>
       </SidebarHeader>
       <SidebarContent>
