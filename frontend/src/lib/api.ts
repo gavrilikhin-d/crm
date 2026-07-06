@@ -1,3 +1,5 @@
+import { signOut } from "next-auth/react";
+
 type ApiOptions = {
   method?: string;
   body?: Record<string, unknown>;
@@ -8,7 +10,34 @@ type ApiErrorPayload = {
   code?: string;
 };
 
+export const STALE_SESSION_ERROR_CODE = "STALE_SESSION";
+
 let cachedToken: { value: string; expiresAt: number } | null = null;
+let reauthInProgress = false;
+
+function clearAccessTokenCache(): void {
+  cachedToken = null;
+}
+
+function handleStaleSession(): void {
+  if (reauthInProgress) {
+    return;
+  }
+
+  reauthInProgress = true;
+  clearAccessTokenCache();
+  void signOut({ callbackUrl: "/login" });
+}
+
+function createStaleSessionError(): Error & { code: string } {
+  const error = new Error("Session expired") as Error & { code: string };
+  error.code = STALE_SESSION_ERROR_CODE;
+  return error;
+}
+
+function isStaleSessionResponse(status: number, payload: ApiErrorPayload): boolean {
+  return status === 401 || payload.error === "Account not found" || payload.error === "Unauthorized";
+}
 
 async function getAccessToken(): Promise<string | null> {
   if (cachedToken && cachedToken.expiresAt > Date.now()) {
@@ -17,7 +46,10 @@ async function getAccessToken(): Promise<string | null> {
 
   const response = await fetch("/api/auth/token");
   if (!response.ok) {
-    cachedToken = null;
+    clearAccessTokenCache();
+    if (response.status === 401) {
+      handleStaleSession();
+    }
     return null;
   }
 
@@ -47,6 +79,11 @@ async function api<T = unknown>(path: string, options: ApiOptions = {}): Promise
 
   if (!response.ok) {
     const payload = (await response.json().catch(() => ({}))) as ApiErrorPayload;
+    if (isStaleSessionResponse(response.status, payload)) {
+      handleStaleSession();
+      throw createStaleSessionError();
+    }
+
     const error = new Error(payload.error ?? `Request failed: ${response.status}`) as Error & { code?: string };
     error.code = payload.code;
     throw error;
@@ -55,4 +92,4 @@ async function api<T = unknown>(path: string, options: ApiOptions = {}): Promise
   return response.json() as Promise<T>;
 }
 
-export { api, getAccessToken, type ApiOptions };
+export { api, clearAccessTokenCache, getAccessToken, type ApiOptions };

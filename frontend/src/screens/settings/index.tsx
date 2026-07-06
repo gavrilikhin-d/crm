@@ -34,7 +34,7 @@ import type { AccountInfo, AppSettings } from "@crm/shared";
 import { CURRENCIES, type CurrencyCode } from "@crm/shared/currency";
 import { PLAN_META } from "@crm/shared/plans";
 import { pageSectionClass } from "@/screens/dashboard/constants";
-import { api } from "@/lib/api";
+import { api, clearAccessTokenCache } from "@/lib/api";
 import { PlanUsageRow } from "./components/plan-usage-row";
 
 const reminderMinutePresets = [15, 60, 120, 1440];
@@ -81,6 +81,7 @@ export function SettingsView({
     setDeletingAccount(true);
     try {
       await api("/api/account", { method: "DELETE" });
+      clearAccessTokenCache();
       await signOut({ callbackUrl: "/login" });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("toast.accountDeleteFailed"));

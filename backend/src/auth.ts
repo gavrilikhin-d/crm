@@ -1,6 +1,7 @@
 import { jwtVerify } from "jose";
 import type { IncomingMessage } from "node:http";
 import type { AccountPlan } from "@crm/shared";
+import { getAccountById } from "./db/repository";
 
 export type AuthContext = {
   accountId: string;
@@ -84,5 +85,16 @@ export async function authenticateRequest(request: IncomingMessage): Promise<Aut
   if (!token) {
     throw new Error("Unauthorized");
   }
-  return verifyAccessToken(token);
+
+  const ctx = await verifyAccessToken(token);
+  const account = await getAccountById(ctx.accountId);
+  if (!account) {
+    throw new Error("Unauthorized");
+  }
+
+  return {
+    accountId: account.id,
+    email: account.email,
+    plan: account.plan
+  };
 }

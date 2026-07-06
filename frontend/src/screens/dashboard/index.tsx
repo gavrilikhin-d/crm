@@ -11,7 +11,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useSnapshotAutoRefresh } from "@/hooks/use-snapshot-auto-refresh";
 import { useI18n } from "@/i18n/context";
 import { formatFullDate } from "@/i18n/format";
-import { api } from "@/lib/api";
+import { api, STALE_SESSION_ERROR_CODE } from "@/lib/api";
 import { readFileAsDataUrl } from "@/lib/files";
 import { dedupeLessonsByOccurrence } from "@crm/shared/lesson-dedupe";
 import type {
@@ -307,6 +307,10 @@ export default function Home() {
         applyPagedSnapshot(await api<Snapshot>(getSnapshotPath(targetMonths)), targetMonths);
       }
     } catch (error) {
+      const apiError = error as Error & { code?: string };
+      if (apiError.code === STALE_SESSION_ERROR_CODE) {
+        return;
+      }
       if (!options?.silent) {
         toast.error(error instanceof Error ? error.message : t("toast.loadFailed"));
       }
@@ -408,6 +412,9 @@ export default function Home() {
       await refreshNow({ calendarOnly: false });
     } catch (error) {
       const apiError = error as Error & { code?: string };
+      if (apiError.code === STALE_SESSION_ERROR_CODE) {
+        return;
+      }
       switch (apiError.code) {
         case "student_limit":
           toast.error(t("plan.limit.students"));

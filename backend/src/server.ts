@@ -180,7 +180,7 @@ async function startServer() {
           return;
         }
         const message = error instanceof Error ? error.message : "Unexpected error";
-        if (message === "Unauthorized" || message === "Invalid token payload") {
+        if (message === "Unauthorized" || message === "Invalid token payload" || message === "Account not found") {
           jsonError(response, error, 401);
           return;
         }
