@@ -14,3 +14,4 @@ data:
   NEXT_PUBLIC_SENTRY_DSN: {{ .Values.config.nextPublicSentryDsn | quote }}
   SENTRY_ENVIRONMENT: {{ .Values.config.sentryEnvironment | quote }}
   TELEGRAM_WEBHOOK_BASE_URL: {{ .Values.config.telegramWebhookBaseUrl | quote }}
+  AWS_REGION: {{ .Values.config.awsRegion | quote }}

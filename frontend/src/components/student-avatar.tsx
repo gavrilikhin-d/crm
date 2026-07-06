@@ -30,9 +30,11 @@ function StudentAvatar({
   className?: string;
   badge?: "confirmed" | "declined";
 }) {
+  const avatarSrc = getAvatarSrc(student);
+
   return (
     <Avatar size={size} className={className}>
-      <AvatarImage src={getAvatarSrc(student)} alt={student.fullName} />
+      <AvatarImage key={avatarSrc} src={avatarSrc} alt={student.fullName} />
       <AvatarFallback>{getStudentInitials(student.fullName)}</AvatarFallback>
       {badge === "confirmed" ? (
         <AvatarBadge className="translate-x-1/4 translate-y-1/4 bg-green-600 text-white ring-card dark:bg-green-500">

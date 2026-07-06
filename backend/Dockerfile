@@ -29,8 +29,6 @@ ENV SENTRY_RELEASE=$SENTRY_RELEASE
 
 COPY --from=builder /app/backend/dist ./dist
 
-VOLUME ["/app/backend/data"]
-
 EXPOSE 4000
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=20s \

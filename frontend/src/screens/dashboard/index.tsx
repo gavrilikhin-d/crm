@@ -94,6 +94,9 @@ function mergePagedSnapshot(current: Snapshot | null, next: Snapshot, months: st
   return {
     ...current,
     ...next,
+    students: mergeById(current.students, next.students),
+    lessonPackages: mergeById(current.lessonPackages, next.lessonPackages),
+    payments: mergeById(current.payments, next.payments),
     lessons: mergeById(retainedLessons, next.lessons),
     vacationPeriods: mergeById(retainedVacationPeriods, next.vacationPeriods)
   };
@@ -378,6 +381,32 @@ export default function Home() {
     );
   }, []);
 
+  const applyStudentUpsert = useCallback((payload: unknown) => {
+    const student = payload as Student;
+    if (!student?.id) {
+      return;
+    }
+
+    setSnapshot((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const existingIndex = current.students.findIndex((item) => item.id === student.id);
+      const students =
+        existingIndex === -1
+          ? [...current.students, student]
+          : current.students.map((item, index) => (index === existingIndex ? student : item));
+      return { ...current, students };
+    });
+  }, []);
+
+  const applyStudentDelete = useCallback((studentId: string) => {
+    setSnapshot((current) =>
+      current ? { ...current, students: current.students.filter((student) => student.id !== studentId) } : current
+    );
+  }, []);
+
   const invalidateCalendar = useCallback(async (months?: string[]) => {
     const loadedMonths = loadedMonthKeysRef.current;
     const requestedMonths = months?.length
@@ -403,6 +432,8 @@ export default function Home() {
       onLessonDelete: applyLessonDelete,
       onPackageUpsert: applyPackageUpsert,
       onPackageDelete: applyPackageDelete,
+      onStudentUpsert: applyStudentUpsert,
+      onStudentDelete: applyStudentDelete,
       onCalendarInvalidate: invalidateCalendar,
       getSnapshotMonths: getSnapshotMonthsForRequest
     });
@@ -473,32 +504,50 @@ export default function Home() {
   }
 
   async function handleStudentCreate(payload: { fullName: string; avatarFile: File | null }) {
-    await withRefresh(async () => {
+    try {
       const body: Record<string, unknown> = { fullName: payload.fullName.trim() };
       if (payload.avatarFile) {
         body.avatarDataUrl = await readFileAsDataUrl(payload.avatarFile);
       }
-      await api("/api/students", { method: "POST", body });
+      const student = await api<Student>("/api/students", { method: "POST", body });
+      applyStudentUpsert(student);
       setActiveModal(null);
-      return t("toast.studentAdded");
-    });
+      toast.success(t("toast.studentAdded"));
+    } catch (error) {
+      const apiError = error as Error & { code?: string };
+      if (apiError.code === STALE_SESSION_ERROR_CODE) {
+        return;
+      }
+      if (apiError.code === "student_limit") {
+        toast.error(t("plan.limit.students"));
+        return;
+      }
+      toast.error(apiError.message || t("toast.actionFailed"));
+    }
   }
 
   async function handleStudentUpdate(
     studentId: string,
     payload: { fullName: string; avatarFile: File | null; removeAvatar: boolean }
   ) {
-    await withRefresh(async () => {
+    try {
       const body: Record<string, unknown> = { fullName: payload.fullName.trim() };
       if (payload.removeAvatar) {
         body.avatarDataUrl = null;
       } else if (payload.avatarFile) {
         body.avatarDataUrl = await readFileAsDataUrl(payload.avatarFile);
       }
-      await api(`/api/students/${studentId}`, { method: "PATCH", body });
+      const student = await api<Student>(`/api/students/${studentId}`, { method: "PATCH", body });
+      applyStudentUpsert(student);
       setEditingStudent(null);
-      return t("toast.studentUpdated");
-    });
+      toast.success(t("toast.studentUpdated"));
+    } catch (error) {
+      const apiError = error as Error & { code?: string };
+      if (apiError.code === STALE_SESSION_ERROR_CODE) {
+        return;
+      }
+      toast.error(apiError.message || t("toast.actionFailed"));
+    }
   }
 
   async function handleLessonSubmit(event: FormEvent<HTMLFormElement>) {
@@ -568,13 +617,24 @@ export default function Home() {
     const data = formData(form);
     data.lessonCount = Number(data.lessonCount);
     data.price = Number(data.price);
-    await withRefresh(async () => {
+
+    try {
       const lessonPackage = await api<LessonPackage>("/api/lesson-packages", { method: "POST", body: data });
       applyPackageUpsert(lessonPackage);
       form.reset();
       setActiveModal(null);
-      return t("toast.packageAdded");
-    });
+      toast.success(t("toast.packageAdded"));
+    } catch (error) {
+      const apiError = error as Error & { code?: string };
+      if (apiError.code === STALE_SESSION_ERROR_CODE) {
+        return;
+      }
+      if (apiError.code === "package_limit") {
+        toast.error(t("plan.limit.packages"));
+        return;
+      }
+      toast.error(apiError.message || t("toast.actionFailed"));
+    }
   }
 
   async function handleCurrencyChange(nextCurrency: CurrencyCode) {

@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { SignJWT } from "jose";
+import { createAccessTokenForSession } from "@/lib/access-token";
 
 export async function GET() {
   const session = await auth();
@@ -7,20 +7,7 @@ export async function GET() {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const secret = process.env.AUTH_SECRET;
-  if (!secret) {
-    return Response.json({ error: "AUTH_SECRET is not configured" }, { status: 500 });
-  }
-
-  const token = await new SignJWT({
-    email: session.user.email,
-    plan: session.user.plan
-  })
-    .setSubject(session.user.id)
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("7d")
-    .sign(new TextEncoder().encode(secret));
+  const token = await createAccessTokenForSession(session);
 
   return Response.json({ token });
 }

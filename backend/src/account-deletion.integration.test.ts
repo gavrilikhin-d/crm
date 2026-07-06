@@ -15,7 +15,7 @@ import {
   telegramInteractions,
   vacationPeriods
 } from "./db/schema";
-import { readStudentAvatar } from "./avatars";
+import { isAvatarStorageConfigured, readStudentAvatar } from "./avatars";
 import { db } from "./db/client";
 import { findStudentByTelegramUser, getAccountById } from "./db/repository";
 import { futureDate, createTestAccount, isDatabaseAvailable } from "./test/fixtures";
@@ -46,7 +46,7 @@ describe.skipIf(!databaseAvailable)("account deletion integration", () => {
     try {
       const alice = await store.createStudent(ctx, {
         fullName: "Alice Account Delete",
-        avatarDataUrl: tinyPngDataUrl()
+        ...(canRunAvatarStorageIntegrationTests() ? { avatarDataUrl: tinyPngDataUrl() } : {})
       });
       const bob = await store.createStudent(ctx, { fullName: "Bob Account Delete" });
       const linked = await store.bindTelegramChat(alice.telegramBindToken, "chat-1", "user-1", "alice");
@@ -90,13 +90,17 @@ describe.skipIf(!databaseAvailable)("account deletion integration", () => {
       const snapshotBeforeDelete = await store.getSnapshot(ctx);
       const scheduleId = snapshotBeforeDelete.recurringSchedules[0]?.id;
       expect(scheduleId).toBeDefined();
-      expect(await readStudentAvatar(alice.id)).not.toBeNull();
+      if (canRunAvatarStorageIntegrationTests()) {
+        expect(await readStudentAvatar(alice.id)).not.toBeNull();
+      }
       expect(await findStudentByTelegramUser(linked.telegramUserId!)).not.toBeNull();
 
       await store.deleteAccount(ctx);
 
       expect(await getAccountById(ctx.accountId)).toBeNull();
-      expect(await readStudentAvatar(alice.id)).toBeNull();
+      if (canRunAvatarStorageIntegrationTests()) {
+        expect(await readStudentAvatar(alice.id)).toBeNull();
+      }
       expect(await findStudentByTelegramUser(linked.telegramUserId!)).toBeNull();
       await expect(store.getTelegramStudentProfile(linked.telegramUserId!)).rejects.toThrow("Student not found");
 
@@ -196,4 +200,13 @@ async function fetchRequestBody(init: RequestInit | undefined): Promise<Record<s
 
 function tinyPngDataUrl(): string {
   return "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+}
+
+function canRunAvatarStorageIntegrationTests(): boolean {
+  if (!isAvatarStorageConfigured()) {
+    return false;
+  }
+
+  // CI may expose S3_BUCKET without AWS credentials; skip live S3 checks unless creds exist.
+  return Boolean(process.env.AWS_ACCESS_KEY_ID?.trim() || process.env.AWS_SECRET_ACCESS_KEY?.trim());
 }

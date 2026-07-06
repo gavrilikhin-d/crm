@@ -116,8 +116,17 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
       } else if (payload.avatarFile) {
         body.avatarDataUrl = await readFileAsDataUrl(payload.avatarFile);
       }
-      await api(`/api/students/${id}`, { method: "PATCH", body });
-      await loadSnapshot();
+      const updated = await api<Student>(`/api/students/${id}`, { method: "PATCH", body });
+      setSnapshot((current) => {
+        if (!current) {
+          return current;
+        }
+
+        return {
+          ...current,
+          students: current.students.map((item) => (item.id === updated.id ? updated : item))
+        };
+      });
       setEditing(false);
       toast.success(t("toast.studentUpdated"));
     } catch (updateError) {

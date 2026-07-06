@@ -14,6 +14,7 @@ import type {
   ParticipantStatus,
   RecurringDeleteScope,
   Reminder,
+  Student,
   StudentBalance,
   VacationPeriod
 } from "@crm/shared";
@@ -54,6 +55,8 @@ type SnapshotWebSocketMessage =
   | { type: "lesson:delete"; payload: { lessonId: string } }
   | { type: "package:upsert"; payload: LessonPackage }
   | { type: "package:delete"; payload: { packageId: string } }
+  | { type: "student:upsert"; payload: Student }
+  | { type: "student:delete"; payload: { studentId: string } }
   | { type: "calendar:invalidate"; payload?: { months?: string[] } }
   | { type: "snapshot:stale" };
 
@@ -387,28 +390,28 @@ async function googleCalendarCallback(request: IncomingMessage, response: Server
 async function createStudent(request: IncomingMessage, response: ServerResponse, _match: RegExpMatchArray, ctx?: AuthContext) {
   const body = await readJson(request);
   requireFields(body, ["fullName"]);
-  jsonOk(
-    response,
-    await store.createStudent(ctx!, body as {
-      fullName: string;
-      avatarDataUrl?: string;
-      telegramUsername?: string;
-      telegramChatId?: string;
-      defaultLessonPrice?: number;
-    }),
-    201
-  );
-  broadcastSnapshotMessage(ctx!, { type: "snapshot:stale" });
+  const student = await store.createStudent(ctx!, body as {
+    fullName: string;
+    avatarDataUrl?: string;
+    telegramUsername?: string;
+    telegramChatId?: string;
+    defaultLessonPrice?: number;
+  });
+  jsonOk(response, student, 201);
+  broadcastSnapshotMessage(ctx!, { type: "student:upsert", payload: student });
 }
 
 async function updateStudent(request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray, ctx?: AuthContext) {
-  jsonOk(response, await store.updateStudent(ctx!, match[1], await readJson(request)));
-  broadcastSnapshotMessage(ctx!, { type: "snapshot:stale" });
+  const student = await store.updateStudent(ctx!, match[1], await readJson(request));
+  jsonOk(response, student);
+  broadcastSnapshotMessage(ctx!, { type: "student:upsert", payload: student });
 }
 
 async function deleteStudent(_request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray, ctx?: AuthContext) {
-  await store.deleteStudent(ctx!, match[1]);
+  const studentId = match[1];
+  await store.deleteStudent(ctx!, studentId);
   jsonOk(response, { ok: true });
+  broadcastSnapshotMessage(ctx!, { type: "student:delete", payload: { studentId } });
   broadcastSnapshotMessage(ctx!, { type: "snapshot:stale" });
 }
 
