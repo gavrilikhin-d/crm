@@ -12,6 +12,7 @@ const en = {
   auth: {
     loginDescription: "Sign in with Google to manage your students and schedule.",
     signInWithGoogle: "Sign in with Google",
+    signInWithLocalOidc: "Sign in with Local OIDC",
     signOut: "Sign out"
   },
   plan: {

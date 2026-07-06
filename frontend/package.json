@@ -9,6 +9,7 @@
     "build": "next build --turbopack",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:e2e": "playwright test --config playwright.config.ts",
     "lint": "eslint .",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",

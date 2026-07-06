@@ -245,7 +245,10 @@ function useSnapshotAutoRefresh({
     };
   }, [connected, runRefresh]);
 
-  const refreshNow = useCallback(() => runRefresh("manual"), [runRefresh]);
+  const refreshNow = useCallback(
+    (options?: Pick<SnapshotLoadOptions, "calendarOnly">) => runRefresh("manual", options),
+    [runRefresh]
+  );
 
   return {
     secondsUntilRefresh: secondsUntilReconnect,

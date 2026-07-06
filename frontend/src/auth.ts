@@ -1,5 +1,6 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
+import type { OIDCConfig } from "@auth/core/providers/oauth";
 import type { AccountPlan } from "@crm/shared";
 import * as Sentry from "@sentry/nextjs";
 
@@ -16,6 +17,14 @@ declare module "next-auth" {
 }
 
 const backendUrl = process.env.BACKEND_INTERNAL_URL ?? "http://localhost:4000";
+const e2eOidcProviderId = "e2e-oidc";
+
+type LocalOidcProfile = {
+  sub: string;
+  email?: string;
+  name?: string;
+  picture?: string;
+};
 
 function authSyncSecret(): string {
   const syncSecret = process.env.AUTH_SYNC_SECRET?.trim();
@@ -31,26 +40,54 @@ function authSyncSecret(): string {
   return authSecret;
 }
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
-  secret: process.env.AUTH_SECRET,
-  trustHost: true,
-  providers: [
+function isE2eAuthEnabled(): boolean {
+  return process.env.E2E_AUTH === "1";
+}
+
+function authProviders() {
+  const localOidcProvider = {
+    id: e2eOidcProviderId,
+    name: "Local OIDC",
+    type: "oidc",
+    issuer: process.env.AUTH_E2E_OIDC_ISSUER ?? "http://localhost:5556/dex",
+    clientId: process.env.AUTH_E2E_OIDC_ID ?? "crm-e2e",
+    clientSecret: process.env.AUTH_E2E_OIDC_SECRET ?? "crm-e2e-secret",
+    checks: ["pkce", "state"],
+    profile(profile) {
+      return {
+        id: profile.sub,
+        email: profile.email,
+        name: profile.name ?? profile.email ?? profile.sub,
+        image: profile.picture ?? null
+      };
+    }
+  } satisfies OIDCConfig<LocalOidcProfile>;
+
+  return [
     Google({
       clientId: process.env.AUTH_GOOGLE_ID,
       clientSecret: process.env.AUTH_GOOGLE_SECRET
-    })
-  ],
+    }),
+    ...(isE2eAuthEnabled() ? [localOidcProvider] : [])
+  ];
+}
+
+export const { handlers, auth, signIn, signOut } = NextAuth({
+  secret: process.env.AUTH_SECRET,
+  trustHost: true,
+  providers: authProviders(),
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
   callbacks: {
     async jwt({ token, account, profile }) {
-      if (account?.provider === "google" && profile) {
+      if ((account?.provider === "google" || account?.provider === e2eOidcProviderId) && profile) {
         if (!profile.sub || !profile.email) {
-          console.error("[auth] Google profile missing sub or email", {
+          console.error("[auth] OAuth profile missing sub or email", {
+            provider: account.provider,
             sub: profile.sub,
             email: profile.email
           });
-          throw new Error("Google profile is incomplete");
+          throw new Error("OAuth profile is incomplete");
         }
 
         let response: Response;
@@ -71,7 +108,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                   googleSub: profile.sub,
                   email: profile.email,
                   name: profile.name ?? profile.email,
-                  image: profile.picture
+                  image: profile.picture,
+                  plan: account.provider === e2eOidcProviderId && isE2eAuthEnabled() ? "premium" : undefined
                 })
               });
             }

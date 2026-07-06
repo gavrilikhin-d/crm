@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: crm
       POSTGRES_DB: crm
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
@@ -16,6 +16,18 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  oidc:
+    image: ghcr.io/dexidp/dex:latest
+    profiles:
+      - e2e
+    networks:
+      - crm
+    command: ["dex", "serve", "/etc/dex/config.yaml"]
+    volumes:
+      - ./e2e/dex/config.yaml:/etc/dex/config.yaml:ro
+    ports:
+      - "5556:5556"
 
   backend:
     build:

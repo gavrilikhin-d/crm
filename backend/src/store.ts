@@ -2,6 +2,7 @@ import { nanoid } from "nanoid";
 import type {
   Account,
   AccountInfo,
+  AccountPlan,
   AppSettings,
   BalanceAdjustment,
   Database,
@@ -125,6 +126,7 @@ export class Store {
     email: string;
     name: string;
     image?: string;
+    plan?: AccountPlan;
   }): Promise<Account> {
     return upsertAccountByGoogle(input);
   }
