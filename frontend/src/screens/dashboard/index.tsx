@@ -29,6 +29,7 @@ import { MobileFab } from "@/screens/dashboard/components/mobile-fab";
 import { Modal } from "@/screens/dashboard/components/modal";
 import { lessonDurationByType, pageHeaderClass } from "@/screens/dashboard/constants";
 import type { ActiveModal, ActiveSection, ScheduleView, Snapshot } from "@/screens/dashboard/types";
+import { getMillisecondsUntilNextMinute } from "@/screens/dashboard/utils/current-time";
 import { formData } from "@/screens/dashboard/utils/form-data";
 import { PaymentsView } from "@/screens/payments";
 import { PaymentForm } from "@/screens/payments/components/payment-form";
@@ -382,8 +383,20 @@ export default function Home() {
   }, [loadSnapshot, selectedDate, snapshot]);
 
   useEffect(() => {
-    const interval = window.setInterval(() => setCurrentTime(new Date()), 60_000);
-    return () => window.clearInterval(interval);
+    let timeout: number | undefined;
+
+    function syncCurrentTime() {
+      const now = new Date();
+      setCurrentTime(now);
+      timeout = window.setTimeout(syncCurrentTime, getMillisecondsUntilNextMinute(now) + 100);
+    }
+
+    syncCurrentTime();
+    return () => {
+      if (timeout !== undefined) {
+        window.clearTimeout(timeout);
+      }
+    };
   }, []);
 
   async function withRefresh(action: () => Promise<string | void>) {
