@@ -29,6 +29,22 @@ services:
     ports:
       - "5556:5556"
 
+  minio:
+    image: minio/minio:latest
+    profiles:
+      - storage
+    networks:
+      - crm
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: crm
+      MINIO_ROOT_PASSWORD: crmcrmcrm
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
   backend:
     build:
       context: .
@@ -98,6 +114,7 @@ services:
 
 volumes:
   pg_data:
+  minio_data:
 
 networks:
   crm:

@@ -70,8 +70,6 @@ services:
       PORT: 4000
       SENTRY_RELEASE: ${SENTRY_RELEASE:-}
       DATABASE_URL: postgres://${POSTGRES_USER:-crm}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-crm}
-    volumes:
-      - backend_data:/app/backend/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -211,7 +209,6 @@ services:
 
 volumes:
   pg_data:
-  backend_data:
   caddy_data:
   caddy_config:
 

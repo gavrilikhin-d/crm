@@ -66,7 +66,12 @@ const profiles: Record<
       { key: "AUTH_SECRET", hint: "generate with: openssl rand -base64 32" },
       { key: "INTERNAL_API_TOKEN", hint: "generate with: openssl rand -base64 32" }
     ],
-    recommended: [{ key: "BACKEND_SENTRY_DSN", hint: sentryHints.BACKEND_SENTRY_DSN }],
+    recommended: [
+      { key: "BACKEND_SENTRY_DSN", hint: sentryHints.BACKEND_SENTRY_DSN },
+      { key: "S3_BUCKET", hint: "S3 bucket for student avatars" },
+      { key: "AWS_REGION", hint: "eu-central-1" },
+      { key: "S3_ENDPOINT", hint: "optional; http://localhost:9000 for local MinIO" }
+    ],
     checkPostgres: true
   },
   bot: {

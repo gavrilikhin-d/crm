@@ -17,6 +17,8 @@ type SnapshotWebSocketMessage =
   | { type: "lesson:delete"; payload?: { lessonId?: unknown } }
   | { type: "package:upsert"; payload?: unknown }
   | { type: "package:delete"; payload?: { packageId?: unknown } }
+  | { type: "student:upsert"; payload?: unknown }
+  | { type: "student:delete"; payload?: { studentId?: unknown } }
   | { type: "calendar:invalidate"; payload?: { months?: unknown } }
   | { type: "snapshot:stale" }
   | { type: "error"; error?: unknown };
@@ -28,6 +30,8 @@ type UseSnapshotAutoRefreshOptions = {
   onLessonDelete?: (lessonId: string) => void;
   onPackageUpsert?: (lessonPackage: unknown) => void;
   onPackageDelete?: (packageId: string) => void;
+  onStudentUpsert?: (student: unknown) => void;
+  onStudentDelete?: (studentId: string) => void;
   onCalendarInvalidate?: (months?: string[]) => void | Promise<void>;
   getSnapshotMonths?: () => string[];
   reconnectMs?: number;
@@ -63,6 +67,8 @@ function useSnapshotAutoRefresh({
   onLessonDelete,
   onPackageUpsert,
   onPackageDelete,
+  onStudentUpsert,
+  onStudentDelete,
   onCalendarInvalidate,
   getSnapshotMonths,
   reconnectMs = 5_000
@@ -78,6 +84,8 @@ function useSnapshotAutoRefresh({
   const onLessonDeleteRef = useRef(onLessonDelete);
   const onPackageUpsertRef = useRef(onPackageUpsert);
   const onPackageDeleteRef = useRef(onPackageDelete);
+  const onStudentUpsertRef = useRef(onStudentUpsert);
+  const onStudentDeleteRef = useRef(onStudentDelete);
   const onCalendarInvalidateRef = useRef(onCalendarInvalidate);
   const getSnapshotMonthsRef = useRef(getSnapshotMonths);
   const runningRef = useRef(false);
@@ -106,6 +114,14 @@ function useSnapshotAutoRefresh({
   useEffect(() => {
     onPackageDeleteRef.current = onPackageDelete;
   }, [onPackageDelete]);
+
+  useEffect(() => {
+    onStudentUpsertRef.current = onStudentUpsert;
+  }, [onStudentUpsert]);
+
+  useEffect(() => {
+    onStudentDeleteRef.current = onStudentDelete;
+  }, [onStudentDelete]);
 
   useEffect(() => {
     onCalendarInvalidateRef.current = onCalendarInvalidate;
@@ -215,6 +231,16 @@ function useSnapshotAutoRefresh({
           }
           if (message.type === "package:delete" && typeof message.payload?.packageId === "string") {
             onPackageDeleteRef.current?.(message.payload.packageId);
+            markRefreshed();
+            return;
+          }
+          if (message.type === "student:upsert" && message.payload) {
+            onStudentUpsertRef.current?.(message.payload);
+            markRefreshed();
+            return;
+          }
+          if (message.type === "student:delete" && typeof message.payload?.studentId === "string") {
+            onStudentDeleteRef.current?.(message.payload.studentId);
             markRefreshed();
             return;
           }
