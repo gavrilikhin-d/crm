@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { eq } from "drizzle-orm";
 import { students } from "./db/schema";
 import { db } from "./db/client";
@@ -8,7 +8,7 @@ const deleteStudentAvatar = mock(async (_studentId: string) => {});
 const deleteStudentAvatars = mock(async (_studentIds: string[]) => {});
 
 mock.module("./avatars", () => ({
-  isAvatarStorageConfigured: () => true,
+  isAvatarStorageConfigured: () => false,
   readStudentAvatar: async () => null,
   saveStudentAvatar: async () => {},
   deleteStudentAvatar,
@@ -25,6 +25,10 @@ describe.skipIf(!databaseAvailable)("avatar deletion integration", () => {
   beforeEach(() => {
     deleteStudentAvatar.mockClear();
     deleteStudentAvatars.mockClear();
+  });
+
+  afterAll(() => {
+    mock.restore();
   });
 
   test("deleteStudent removes the avatar from S3", async () => {

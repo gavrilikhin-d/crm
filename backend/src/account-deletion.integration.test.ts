@@ -46,7 +46,7 @@ describe.skipIf(!databaseAvailable)("account deletion integration", () => {
     try {
       const alice = await store.createStudent(ctx, {
         fullName: "Alice Account Delete",
-        ...(isAvatarStorageConfigured() ? { avatarDataUrl: tinyPngDataUrl() } : {})
+        ...(canRunAvatarStorageIntegrationTests() ? { avatarDataUrl: tinyPngDataUrl() } : {})
       });
       const bob = await store.createStudent(ctx, { fullName: "Bob Account Delete" });
       const linked = await store.bindTelegramChat(alice.telegramBindToken, "chat-1", "user-1", "alice");
@@ -90,7 +90,7 @@ describe.skipIf(!databaseAvailable)("account deletion integration", () => {
       const snapshotBeforeDelete = await store.getSnapshot(ctx);
       const scheduleId = snapshotBeforeDelete.recurringSchedules[0]?.id;
       expect(scheduleId).toBeDefined();
-      if (isAvatarStorageConfigured()) {
+      if (canRunAvatarStorageIntegrationTests()) {
         expect(await readStudentAvatar(alice.id)).not.toBeNull();
       }
       expect(await findStudentByTelegramUser(linked.telegramUserId!)).not.toBeNull();
@@ -98,7 +98,7 @@ describe.skipIf(!databaseAvailable)("account deletion integration", () => {
       await store.deleteAccount(ctx);
 
       expect(await getAccountById(ctx.accountId)).toBeNull();
-      if (isAvatarStorageConfigured()) {
+      if (canRunAvatarStorageIntegrationTests()) {
         expect(await readStudentAvatar(alice.id)).toBeNull();
       }
       expect(await findStudentByTelegramUser(linked.telegramUserId!)).toBeNull();
@@ -200,4 +200,13 @@ async function fetchRequestBody(init: RequestInit | undefined): Promise<Record<s
 
 function tinyPngDataUrl(): string {
   return "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+}
+
+function canRunAvatarStorageIntegrationTests(): boolean {
+  if (!isAvatarStorageConfigured()) {
+    return false;
+  }
+
+  // CI may expose S3_BUCKET without AWS credentials; skip live S3 checks unless creds exist.
+  return Boolean(process.env.AWS_ACCESS_KEY_ID?.trim() || process.env.AWS_SECRET_ACCESS_KEY?.trim());
 }
