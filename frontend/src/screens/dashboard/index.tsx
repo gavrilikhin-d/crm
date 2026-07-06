@@ -11,7 +11,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useSnapshotAutoRefresh } from "@/hooks/use-snapshot-auto-refresh";
 import { useI18n } from "@/i18n/context";
 import { formatFullDate } from "@/i18n/format";
-import { api } from "@/lib/api";
+import { api, STALE_SESSION_ERROR_CODE } from "@/lib/api";
 import { readFileAsDataUrl } from "@/lib/files";
 import { dedupeLessonsByOccurrence } from "@crm/shared/lesson-dedupe";
 import type {
@@ -307,6 +307,10 @@ export default function Home() {
         applyPagedSnapshot(await api<Snapshot>(getSnapshotPath(targetMonths)), targetMonths);
       }
     } catch (error) {
+      const apiError = error as Error & { code?: string };
+      if (apiError.code === STALE_SESSION_ERROR_CODE) {
+        return;
+      }
       if (!options?.silent) {
         toast.error(error instanceof Error ? error.message : t("toast.loadFailed"));
       }
@@ -348,6 +352,32 @@ export default function Home() {
     );
   }, []);
 
+  const applyPackageUpsert = useCallback((payload: unknown) => {
+    const lessonPackage = payload as LessonPackage;
+    if (!lessonPackage?.id) {
+      return;
+    }
+
+    setSnapshot((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const existingIndex = current.lessonPackages.findIndex((item) => item.id === lessonPackage.id);
+      const lessonPackages =
+        existingIndex === -1
+          ? [...current.lessonPackages, lessonPackage]
+          : current.lessonPackages.map((item, index) => (index === existingIndex ? lessonPackage : item));
+      return { ...current, lessonPackages };
+    });
+  }, []);
+
+  const applyPackageDelete = useCallback((packageId: string) => {
+    setSnapshot((current) =>
+      current ? { ...current, lessonPackages: current.lessonPackages.filter((item) => item.id !== packageId) } : current
+    );
+  }, []);
+
   const invalidateCalendar = useCallback(async (months?: string[]) => {
     const loadedMonths = loadedMonthKeysRef.current;
     const requestedMonths = months?.length
@@ -371,6 +401,8 @@ export default function Home() {
       onSnapshot: applySocketSnapshot,
       onLessonUpsert: applyLessonUpsert,
       onLessonDelete: applyLessonDelete,
+      onPackageUpsert: applyPackageUpsert,
+      onPackageDelete: applyPackageDelete,
       onCalendarInvalidate: invalidateCalendar,
       getSnapshotMonths: getSnapshotMonthsForRequest
     });
@@ -408,6 +440,9 @@ export default function Home() {
       await refreshNow({ calendarOnly: false });
     } catch (error) {
       const apiError = error as Error & { code?: string };
+      if (apiError.code === STALE_SESSION_ERROR_CODE) {
+        return;
+      }
       switch (apiError.code) {
         case "student_limit":
           toast.error(t("plan.limit.students"));
@@ -534,7 +569,8 @@ export default function Home() {
     data.lessonCount = Number(data.lessonCount);
     data.price = Number(data.price);
     await withRefresh(async () => {
-      await api("/api/lesson-packages", { method: "POST", body: data });
+      const lessonPackage = await api<LessonPackage>("/api/lesson-packages", { method: "POST", body: data });
+      applyPackageUpsert(lessonPackage);
       form.reset();
       setActiveModal(null);
       return t("toast.packageAdded");
@@ -697,6 +733,7 @@ export default function Home() {
 
     await withRefresh(async () => {
       await api(`/api/lesson-packages/${lessonPackage.id}`, { method: "DELETE" });
+      applyPackageDelete(lessonPackage.id);
       return t("toast.packageDeleted");
     });
   }

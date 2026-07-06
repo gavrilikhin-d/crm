@@ -8,6 +8,7 @@ import type {
   AccountPlan,
   Database,
   Lesson,
+  LessonPackage,
   LessonType,
   PaymentMethod,
   ParticipantStatus,
@@ -51,6 +52,8 @@ type SnapshotWebSocketMessage =
   | { type: "snapshot"; payload: SnapshotPayload }
   | { type: "lesson:upsert"; payload: Lesson }
   | { type: "lesson:delete"; payload: { lessonId: string } }
+  | { type: "package:upsert"; payload: LessonPackage }
+  | { type: "package:delete"; payload: { packageId: string } }
   | { type: "calendar:invalidate"; payload?: { months?: string[] } }
   | { type: "snapshot:stale" };
 
@@ -180,7 +183,7 @@ async function startServer() {
           return;
         }
         const message = error instanceof Error ? error.message : "Unexpected error";
-        if (message === "Unauthorized" || message === "Invalid token payload") {
+        if (message === "Unauthorized" || message === "Invalid token payload" || message === "Account not found") {
           jsonError(response, error, 401);
           return;
         }
@@ -412,18 +415,19 @@ async function deleteStudent(_request: IncomingMessage, response: ServerResponse
 async function createLessonPackage(request: IncomingMessage, response: ServerResponse, _match: RegExpMatchArray, ctx?: AuthContext) {
   const body = await readJson(request);
   requireFields(body, ["name", "lessonCount", "price"]);
-  jsonOk(
-    response,
-    await store.createLessonPackage(ctx!, body as { name: string; lessonCount: number; price: number; currency?: string }),
-    201
+  const lessonPackage = await store.createLessonPackage(
+    ctx!,
+    body as { name: string; lessonCount: number; price: number; currency?: string }
   );
-  broadcastSnapshotMessage(ctx!, { type: "snapshot:stale" });
+  jsonOk(response, lessonPackage, 201);
+  broadcastSnapshotMessage(ctx!, { type: "package:upsert", payload: lessonPackage });
 }
 
 async function deleteLessonPackage(_request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray, ctx?: AuthContext) {
-  await store.deleteLessonPackage(ctx!, match[1]);
+  const packageId = match[1];
+  await store.deleteLessonPackage(ctx!, packageId);
   jsonOk(response, { ok: true });
-  broadcastSnapshotMessage(ctx!, { type: "snapshot:stale" });
+  broadcastSnapshotMessage(ctx!, { type: "package:delete", payload: { packageId } });
 }
 
 async function createLesson(request: IncomingMessage, response: ServerResponse, _match: RegExpMatchArray, ctx?: AuthContext) {
