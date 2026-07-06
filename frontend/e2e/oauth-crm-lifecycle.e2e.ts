@@ -103,6 +103,7 @@ async function createPackage(page: Page, packageName: string) {
   await submitAndWait(page, "/api/lesson-packages", () =>
     page.getByRole("button", { name: "Add package" }).last().click()
   );
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByText(packageName)).toBeVisible();
 }
 

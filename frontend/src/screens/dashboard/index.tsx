@@ -94,6 +94,9 @@ function mergePagedSnapshot(current: Snapshot | null, next: Snapshot, months: st
   return {
     ...current,
     ...next,
+    students: mergeById(current.students, next.students),
+    lessonPackages: mergeById(current.lessonPackages, next.lessonPackages),
+    payments: mergeById(current.payments, next.payments),
     lessons: mergeById(retainedLessons, next.lessons),
     vacationPeriods: mergeById(retainedVacationPeriods, next.vacationPeriods)
   };
@@ -614,13 +617,24 @@ export default function Home() {
     const data = formData(form);
     data.lessonCount = Number(data.lessonCount);
     data.price = Number(data.price);
-    await withRefresh(async () => {
+
+    try {
       const lessonPackage = await api<LessonPackage>("/api/lesson-packages", { method: "POST", body: data });
       applyPackageUpsert(lessonPackage);
       form.reset();
       setActiveModal(null);
-      return t("toast.packageAdded");
-    });
+      toast.success(t("toast.packageAdded"));
+    } catch (error) {
+      const apiError = error as Error & { code?: string };
+      if (apiError.code === STALE_SESSION_ERROR_CODE) {
+        return;
+      }
+      if (apiError.code === "package_limit") {
+        toast.error(t("plan.limit.packages"));
+        return;
+      }
+      toast.error(apiError.message || t("toast.actionFailed"));
+    }
   }
 
   async function handleCurrencyChange(nextCurrency: CurrencyCode) {
