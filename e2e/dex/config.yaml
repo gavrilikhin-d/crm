@@ -1,0 +1,26 @@
+issuer: http://localhost:5556/dex
+
+storage:
+  type: memory
+
+web:
+  http: 0.0.0.0:5556
+
+oauth2:
+  skipApprovalScreen: true
+
+staticClients:
+  - id: crm-e2e
+    name: CRM E2E
+    secret: crm-e2e-secret
+    redirectURIs:
+      - http://localhost:3000/api/auth/callback/e2e-oidc
+      - http://localhost:3100/api/auth/callback/e2e-oidc
+
+enablePasswordDB: true
+
+staticPasswords:
+  - email: e2e.teacher@example.com
+    hash: "$2a$10$uUOY306Ht87oLUraIjxhj.ItcgQy7MPuY2l2uKfIhDrKn0AXdocYq"
+    username: e2e-teacher
+    userID: e2e-teacher

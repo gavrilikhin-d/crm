@@ -36,6 +36,10 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "bun --filter @crm/shared test && bun --filter @crm/bot test && bun --filter @crm/reminder test && bun --filter @crm/backend test",
+    "test:e2e:services": "POSTGRES_PORT=${E2E_POSTGRES_PORT:-55432} docker compose --profile e2e up -d postgres && POSTGRES_PORT=${E2E_POSTGRES_PORT:-55432} docker compose --profile e2e up -d --force-recreate oidc",
+    "test:e2e:install-browsers": "playwright install chromium",
+    "test:e2e:setup-db": "E2E_DATABASE_URL=${E2E_DATABASE_URL:-postgres://crm:crm@localhost:${E2E_POSTGRES_PORT:-55432}/crm_e2e} bun e2e/setup-db.ts",
+    "test:e2e": "bun run test:e2e:services && bun run test:e2e:setup-db && DATABASE_URL=${E2E_DATABASE_URL:-postgres://crm:crm@localhost:${E2E_POSTGRES_PORT:-55432}/crm_e2e} bun run db:migrate && E2E_DATABASE_URL=${E2E_DATABASE_URL:-postgres://crm:crm@localhost:${E2E_POSTGRES_PORT:-55432}/crm_e2e} bun --filter @crm/frontend test:e2e",
     "seed": "cd backend && bun run seed",
     "db:push": "cd backend && bun run db:push",
     "db:migrate": "cd backend && bun run db:migrate",
@@ -56,6 +60,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
+    "@playwright/test": "^1.61.1",
     "@sentry/cli": "^3.6.0",
     "eslint": "^9.0.0",
     "eslint-config-next": "^16.2.9",

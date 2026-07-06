@@ -5,6 +5,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { Duplex } from "node:stream";
 import { WebSocketServer, type WebSocket } from "ws";
 import type {
+  AccountPlan,
   Database,
   Lesson,
   LessonType,
@@ -216,15 +217,21 @@ async function syncAccount(request: IncomingMessage, response: ServerResponse) {
   assertAuthSyncSecret(request);
   const body = await readJson(request);
   requireFields(body, ["googleSub", "email", "name"]);
+  const e2ePlan = process.env.E2E_AUTH === "1" ? accountPlanValue(body.plan) : undefined;
   jsonOk(
     response,
     await store.syncAccount({
       googleSub: String(body.googleSub),
       email: String(body.email),
       name: String(body.name),
-      image: stringValue(body.image)
+      image: stringValue(body.image),
+      plan: e2ePlan
     })
   );
+}
+
+function accountPlanValue(value: unknown): AccountPlan | undefined {
+  return value === "free" || value === "standard" || value === "premium" ? value : undefined;
 }
 
 async function getAccount(_request: IncomingMessage, response: ServerResponse, _match: RegExpMatchArray, ctx?: AuthContext) {

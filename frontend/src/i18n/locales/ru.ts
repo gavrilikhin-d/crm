@@ -6,6 +6,7 @@ const ru = {
   auth: {
     loginDescription: "Войдите через Google, чтобы управлять своими учениками и расписанием.",
     signInWithGoogle: "Войти через Google",
+    signInWithLocalOidc: "Войти через Local OIDC",
     signOut: "Выйти"
   },
   plan: {

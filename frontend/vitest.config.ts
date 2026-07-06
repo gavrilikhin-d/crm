@@ -17,11 +17,13 @@ export default defineConfig({
     include: ['@storybook/nextjs-vite'],
   },
   test: {
+    exclude: ['e2e/**', 'node_modules/**', 'dist/**', '.next/**'],
     projects: [
       {
         test: {
           name: 'unit',
           include: ['src/**/*.test.{ts,tsx}'],
+          exclude: ['e2e/**'],
           environment: 'node',
         },
       },
@@ -34,6 +36,7 @@ export default defineConfig({
         ],
         test: {
           name: 'storybook',
+          exclude: ['e2e/**'],
           browser: {
             enabled: true,
             headless: true,

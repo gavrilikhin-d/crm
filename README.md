@@ -79,6 +79,52 @@ bun run test
 bun run storybook
 ```
 
+## End-to-End Tests
+
+The e2e suite uses Playwright with a local Dex OIDC provider, so it exercises a real OAuth redirect flow without contacting Google. It uses isolated local ports by default:
+
+- Frontend: `http://localhost:3100`
+- Backend: `http://localhost:4100`
+- Dex OIDC: `http://localhost:5556/dex`
+- PostgreSQL: `localhost:55432`, database `crm_e2e`
+
+Install the Playwright browser once:
+
+```bash
+bun run test:e2e:install-browsers
+```
+
+Run the full e2e flow headlessly:
+
+```bash
+bun run test:e2e
+```
+
+This starts the e2e Postgres and Dex containers, creates/migrates the e2e database, starts the backend/frontend dev servers, and runs the Playwright spec.
+
+For Playwright UI mode, start the supporting services and migrate first:
+
+```bash
+bun run test:e2e:services
+bun run test:e2e:setup-db
+DATABASE_URL=${E2E_DATABASE_URL:-postgres://crm:crm@localhost:${E2E_POSTGRES_PORT:-55432}/crm_e2e} bun run db:migrate
+cd frontend
+E2E_DATABASE_URL=${E2E_DATABASE_URL:-postgres://crm:crm@localhost:${E2E_POSTGRES_PORT:-55432}/crm_e2e} bun run test:e2e -- --ui
+```
+
+For a visible browser without the Playwright UI:
+
+```bash
+cd frontend
+E2E_DATABASE_URL=${E2E_DATABASE_URL:-postgres://crm:crm@localhost:${E2E_POSTGRES_PORT:-55432}/crm_e2e} bun run test:e2e -- --headed
+```
+
+When finished, stop the e2e containers:
+
+```bash
+docker compose --profile e2e stop postgres oidc
+```
+
 ## Docker
 
 Local container stack:

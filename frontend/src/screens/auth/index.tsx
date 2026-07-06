@@ -7,6 +7,7 @@ import { useI18n } from "@/i18n/context";
 
 export default function LoginPage() {
   const { t } = useI18n();
+  const providerId = process.env.NEXT_PUBLIC_E2E_AUTH === "1" ? "e2e-oidc" : "google";
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-stone-50 px-4">
@@ -16,8 +17,8 @@ export default function LoginPage() {
           <CardDescription>{t("auth.loginDescription")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <Button className="w-full" type="button" onClick={() => void signIn("google", { callbackUrl: "/" })}>
-            {t("auth.signInWithGoogle")}
+          <Button className="w-full" type="button" onClick={() => void signIn(providerId, { callbackUrl: "/" })}>
+            {providerId === "e2e-oidc" ? t("auth.signInWithLocalOidc") : t("auth.signInWithGoogle")}
           </Button>
         </CardContent>
       </Card>

@@ -58,6 +58,7 @@ export async function upsertAccountByGoogle(input: {
   email: string;
   name: string;
   image?: string;
+  plan?: AccountPlan;
 }): Promise<Account> {
   const existing = await getAccountByGoogleSub(input.googleSub);
   const timestamp = new Date().toISOString();
@@ -69,6 +70,7 @@ export async function upsertAccountByGoogle(input: {
         email: input.email,
         name: input.name,
         image: input.image ?? null,
+        ...(input.plan ? { plan: input.plan } : {}),
         updatedAt: timestamp
       })
       .where(eq(accounts.id, existing.id));
@@ -78,6 +80,7 @@ export async function upsertAccountByGoogle(input: {
       email: input.email,
       name: input.name,
       image: input.image,
+      plan: input.plan ?? existing.plan,
       updatedAt: timestamp
     };
   }
@@ -87,7 +90,7 @@ export async function upsertAccountByGoogle(input: {
     email: input.email,
     name: input.name,
     image: input.image,
-    plan: "free",
+    plan: input.plan ?? "free",
     createdAt: timestamp,
     updatedAt: timestamp
   };

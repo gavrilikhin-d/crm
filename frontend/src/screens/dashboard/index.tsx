@@ -405,7 +405,7 @@ export default function Home() {
       if (result) {
         toast.success(result);
       }
-      await refreshNow();
+      await refreshNow({ calendarOnly: false });
     } catch (error) {
       const apiError = error as Error & { code?: string };
       switch (apiError.code) {
