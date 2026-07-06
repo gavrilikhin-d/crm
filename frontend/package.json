@@ -8,6 +8,7 @@
     "start": "next start",
     "build": "next build --turbopack",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "lint": "eslint .",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
