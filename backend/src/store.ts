@@ -29,6 +29,7 @@ import { isSupportedCurrency } from "@crm/shared/currency";
 import type { AuthContext } from "./auth";
 import {
   deleteStudentAvatar,
+  deleteStudentAvatars,
   ensureAvatarsDir,
   readStudentAvatar,
   saveStudentAvatar,
@@ -147,23 +148,14 @@ export class Store {
 
   async deleteAccount(ctx: AuthContext): Promise<void> {
     const db = await loadAccountDatabase(ctx.accountId);
-    const avatarStudentIds = db.students
-      .filter((student) => student.avatarUrl)
-      .map((student) => student.id);
+    const studentIds = db.students.map((student) => student.id);
     const telegramTargets = db.students.flatMap((student) =>
       student.telegramChatId ? [{ chatId: student.telegramChatId }] : []
     );
 
     await deleteAccountRecord(ctx.accountId);
     await notifyTelegramDisconnects(telegramTargets);
-
-    const avatarResults = await Promise.allSettled(
-      avatarStudentIds.map((studentId) => deleteStudentAvatar(studentId))
-    );
-    const failedAvatarDeletes = avatarResults.filter((result) => result.status === "rejected");
-    if (failedAvatarDeletes.length) {
-      console.warn(`[account-delete] Failed to delete ${failedAvatarDeletes.length} student avatar(s)`);
-    }
+    await deleteStudentAvatars(studentIds);
   }
 
   async getSnapshot(ctx: AuthContext): Promise<Database> {
@@ -364,8 +356,12 @@ export class Store {
 
     const emptyLessons = db.lessons.filter((lesson) => lesson.participants.length === 0);
 
+    const avatarDelete = deleteStudentAvatar(id).catch((error) => {
+      console.warn(`[student-delete] Failed to delete avatar for ${id}`, error);
+    });
+
     await Promise.all([
-      deleteStudentAvatar(id),
+      avatarDelete,
       deleteStudentRecords(id),
       ...emptyLessons.map((lesson) => this.purgeLesson(ctx.accountId, db, lesson)),
       ...db.lessons

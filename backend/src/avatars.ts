@@ -118,6 +118,10 @@ export async function saveStudentAvatar(studentId: string, dataUrl: string): Pro
 }
 
 export async function deleteStudentAvatar(studentId: string): Promise<void> {
+  if (!isAvatarStorageConfigured()) {
+    return;
+  }
+
   const key = await findAvatarKey(studentId);
   if (!key) {
     return;
@@ -125,6 +129,18 @@ export async function deleteStudentAvatar(studentId: string): Promise<void> {
 
   const { bucket } = getS3Config();
   await getS3Client().send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+}
+
+export async function deleteStudentAvatars(studentIds: string[]): Promise<void> {
+  if (!studentIds.length || !isAvatarStorageConfigured()) {
+    return;
+  }
+
+  const results = await Promise.allSettled(studentIds.map((studentId) => deleteStudentAvatar(studentId)));
+  const failedDeletes = results.filter((result) => result.status === "rejected");
+  if (failedDeletes.length) {
+    console.warn(`[avatars] Failed to delete ${failedDeletes.length} student avatar(s) from S3`);
+  }
 }
 
 export async function readStudentAvatar(
