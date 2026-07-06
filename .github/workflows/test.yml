@@ -54,9 +54,10 @@ jobs:
       - name: Run tests
         env:
           DATABASE_URL: postgres://crm:crm@localhost:5432/crm_test
-        run: bun test
+        run: bun run test
 
       - name: Install Playwright browsers
+        working-directory: frontend
         run: bunx playwright install --with-deps chromium
 
       - name: Run e2e tests

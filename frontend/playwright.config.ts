@@ -11,6 +11,7 @@ const oidcClientSecret = process.env.AUTH_E2E_OIDC_SECRET ?? "crm-e2e-secret";
 
 export default defineConfig({
   testDir: "./e2e",
+  testMatch: "**/*.e2e.ts",
   timeout: 90_000,
   expect: {
     timeout: 10_000

@@ -51,6 +51,7 @@
     "@types/node": "^22.10.5",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.8",
+    "@playwright/test": "^1.61.1",
     "@vitest/browser-playwright": "^4.1.9",
     "@vitest/coverage-v8": "^4.1.9",
     "chromatic": "^18.0.1",
