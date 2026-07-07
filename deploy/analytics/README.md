@@ -1,70 +1,203 @@
 # Platform Analytics (Metabase)
 
-Self-hosted Metabase for cross-teacher CRM metrics. It reads from the `analytics` schema in PostgreSQL through a read-only role.
+Self-hosted Metabase for cross-teacher CRM metrics. It reads from the `analytics` schema in RDS through a read-only Postgres role.
 
-## What gets deployed
+Helm chart: [`deploy/helm/metabase/`](../helm/metabase/)
 
-- Migration [`backend/drizzle/0006_analytics_views.sql`](../../backend/drizzle/0006_analytics_views.sql): safe views + `metabase_readonly` role
-- Helm chart [`deploy/helm/metabase/`](../helm/metabase/): Metabase + internal Postgres for Metabase metadata
-- Ingress host default: `analytics.vocalcrm.site`
-- Saved questions in [`questions/`](questions/) and bootstrap script [`bootstrap-metabase.mjs`](bootstrap-metabase.mjs)
+## Prerequisites
 
-## One-time database setup
+1. **CRM migration applied** — deploy `main` so migration `0006_analytics_views` runs. It creates `analytics.*` views and the `metabase_readonly` role (no password yet).
 
-Run CRM migrations as usual (`bun run db:migrate` in `backend/`). Then enable the read-only login:
+2. **DNS** — A record `analytics` → same EC2 IP as `vocalcrm.site`.
 
-```bash
-METABASE_DB_PASSWORD="$(openssl rand -base64 24)" ./deploy/analytics/ensure-readonly-user.sh
-```
+3. **RDS access from k3s** — security groups allow the node to reach RDS on port 5432.
 
-Or generate all required secrets and print env values:
+4. **kubectl + helm** on the deploy host, with kubeconfig pointing at k3s.
 
-```bash
-METABASE_ADMIN_EMAIL=you@example.com ./deploy/analytics/create-secrets.sh
-```
+---
 
-The CRM connection URL should use `metabase_readonly` and `search_path=analytics`.
+## One-time: enable the readonly DB user
 
-## Kubernetes deploy
-
-1. Point DNS `analytics.vocalcrm.site` at the cluster ingress.
-2. Put the generated values in `.env` on the deploy host.
-3. Deploy:
+Generate a **new** password for `metabase_readonly` (not your CRM `DATABASE_URL` password):
 
 ```bash
-./deploy/analytics/deploy-metabase.sh
+openssl rand -base64 24
 ```
 
-Optional IP restriction (Traefik middleware):
+Connect to RDS as the admin user from `.env` (`DATABASE_URL`) and run:
+
+```sql
+ALTER ROLE metabase_readonly WITH LOGIN PASSWORD 'paste-new-password-here';
+```
+
+On EC2 without host `psql`:
 
 ```bash
-METABASE_IP_WHITELIST="203.0.113.10/32" ./deploy/analytics/deploy-metabase.sh
+cd ~/crm
+source .env
+
+docker run --rm -i --network host \
+  -e PGURL="$DATABASE_URL" \
+  postgres:16-alpine \
+  sh -c 'psql "$PGURL" -v ON_ERROR_STOP=1' <<'SQL'
+ALTER ROLE metabase_readonly WITH LOGIN PASSWORD 'paste-new-password-here';
+SQL
 ```
 
-## Security notes
+Save that password — you enter it in the Metabase UI when adding the CRM database.
 
-- Metabase requires login; only platform admins should receive credentials.
-- The readonly role can `SELECT` only from `analytics.*` views (OAuth tokens and bind tokens are excluded).
-- Keep `metabase-secrets` out of git. Rotate `METABASE_ADMIN_PASSWORD` and `METABASE_DB_PASSWORD` if leaked.
-- Prefer private network access from Metabase pods to CRM Postgres (EC2 private IP, not `localhost` from inside Kubernetes).
+---
 
-## Local bootstrap test
+## One-time: deploy Metabase
 
-After starting Metabase locally on port 3000:
+### 1. Generate secrets
 
 ```bash
-METABASE_URL=http://localhost:3000 \
-METABASE_ADMIN_EMAIL=admin@example.com \
-METABASE_ADMIN_PASSWORD=secret \
-METABASE_CRM_DATABASE_URL='postgres://metabase_readonly:secret@localhost:5432/crm?options=-c%20search_path%3Danalytics' \
-node deploy/analytics/bootstrap-metabase.mjs
+openssl rand -hex 32          # MB_ENCRYPTION_SECRET_KEY
+openssl rand -base64 24       # METABASE_APP_DB_PASSWORD
 ```
 
-## Dashboard contents
+### 2. Create Kubernetes secret
 
-The bootstrap script creates a **Platform Overview** dashboard with:
+Only these two keys are required by the Helm chart:
 
-- Registered teachers, active students, total lessons, payment volume
-- Teachers by plan, lessons by kind (one-off vs recurring)
-- Teacher signups by month, payments by month
-- Per-teacher overview table
+```bash
+kubectl create namespace analytics
+
+kubectl create secret generic metabase-secrets \
+  --namespace analytics \
+  --from-literal=MB_ENCRYPTION_SECRET_KEY='paste-hex-key' \
+  --from-literal=METABASE_APP_DB_PASSWORD='paste-app-db-password' \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+### 3. Install Helm release
+
+From the repo root on a machine with the full checkout:
+
+```bash
+helm upgrade --install metabase deploy/helm/metabase \
+  --namespace analytics \
+  --create-namespace \
+  -f deploy/helm/metabase/values.yaml \
+  --set ingress.host=analytics.vocalcrm.site \
+  --atomic --wait --timeout 15m
+```
+
+Wait for the pod:
+
+```bash
+kubectl rollout status deployment/metabase-metabase -n analytics --timeout=10m
+kubectl get pods -n analytics
+```
+
+### 4. Optional: reduce memory on small hosts
+
+```bash
+kubectl set env deployment/metabase-metabase -n analytics \
+  JAVA_OPTS='-Xmx384m -Xms256m'
+
+helm upgrade metabase deploy/helm/metabase \
+  --namespace analytics \
+  --reuse-values \
+  --set resources.limits.memory=768Mi \
+  --set resources.requests.memory=384Mi \
+  --set appDatabase.resources.limits.memory=128Mi
+```
+
+### 5. First-time setup in the browser
+
+Open **https://analytics.vocalcrm.site** and complete the setup wizard:
+
+- Create your **admin** email and password (platform owner only)
+- Organization name: e.g. `CRM Analytics`
+
+Then **Admin → Databases → Add database**:
+
+| Field | Value |
+|-------|--------|
+| Type | PostgreSQL |
+| Name | `CRM` |
+| Host | RDS endpoint |
+| Port | `5432` |
+| Database | `crm` |
+| Username | `metabase_readonly` |
+| Password | password from the `ALTER ROLE` step |
+| SSL | On if RDS requires it |
+
+Under advanced options, restrict schemas to **`analytics`** only.
+
+Build dashboards in the Metabase UI (**New → SQL query** or the visual query builder) using tables in the `analytics` schema.
+
+---
+
+## Update Metabase
+
+Pull the latest chart from git, then upgrade in place:
+
+```bash
+cd ~/crm
+git pull origin main
+
+helm upgrade metabase deploy/helm/metabase \
+  --namespace analytics \
+  -f deploy/helm/metabase/values.yaml \
+  --set ingress.host=analytics.vocalcrm.site \
+  --atomic --wait --timeout 15m
+```
+
+To pin a specific Metabase version:
+
+```bash
+helm upgrade metabase deploy/helm/metabase \
+  --namespace analytics \
+  --reuse-values \
+  --set image.tag=v0.52.6
+```
+
+Check rollout:
+
+```bash
+kubectl rollout status deployment/metabase-metabase -n analytics
+kubectl logs -n analytics deployment/metabase-metabase --tail=50
+```
+
+CRM data and saved Metabase questions live in separate stores:
+
+- **CRM metrics** — RDS (`analytics.*` views)
+- **Metabase settings/dashboards** — Postgres pod inside the `analytics` namespace (`metabase-metabase-app-db`)
+
+Upgrading the Helm chart does not touch RDS or CRM data.
+
+---
+
+## Optional: IP allowlist
+
+```bash
+helm upgrade metabase deploy/helm/metabase \
+  --namespace analytics \
+  --reuse-values \
+  --set ingress.ipWhitelist.enabled=true \
+  --set ingress.ipWhitelist.sourceRange[0]=YOUR.PUBLIC.IP/32
+```
+
+---
+
+## Uninstall
+
+```bash
+helm uninstall metabase -n analytics
+kubectl delete namespace analytics   # also removes metabase-secrets and the internal app DB PVC
+```
+
+RDS analytics views and `metabase_readonly` remain until you drop them manually.
+
+---
+
+## Troubleshooting
+
+**DNS / NXDOMAIN** — verify with `dig @8.8.8.8 +short analytics.vocalcrm.site`. Flush Mac DNS or use public resolvers if local cache is stale.
+
+**High RAM** — cap JVM with `JAVA_OPTS` (see step 4), add swap as a safety net, or move to a larger instance / Metabase Cloud.
+
+**CRM database connection fails in Metabase** — check RDS security groups, SSL settings, and that `metabase_readonly` password is correct.

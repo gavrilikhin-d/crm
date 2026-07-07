@@ -1,13 +1,6 @@
 Metabase has been deployed.
 
 1. Open https://{{ .Values.ingress.host }}
-2. Sign in with the admin credentials from `metabase-secrets`.
-3. If the bootstrap script was not run, execute:
+2. Complete the setup wizard and add the CRM RDS database manually.
 
-   METABASE_URL=https://{{ .Values.ingress.host }} \
-   METABASE_ADMIN_EMAIL=... \
-   METABASE_ADMIN_PASSWORD=... \
-   METABASE_CRM_DATABASE_URL=... \
-   node deploy/analytics/bootstrap-metabase.mjs
-
-See deploy/analytics/README.md for full setup details.
+See deploy/analytics/README.md for deploy, update, and troubleshooting steps.

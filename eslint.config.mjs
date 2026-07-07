@@ -11,8 +11,7 @@ const nodeFiles = [
   "backend/src/**/*.ts",
   "bot/src/**/*.ts",
   "reminder/src/**/*.ts",
-  "scripts/**/*.ts",
-  "deploy/analytics/**/*.mjs"
+  "scripts/**/*.ts"
 ];
 
 const frontendFiles = ["frontend/**/*.{js,jsx,ts,tsx}"];
