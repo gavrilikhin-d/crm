@@ -76,6 +76,7 @@ configure_sparse_checkout() {
 /.gitignore
 /docker-compose.prod.yml
 /deploy/Caddyfile
+/deploy/analytics/
 /deploy/helm/
 /deploy/helm-deploy.sh
 EOF
