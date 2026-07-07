@@ -77,6 +77,7 @@ configure_sparse_checkout() {
 /docker-compose.prod.yml
 /deploy/Caddyfile
 /deploy/analytics/
+/deploy/analytics/**
 /deploy/helm/
 /deploy/helm-deploy.sh
 EOF
@@ -87,6 +88,12 @@ configure_sparse_checkout
 git fetch origin "$DEPLOY_REF"
 git checkout --detach "$DEPLOY_SHA"
 git reset --hard "$DEPLOY_SHA"
+configure_sparse_checkout
+if git sparse-checkout reapply >/dev/null 2>&1; then
+  :
+else
+  git read-tree -mu HEAD
+fi
 git clean -ffd
 
 echo "==> Ensuring namespace exists ($KUBE_NAMESPACE)"
