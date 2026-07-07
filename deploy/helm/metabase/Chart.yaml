@@ -1,0 +1,6 @@
+apiVersion: v2
+name: metabase
+description: Self-hosted Metabase for CRM platform analytics
+type: application
+version: 0.1.0
+appVersion: "0.52.6"

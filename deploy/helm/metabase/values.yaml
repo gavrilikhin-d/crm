@@ -1,0 +1,77 @@
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: metabase/metabase
+  tag: v0.52.6
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1536Mi
+
+port: 3000
+
+site:
+  name: CRM Platform Analytics
+  timezone: Europe/Minsk
+
+secrets:
+  existingSecret: metabase-secrets
+  encryptionSecretKey: MB_ENCRYPTION_SECRET_KEY
+  appDbPasswordKey: METABASE_APP_DB_PASSWORD
+  adminEmailKey: METABASE_ADMIN_EMAIL
+  adminPasswordKey: METABASE_ADMIN_PASSWORD
+  crmDatabaseUrlKey: METABASE_CRM_DATABASE_URL
+
+appDatabase:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+  port: 5432
+  name: metabase
+  user: metabase
+  resources:
+    requests:
+      cpu: 25m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  persistence:
+    enabled: true
+    size: 2Gi
+    storageClassName: ""
+
+ingress:
+  enabled: true
+  className: traefik
+  host: analytics.vocalcrm.site
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  tls:
+    enabled: true
+    secretName: analytics-vocalcrm-site-tls
+  ipWhitelist:
+    enabled: false
+    sourceRange: []
+
+certManager:
+  clusterIssuer:
+    enabled: false
+    name: letsencrypt-prod
+    email: ""
+    server: https://acme-v02.api.letsencrypt.org/directory
+    ingressClassName: traefik
+
+rollout:
+  minReadySeconds: 10
+  terminationGracePeriodSeconds: 30

@@ -1,0 +1,14 @@
+{{- if and .Values.ingress.enabled .Values.ingress.ipWhitelist.enabled .Values.ingress.ipWhitelist.sourceRange }}
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "metabase.fullname" . }}-ipwhitelist
+  labels:
+    {{- include "metabase.labels" . | nindent 4 }}
+spec:
+  ipWhiteList:
+    sourceRange:
+      {{- range .Values.ingress.ipWhitelist.sourceRange }}
+      - {{ . | quote }}
+      {{- end }}
+{{- end }}
