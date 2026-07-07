@@ -26,9 +26,6 @@ secrets:
   existingSecret: metabase-secrets
   encryptionSecretKey: MB_ENCRYPTION_SECRET_KEY
   appDbPasswordKey: METABASE_APP_DB_PASSWORD
-  adminEmailKey: METABASE_ADMIN_EMAIL
-  adminPasswordKey: METABASE_ADMIN_PASSWORD
-  crmDatabaseUrlKey: METABASE_CRM_DATABASE_URL
 
 appDatabase:
   enabled: true
