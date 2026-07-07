@@ -1,0 +1,101 @@
+{{- if .Values.appDatabase.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "metabase.fullname" . }}-app-db
+  labels:
+    {{- include "metabase.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app-db
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.appDatabase.persistence.storageClassName }}
+  storageClassName: {{ .Values.appDatabase.persistence.storageClassName | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.appDatabase.persistence.size | quote }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "metabase.fullname" . }}-app-db
+  labels:
+    {{- include "metabase.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app-db
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "metabase.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: app-db
+  template:
+    metadata:
+      labels:
+        {{- include "metabase.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: app-db
+    spec:
+      containers:
+        - name: postgres
+          image: {{ printf "%s:%s" .Values.appDatabase.image.repository .Values.appDatabase.image.tag | quote }}
+          imagePullPolicy: {{ .Values.appDatabase.image.pullPolicy }}
+          ports:
+            - name: postgres
+              containerPort: {{ .Values.appDatabase.port }}
+          env:
+            - name: POSTGRES_DB
+              value: {{ .Values.appDatabase.name | quote }}
+            - name: POSTGRES_USER
+              value: {{ .Values.appDatabase.user | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.appDbPasswordKey }}
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.appDatabase.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "metabase.fullname" . }}-app-db
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "metabase.fullname" . }}-app-db
+  labels:
+    {{- include "metabase.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app-db
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "metabase.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: app-db
+  ports:
+    - name: postgres
+      port: {{ .Values.appDatabase.port }}
+      targetPort: postgres
+{{- end }}
