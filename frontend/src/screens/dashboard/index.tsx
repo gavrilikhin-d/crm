@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useLocationCurrency } from "@/hooks/use-location-currency";
 import { useSnapshotAutoRefresh } from "@/hooks/use-snapshot-auto-refresh";
 import { useI18n } from "@/i18n/context";
 import { formatFullDate } from "@/i18n/format";
@@ -23,7 +24,7 @@ import type {
   Student,
   VacationPeriod
 } from "@crm/shared";
-import { resolveCurrency, type CurrencyCode } from "@crm/shared/currency";
+import { type CurrencyCode } from "@crm/shared/currency";
 import { ClientsView } from "@/screens/clients";
 import { DashboardSidebar } from "@/screens/dashboard/components/dashboard-sidebar";
 import { MobileFab } from "@/screens/dashboard/components/mobile-fab";
@@ -197,7 +198,16 @@ export default function Home() {
       ),
     [snapshot?.payments]
   );
-  const currency = resolveCurrency(snapshot?.settings.currency);
+  const applySettingsUpdate = useCallback((settings: AppSettings) => {
+    setSnapshot((current) => (current ? { ...current, settings: { ...current.settings, ...settings } } : current));
+  }, []);
+  const currency = useLocationCurrency({
+    accountId: snapshot?.account?.account.id,
+    settingsCurrency: snapshot?.settings.currency,
+    payments,
+    lessonPackages,
+    onCurrencyBootstrapped: applySettingsUpdate
+  });
   const lessonReminderMinutes = snapshot?.settings.lessonReminderMinutes ?? [1440, 120];
   const recurringSchedules = useMemo(() => snapshot?.recurringSchedules ?? [], [snapshot?.recurringSchedules]);
   const vacationPeriods = useMemo(() => snapshot?.vacationPeriods ?? [], [snapshot?.vacationPeriods]);
