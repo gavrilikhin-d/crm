@@ -7,11 +7,15 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { FieldDescription } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
-import { t } from "@/i18n";
+import { useI18n } from "@/i18n/context";
+import type { TranslationKey } from "@/i18n/types";
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
-function validateAvatarFile(file: File): void {
+function validateAvatarFile(
+  file: File,
+  t: (key: Extract<TranslationKey, "avatar.selectImage" | "avatar.maxSize">) => string
+): void {
   if (!file.type.startsWith("image/")) {
     throw new Error(t("avatar.selectImage"));
   }
@@ -33,6 +37,7 @@ function AvatarPicker({
   onClear?: () => void;
   className?: string;
 }) {
+  const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -42,7 +47,7 @@ function AvatarPicker({
     }
 
     try {
-      validateAvatarFile(file);
+      validateAvatarFile(file, t);
       onFileSelect(file);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("avatar.uploadFailed"));

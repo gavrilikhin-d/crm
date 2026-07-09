@@ -7,7 +7,7 @@ import type { Student } from "@crm/shared";
 import { getStudentInitials } from "@crm/shared/student-initials";
 import { Avatar, AvatarBadge, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
-import { t } from "@/i18n";
+import { useI18n } from "@/i18n/context";
 
 type StudentLike = Pick<Student, "id" | "fullName" | "avatarUrl" | "updatedAt">;
 
@@ -61,6 +61,7 @@ function StudentAvatarUpload({
   className?: string;
   onUpload: (studentId: string, file: File) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function handleChange(event: ChangeEvent<HTMLInputElement>) {
