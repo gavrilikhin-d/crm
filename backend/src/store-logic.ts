@@ -320,11 +320,46 @@ export function getStudentBalance(db: Database, studentId: string, extraLessons:
 export function refreshParticipantDebtFlags(db: Database, studentId: string, balance: StudentBalance): void {
   for (const lesson of db.lessons) {
     for (const participant of lesson.participants) {
-      if (participant.studentId === studentId && !participant.balanceCharged) {
+      if (participant.studentId !== studentId) {
+        continue;
+      }
+
+      if (!participant.balanceCharged) {
         participant.hasDebt = balance.remainingLessons < 1;
       }
     }
   }
+
+  const chargedParticipants = db.lessons
+    .flatMap((lesson) =>
+      lesson.participants
+        .filter((participant) => participant.studentId === studentId && participant.balanceCharged)
+        .map((participant) => ({ lesson, participant }))
+    )
+    .sort(
+      (first, second) =>
+        new Date(first.lesson.startsAt).getTime() - new Date(second.lesson.startsAt).getTime()
+    );
+
+  for (const entry of chargedParticipants) {
+    entry.participant.hasDebt = false;
+  }
+
+  const debtLessonCount = Math.min(balance.debtLessons, chargedParticipants.length);
+  for (let index = chargedParticipants.length - debtLessonCount; index < chargedParticipants.length; index += 1) {
+    chargedParticipants[index]!.participant.hasDebt = true;
+  }
+}
+
+export function collectParticipantDebtFlagUpdates(db: Database, studentId: string): Array<{ participantId: string; hasDebt: boolean }> {
+  return db.lessons.flatMap((lesson) =>
+    lesson.participants
+      .filter((participant) => participant.studentId === studentId)
+      .map((participant) => ({
+        participantId: participant.id,
+        hasDebt: participant.hasDebt
+      }))
+  );
 }
 
 export function buildLesson(

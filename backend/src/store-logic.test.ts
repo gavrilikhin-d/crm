@@ -13,6 +13,7 @@ import {
   applyLessonCompletionCharges,
   applyTeacherParticipantStatusUpdate,
   buildLesson,
+  collectParticipantDebtFlagUpdates,
   getStudentBalance,
   hasExactLessonDuplicate,
   hasRecurringLesson,
@@ -20,6 +21,7 @@ import {
   materializeRecurringLessons,
   now,
   recalculateLesson,
+  refreshParticipantDebtFlags,
   shouldChargeParticipant,
   skipRecurringOccurrence,
   syncLessonCompletionWithSchedule
@@ -368,6 +370,98 @@ describe("past lesson creation", () => {
 
     expect(lesson.status).toBe("completed");
     expect(lesson.participants[0]?.status).toBe("attended");
+  });
+});
+
+describe("refreshParticipantDebtFlags", () => {
+  const pastStartsAt = "2020-06-01T10:00:00.000Z";
+
+  test("clears debt flag on charged lessons when payment clears debt", () => {
+    const alice = createStudentRecord("Alice");
+    const db = createEmptyDatabase({ students: [alice] });
+    const lesson = buildLesson(db, {
+      startsAt: pastStartsAt,
+      lessonType: "individual",
+      studentIds: [alice.id]
+    });
+    db.lessons.push(lesson);
+
+    expect(lesson.participants[0]?.balanceCharged).toBe(true);
+    expect(lesson.participants[0]?.hasDebt).toBe(true);
+
+    db.payments.push(createPayment(alice.id, 4));
+    const balance = getStudentBalance(db, alice.id);
+    expect(balance.debtLessons).toBe(0);
+
+    refreshParticipantDebtFlags(db, alice.id, balance);
+
+    expect(lesson.participants[0]?.hasDebt).toBe(false);
+    expect(collectParticipantDebtFlagUpdates(db, alice.id)).toEqual([
+      { participantId: lesson.participants[0]!.id, hasDebt: false }
+    ]);
+  });
+
+  test("clears oldest debt flags first when payment only partially covers debt", () => {
+    const alice = createStudentRecord("Alice");
+    const db = createEmptyDatabase({ students: [alice] });
+
+    const olderLesson = buildLesson(db, {
+      startsAt: "2020-06-01T10:00:00.000Z",
+      lessonType: "individual",
+      studentIds: [alice.id]
+    });
+    const newerLesson = buildLesson(db, {
+      startsAt: "2020-06-02T10:00:00.000Z",
+      lessonType: "individual",
+      studentIds: [alice.id]
+    });
+    db.lessons.push(olderLesson, newerLesson);
+
+    expect(olderLesson.participants[0]?.hasDebt).toBe(true);
+    expect(newerLesson.participants[0]?.hasDebt).toBe(true);
+
+    db.payments.push(createPayment(alice.id, 1));
+    const balance = getStudentBalance(db, alice.id);
+    expect(balance.debtLessons).toBe(1);
+
+    refreshParticipantDebtFlags(db, alice.id, balance);
+
+    expect(olderLesson.participants[0]?.hasDebt).toBe(false);
+    expect(newerLesson.participants[0]?.hasDebt).toBe(true);
+  });
+
+  test("restores debt flags on newest charged lessons when payment is removed", () => {
+    const alice = createStudentRecord("Alice");
+    const db = createEmptyDatabase({ students: [alice] });
+
+    const olderLesson = buildLesson(db, {
+      startsAt: "2020-06-01T10:00:00.000Z",
+      lessonType: "individual",
+      studentIds: [alice.id]
+    });
+    const newerLesson = buildLesson(db, {
+      startsAt: "2020-06-02T10:00:00.000Z",
+      lessonType: "individual",
+      studentIds: [alice.id]
+    });
+    db.lessons.push(olderLesson, newerLesson);
+
+    const payment = createPayment(alice.id, 1);
+    db.payments.push(payment);
+
+    let balance = getStudentBalance(db, alice.id);
+    refreshParticipantDebtFlags(db, alice.id, balance);
+    expect(olderLesson.participants[0]?.hasDebt).toBe(false);
+    expect(newerLesson.participants[0]?.hasDebt).toBe(true);
+
+    db.payments = db.payments.filter((item) => item.id !== payment.id);
+    balance = getStudentBalance(db, alice.id);
+    expect(balance.debtLessons).toBe(2);
+
+    refreshParticipantDebtFlags(db, alice.id, balance);
+
+    expect(olderLesson.participants[0]?.hasDebt).toBe(true);
+    expect(newerLesson.participants[0]?.hasDebt).toBe(true);
   });
 });
 
