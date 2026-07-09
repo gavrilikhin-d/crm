@@ -16,6 +16,8 @@ const nodeFiles = [
 
 const frontendFiles = ["frontend/**/*.{js,jsx,ts,tsx}"];
 
+const i18nStaticTAllowedFiles = ["frontend/src/i18n/**/*.{ts,tsx}"];
+
 function scopeToFrontend(configs) {
   return configs.flatMap((config) => {
     if (!config || typeof config !== "object") {
@@ -87,7 +89,25 @@ export default defineConfig(
       "react-hooks/set-state-in-effect": "error",
       "react-hooks/refs": "error",
       "react-hooks/purity": "error",
-      "react-hooks/exhaustive-deps": "error"
+      "react-hooks/exhaustive-deps": "error",
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@/i18n",
+              importNames: ["t"],
+              message: "Use useI18n() in client components so translations follow the active locale."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    files: i18nStaticTAllowedFiles,
+    rules: {
+      "no-restricted-imports": "off"
     }
   }
 );
