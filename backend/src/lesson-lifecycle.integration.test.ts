@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createTestAccount, futureDate, isDatabaseAvailable, loadAccountDatabase } from "./test/fixtures";
-import { isOccurrenceSkipped } from "./store-logic";
+import { isOccurrenceSkipped, getStudentBalance } from "./store-logic";
 import { store } from "./store";
 
 const databaseAvailable = await isDatabaseAvailable();
@@ -199,7 +199,7 @@ describe.skipIf(!databaseAvailable)("lesson lifecycle integration", () => {
     }
   });
 
-  test("allows rescheduling a completed past lesson", async () => {
+  test("allows rescheduling a completed past lesson within the past", async () => {
     const { ctx, cleanup: localCleanup } = await setupAccount();
 
     try {
@@ -216,6 +216,86 @@ describe.skipIf(!databaseAvailable)("lesson lifecycle integration", () => {
 
       expect(updated.status).toBe("completed");
       expect(new Date(updated.startsAt).getTime()).toBe(new Date(nextStartsAt).getTime());
+    } finally {
+      await localCleanup();
+    }
+  });
+
+  test("reopens completed lesson when rescheduled to the future", async () => {
+    const { ctx, cleanup: localCleanup } = await setupAccount();
+
+    try {
+      const alice = await store.createStudent(ctx, { fullName: "Alice Reopen Future" });
+      await store.createPayment(ctx, {
+        studentId: alice.id,
+        amount: 4000,
+        currency: "BYN",
+        method: "cash",
+        lessonCount: 4
+      });
+      const lesson = await store.createLesson(ctx, {
+        startsAt: daysFromNow(-2, 18, 0),
+        lessonType: "individual",
+        studentIds: [alice.id]
+      });
+      expect(lesson.status).toBe("completed");
+      expect(lesson.participants[0]?.balanceCharged).toBe(true);
+
+      const nextStartsAt = futureDate(10, 18, 0);
+      const updated = await store.updateLesson(ctx, lesson.id, { startsAt: nextStartsAt });
+
+      expect(updated.status).toBe("scheduled");
+      expect(updated.participants[0]?.status).toBe("awaiting");
+      expect(updated.participants[0]?.balanceCharged).toBe(false);
+
+      const db = await loadAccountDatabase(ctx.accountId);
+      expect(getStudentBalance(db, alice.id).remainingLessons).toBe(4);
+    } finally {
+      await localCleanup();
+    }
+  });
+
+  test("completes lesson when rescheduled to the past", async () => {
+    const { ctx, cleanup: localCleanup } = await setupAccount();
+
+    try {
+      const alice = await store.createStudent(ctx, { fullName: "Alice Complete Past" });
+      const lesson = await store.createLesson(ctx, {
+        startsAt: futureDate(10, 18, 0),
+        lessonType: "individual",
+        studentIds: [alice.id]
+      });
+      expect(lesson.status).toBe("scheduled");
+
+      const nextStartsAt = daysFromNow(-1, 18, 0);
+      const updated = await store.updateLesson(ctx, lesson.id, { startsAt: nextStartsAt });
+
+      expect(updated.status).toBe("completed");
+      expect(updated.participants[0]?.status).toBe("attended");
+      expect(new Date(updated.startsAt).getTime()).toBe(new Date(nextStartsAt).getTime());
+    } finally {
+      await localCleanup();
+    }
+  });
+
+  test("does not complete in-progress lesson until end time", async () => {
+    const { ctx, cleanup: localCleanup } = await setupAccount();
+
+    try {
+      const alice = await store.createStudent(ctx, { fullName: "Alice In Progress" });
+      const startedAt = new Date();
+      startedAt.setMinutes(startedAt.getMinutes() - 30, 0, 0);
+
+      const lesson = await store.createLesson(ctx, {
+        startsAt: startedAt.toISOString(),
+        durationMinutes: 60,
+        lessonType: "individual",
+        studentIds: [alice.id]
+      });
+
+      expect(lesson.status).toBe("scheduled");
+      expect(lesson.participants[0]?.status).toBe("awaiting");
+      expect(lesson.participants[0]?.balanceCharged).toBe(false);
     } finally {
       await localCleanup();
     }

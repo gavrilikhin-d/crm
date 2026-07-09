@@ -92,6 +92,7 @@ import {
   buildRecurringSchedule,
   createTelegramBindToken,
   finalizePastLesson,
+  syncLessonCompletionWithSchedule,
   getStudentBalance,
   hasExactLessonDuplicate,
   materializeRecurringLessons,
@@ -671,7 +672,7 @@ export class Store {
     lesson.durationMinutes = durationMinutes;
     lesson.recurringScheduleId = undefined;
     lesson.updatedAt = now();
-    finalizePastLesson(db, lesson);
+    syncLessonCompletionWithSchedule(db, lesson);
 
     await Promise.all([
       replaceLesson(lesson),
