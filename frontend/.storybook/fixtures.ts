@@ -235,9 +235,9 @@ const accountInfo: AccountInfo = {
 };
 
 const calendarRange: CalendarRange = {
-  startHour: 8,
-  endHour: 20,
-  hours: Array.from({ length: 13 }, (_, index) => index + 8)
+  startHour: 0,
+  endHour: 24,
+  hours: Array.from({ length: 24 }, (_, index) => index)
 };
 
 function getStudent(studentId: string): Student | undefined {

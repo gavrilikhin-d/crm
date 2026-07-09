@@ -1,11 +1,7 @@
 import { formatTime } from "@/i18n/format";
 import type { Locale } from "@/i18n/locale";
 import type { Lesson } from "@crm/shared";
-import {
-  defaultCalendarEndHour,
-  defaultCalendarStartHour,
-  hourHeight
-} from "@/screens/dashboard/constants";
+import { hourHeight } from "@/screens/dashboard/constants";
 import type { CalendarRange, ScheduleView } from "@/screens/dashboard/types";
 
 export type LessonLayout = {
@@ -67,9 +63,11 @@ export function sameDate(first: Date, second: Date): boolean {
   );
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(Math.trunc(value), min), max);
-}
+const fullDayCalendarRange: CalendarRange = {
+  startHour: 0,
+  endHour: 24,
+  hours: Array.from({ length: 24 }, (_, index) => index)
+};
 
 export function getDefaultLessonStartsAt(date: Date): string {
   return formatDateTimeLocal(new Date(date.getFullYear(), date.getMonth(), date.getDate(), 10, 0));
@@ -81,21 +79,11 @@ export function formatDateTimeLocal(value: Date): string {
 }
 
 export function getCalendarRangeWithCurrentTime(
-  lessons: Lesson[],
-  referenceDate: Date,
-  currentTime: Date | null
+  _lessons: Lesson[],
+  _referenceDate: Date,
+  _currentTime: Date | null
 ): CalendarRange {
-  const timeAnchor = currentTime
-    ? new Date(
-        referenceDate.getFullYear(),
-        referenceDate.getMonth(),
-        referenceDate.getDate(),
-        currentTime.getHours(),
-        currentTime.getMinutes()
-      )
-    : undefined;
-
-  return getCalendarRange(lessons, timeAnchor);
+  return fullDayCalendarRange;
 }
 
 export function getCalendarScrollAnchor(
@@ -122,36 +110,6 @@ export function getCalendarScrollAnchor(
   return 0;
 }
 
-function getCalendarRange(lessons: Lesson[], currentTime?: Date): CalendarRange {
-  const lessonStartHours = lessons.map((lesson) => new Date(lesson.startsAt).getHours());
-  const lessonEndHours = lessons.map((lesson) => {
-    const startsAt = new Date(lesson.startsAt);
-    const endMinutes = startsAt.getHours() * 60 + startsAt.getMinutes() + lesson.durationMinutes;
-    return Math.ceil(endMinutes / 60);
-  });
-  const currentHour = currentTime?.getHours();
-  const startHour = clamp(
-    Math.min(defaultCalendarStartHour, ...lessonStartHours, currentHour ?? defaultCalendarStartHour),
-    0,
-    23
-  );
-  const endHour = clamp(
-    Math.max(
-      defaultCalendarEndHour,
-      ...lessonEndHours,
-      currentHour !== undefined ? currentHour + 1 : defaultCalendarEndHour
-    ),
-    startHour + 1,
-    24
-  );
-
-  return {
-    startHour,
-    endHour,
-    hours: Array.from({ length: endHour - startHour }, (_, index) => startHour + index)
-  };
-}
-
 export function getCurrentTimeOffset(value: Date, calendarRange: CalendarRange): number | null {
   const currentMinutes = value.getHours() * 60 + value.getMinutes();
   const calendarStartMinutes = calendarRange.startHour * 60;
@@ -165,7 +123,7 @@ export function getCurrentTimeOffset(value: Date, calendarRange: CalendarRange):
 }
 
 export function formatHour(hour: number): string {
-  return `${hour}:00`;
+  return `${String(hour).padStart(2, "0")}:00`;
 }
 
 export function getLessonPosition(lesson: Lesson, calendarRange: CalendarRange) {
