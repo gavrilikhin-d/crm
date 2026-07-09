@@ -236,7 +236,10 @@ export function finalizePastLesson(db: Database, lesson: Lesson, referenceNow = 
 
 function reopenFutureLesson(db: Database, lesson: Lesson): void {
   for (const participant of lesson.participants) {
-    if (participant.status === "attended") {
+    if (
+      participant.status === "attended" ||
+      participant.status === "confirmed"
+    ) {
       participant.status = "awaiting";
     }
     participant.balanceCharged = false;

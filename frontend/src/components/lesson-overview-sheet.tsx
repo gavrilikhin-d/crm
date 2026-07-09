@@ -84,6 +84,12 @@ function LessonOverviewSheet({
   const canEditParticipants = lesson.status !== "completed" && lesson.status !== "cancelled_by_teacher";
   const canChangeParticipantStatus = lesson.status !== "cancelled_by_teacher";
   const canChangeTime = lesson.status !== "cancelled_by_teacher";
+  const isFutureLesson =
+    lesson.status !== "completed" &&
+    lesson.status !== "cancelled_by_teacher" &&
+    lesson.status !== "cancelled_by_student" &&
+    lesson.status !== "missed" &&
+    startsAt.getTime() > Date.now();
 
   async function handleAddParticipants() {
     if (!selectedStudentIds.length) {
@@ -227,6 +233,7 @@ function LessonOverviewSheet({
                         status={participant.status}
                         className="text-[0.65rem]"
                         interactive={canChangeParticipantStatus}
+                        isFutureLesson={isFutureLesson}
                         disabled={statusUpdatingStudentId === participant.studentId}
                         ariaLabel={t("lessonOverview.participantStatusAria", { name: studentName })}
                         onStatusChange={(status) => void handleParticipantStatusChange(participant.studentId, status)}

@@ -8,7 +8,18 @@ import { participantStatusBadgeClass } from "@/lib/participant-status";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-function teacherDisplayStatus(status: ParticipantStatus): ParticipantStatus {
+function teacherDisplayStatus(status: ParticipantStatus, isFutureLesson = false): ParticipantStatus {
+  if (status === "declined") {
+    return "declined";
+  }
+
+  if (isFutureLesson) {
+    if (status === "awaiting" || status === "attended" || status === "confirmed") {
+      return status;
+    }
+    return "awaiting";
+  }
+
   return toTeacherParticipantStatus(status) === "declined" ? "declined" : "confirmed";
 }
 
@@ -20,6 +31,7 @@ function ParticipantStatusBadge({
   status,
   className,
   interactive = false,
+  isFutureLesson = false,
   disabled = false,
   ariaLabel,
   onStatusChange
@@ -27,12 +39,13 @@ function ParticipantStatusBadge({
   status: ParticipantStatus;
   className?: string;
   interactive?: boolean;
+  isFutureLesson?: boolean;
   disabled?: boolean;
   ariaLabel?: string;
   onStatusChange?: (status: TeacherParticipantStatus) => void;
 }) {
   const { t } = useI18n();
-  const displayStatus = interactive ? teacherDisplayStatus(status) : status;
+  const displayStatus = interactive ? teacherDisplayStatus(status, isFutureLesson) : status;
   const hint = t("lessonOverview.participantStatusHint");
 
   if (!interactive || !onStatusChange) {

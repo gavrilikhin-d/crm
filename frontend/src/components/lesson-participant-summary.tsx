@@ -6,6 +6,7 @@ function countParticipantStatuses(participants: LessonParticipant[]) {
   let confirmed = 0;
   let declined = 0;
   let awaiting = 0;
+  let attended = 0;
 
   for (const participant of participants) {
     if (participant.status === "confirmed") {
@@ -14,10 +15,12 @@ function countParticipantStatuses(participants: LessonParticipant[]) {
       declined++;
     } else if (participant.status === "awaiting") {
       awaiting++;
+    } else if (participant.status === "attended") {
+      attended++;
     }
   }
 
-  return { confirmed, declined, awaiting };
+  return { confirmed, declined, awaiting, attended };
 }
 
 function LessonParticipantSummary({
@@ -27,9 +30,9 @@ function LessonParticipantSummary({
   participants: LessonParticipant[];
   compact?: boolean;
 }) {
-  const { confirmed, declined, awaiting } = countParticipantStatuses(participants);
+  const { confirmed, declined, awaiting, attended } = countParticipantStatuses(participants);
 
-  if (confirmed === 0 && declined === 0 && awaiting === 0) {
+  if (confirmed === 0 && declined === 0 && awaiting === 0 && attended === 0) {
     return null;
   }
 
@@ -54,6 +57,12 @@ function LessonParticipantSummary({
         <span className="inline-flex items-center gap-px text-amber-600 dark:text-amber-400">
           <HelpCircle className={iconClass} aria-hidden />
           {awaiting}
+        </span>
+      ) : null}
+      {attended > 0 ? (
+        <span className="inline-flex items-center gap-px text-sky-600 dark:text-sky-400">
+          <Check className={iconClass} aria-hidden />
+          {attended}
         </span>
       ) : null}
     </div>

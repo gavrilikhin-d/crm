@@ -507,6 +507,28 @@ describe("syncLessonCompletionWithSchedule", () => {
     expect(getStudentBalance(db, alice.id).remainingLessons).toBe(4);
   });
 
+  test("resets confirmed participant to awaiting when completed lesson is moved to the future", () => {
+    const alice = createStudentRecord("Alice");
+    const db = createEmptyDatabase({
+      students: [alice],
+      payments: [createPayment(alice.id, 4)]
+    });
+    const lesson = createLessonRecord({ db, startsAt: futureStartsAt, studentIds: [alice.id] });
+    lesson.participants[0]!.status = "confirmed";
+    db.lessons.push(lesson);
+
+    lesson.startsAt = pastStartsAt;
+    syncLessonCompletionWithSchedule(db, lesson, referenceNow);
+    expect(lesson.status).toBe("completed");
+    expect(lesson.participants[0]?.status).toBe("attended");
+
+    lesson.startsAt = futureStartsAt;
+    syncLessonCompletionWithSchedule(db, lesson, referenceNow);
+
+    expect(lesson.status).toBe("scheduled");
+    expect(lesson.participants[0]?.status).toBe("awaiting");
+  });
+
   test("keeps completed lesson completed when rescheduled within the past", () => {
     const alice = createStudentRecord("Alice");
     const db = createEmptyDatabase({ students: [alice] });
