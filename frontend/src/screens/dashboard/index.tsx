@@ -507,7 +507,7 @@ export default function Home() {
     try {
       const body: Record<string, unknown> = { fullName: payload.fullName.trim() };
       if (payload.avatarFile) {
-        body.avatarDataUrl = await readFileAsDataUrl(payload.avatarFile);
+        body.avatarDataUrl = await readFileAsDataUrl(payload.avatarFile, t("error.readFileFailed"));
       }
       const student = await api<Student>("/api/students", { method: "POST", body });
       applyStudentUpsert(student);
@@ -535,7 +535,7 @@ export default function Home() {
       if (payload.removeAvatar) {
         body.avatarDataUrl = null;
       } else if (payload.avatarFile) {
-        body.avatarDataUrl = await readFileAsDataUrl(payload.avatarFile);
+        body.avatarDataUrl = await readFileAsDataUrl(payload.avatarFile, t("error.readFileFailed"));
       }
       const student = await api<Student>(`/api/students/${studentId}`, { method: "PATCH", body });
       applyStudentUpsert(student);

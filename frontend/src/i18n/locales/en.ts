@@ -326,6 +326,7 @@ const en = {
       description: "Student name and avatar",
       button: "Edit"
     },
+    telegram: "Telegram: ",
     telegramConnected: "Connected",
     telegramNotConnected: "Not connected",
     connectTelegram: "Connect Telegram",

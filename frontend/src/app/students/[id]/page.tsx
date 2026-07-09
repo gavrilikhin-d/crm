@@ -114,7 +114,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
       if (payload.removeAvatar) {
         body.avatarDataUrl = null;
       } else if (payload.avatarFile) {
-        body.avatarDataUrl = await readFileAsDataUrl(payload.avatarFile);
+        body.avatarDataUrl = await readFileAsDataUrl(payload.avatarFile, t("error.readFileFailed"));
       }
       const updated = await api<Student>(`/api/students/${id}`, { method: "PATCH", body });
       setSnapshot((current) => {
@@ -217,7 +217,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
               </div>
               <div className="grid gap-2 text-sm sm:grid-cols-2">
                 <p className="flex items-center gap-1.5">
-                  <span className="text-muted-foreground">Telegram: </span>
+                  <span className="text-muted-foreground">{t("student.telegram")}</span>
                   {student.telegramChatId ? (
                     <span className="inline-flex items-center gap-1">
                       <TelegramIcon className="size-3.5 shrink-0" />

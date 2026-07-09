@@ -324,6 +324,7 @@ const ru = {
       description: "Имя и аватар ученика",
       button: "Редактировать"
     },
+    telegram: "Telegram: ",
     telegramConnected: "Подключен",
     telegramNotConnected: "Не подключен",
     connectTelegram: "Подключить Telegram",

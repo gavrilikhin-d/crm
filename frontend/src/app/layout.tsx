@@ -3,7 +3,7 @@ import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { I18nProvider } from "@/i18n/context";
-import { t } from "@/i18n";
+import { createTranslator } from "@/i18n/translator";
 import { LOCALE_COOKIE_NAME, LOCALE_STORAGE_KEY, SUPPORTED_LOCALES, resolveLocale } from "@/i18n/locale";
 import "./globals.css";
 import { Geist } from "next/font/google";
@@ -26,10 +26,16 @@ const localeBootstrapScript = `(() => {
   } catch {}
 })();`;
 
-export const metadata: Metadata = {
-  title: t("app.title"),
-  description: t("app.description")
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const cookieStore = await cookies();
+  const locale = resolveLocale(cookieStore.get(LOCALE_COOKIE_NAME)?.value);
+  const { t } = createTranslator(locale);
+
+  return {
+    title: t("app.title"),
+    description: t("app.description")
+  };
+}
 
 export const viewport: Viewport = {
   width: "device-width",
