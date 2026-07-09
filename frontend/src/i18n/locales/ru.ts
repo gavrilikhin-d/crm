@@ -190,6 +190,7 @@ const ru = {
   payments: {
     title: "История оплат",
     addPaymentAria: "Добавить оплату",
+    deletePaymentAria: "Удалить оплату для {student}",
     studentDeleted: "Ученик удален",
     packageFallback: "Пакет"
   },
@@ -272,6 +273,7 @@ const ru = {
     recurringLessonCreated: "Создано повторяющееся занятие.",
     enterLessonCountAndAmount: "Укажите количество занятий и сумму.",
     paymentAdded: "Оплата добавлена.",
+    paymentDeleted: "Оплата удалена.",
     packageAdded: "Пакет добавлен.",
     currencyUpdated: "Валюта обновлена.",
     lessonReminderMinutesUpdated: "Время напоминаний обновлено.",
@@ -304,7 +306,8 @@ const ru = {
     removeLastParticipant: "Убрать {name}? Занятие будет удалено.",
     deleteLesson: "Удалить занятие {date}?",
     deletePackage:
-      'Удалить пакет "{name}"? Уже внесенные оплаты сохранят количество занятий.'
+      'Удалить пакет "{name}"? Уже внесенные оплаты сохранят количество занятий.',
+    deletePayment: "Удалить оплату для {student}?"
   },
   common: {
     back: "Назад",

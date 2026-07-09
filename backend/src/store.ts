@@ -39,6 +39,7 @@ import {
   deleteLessonsByIds,
   deleteAccountRecord,
   deleteLessonPackageRecord,
+  deletePaymentRecord,
   deleteRecurringScheduleRecord,
   deleteStudentRecords,
   deleteVacationPeriodById,
@@ -970,6 +971,32 @@ export class Store {
     );
 
     return payment;
+  }
+
+  async deletePayment(ctx: AuthContext, paymentId: string): Promise<void> {
+    const db = await loadAccountDatabase(ctx.accountId);
+    const payment = mustFind(db.payments, paymentId, "Payment");
+    const studentId = payment.studentId;
+
+    await deletePaymentRecord(payment.id);
+
+    const updatedPayments = db.payments.filter((item) => item.id !== paymentId);
+    const balance = getStudentBalance({ ...db, payments: updatedPayments }, studentId);
+    refreshParticipantDebtFlags({ ...db, payments: updatedPayments }, studentId, balance);
+    const flags = db.lessons.flatMap((lesson) =>
+      lesson.participants
+        .filter((participant) => participant.studentId === studentId && !participant.balanceCharged)
+        .map((participant) => ({
+          participantId: participant.id,
+          hasDebt: participant.hasDebt
+        }))
+    );
+    await replaceParticipantDebtFlags(flags);
+    await Promise.all(
+      db.lessons
+        .filter((lesson) => lesson.participants.some((participant) => participant.studentId === studentId))
+        .map((lesson) => replaceLesson(lesson))
+    );
   }
 
   async createAdjustment(

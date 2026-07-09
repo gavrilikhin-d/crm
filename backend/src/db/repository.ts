@@ -481,6 +481,10 @@ export async function deleteLessonPackageRecord(id: string): Promise<void> {
   await db.delete(lessonPackages).where(eq(lessonPackages.id, id));
 }
 
+export async function deletePaymentRecord(id: string): Promise<void> {
+  await db.delete(payments).where(eq(payments.id, id));
+}
+
 export async function insertRecurringSchedule(accountId: string, schedule: RecurringSchedule): Promise<void> {
   await db.insert(recurringSchedules).values({
     id: schedule.id,

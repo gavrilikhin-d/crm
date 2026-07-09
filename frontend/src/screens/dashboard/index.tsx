@@ -18,6 +18,7 @@ import type {
   AppSettings,
   Lesson,
   LessonPackage,
+  Payment,
   RecurringDeleteScope,
   Student,
   VacationPeriod
@@ -373,6 +374,12 @@ export default function Home() {
           : current.lessonPackages.map((item, index) => (index === existingIndex ? lessonPackage : item));
       return { ...current, lessonPackages };
     });
+  }, []);
+
+  const applyPaymentDelete = useCallback((paymentId: string) => {
+    setSnapshot((current) =>
+      current ? { ...current, payments: current.payments.filter((item) => item.id !== paymentId) } : current
+    );
   }, []);
 
   const applyPackageDelete = useCallback((packageId: string) => {
@@ -798,6 +805,25 @@ export default function Home() {
     });
   }
 
+  async function handleDeletePayment(payment: Payment) {
+    const student = getStudent(payment.studentId);
+    if (
+      !window.confirm(
+        t("confirm.deletePayment", {
+          student: student?.fullName ?? t("payments.studentDeleted")
+        })
+      )
+    ) {
+      return;
+    }
+
+    await withRefresh(async () => {
+      await api(`/api/payments/${payment.id}`, { method: "DELETE" });
+      applyPaymentDelete(payment.id);
+      return t("toast.paymentDeleted");
+    });
+  }
+
   function shiftCalendar(direction: -1 | 1) {
     setSelectedDate((current) => addToDate(current, scheduleView, direction));
   }
@@ -891,6 +917,7 @@ export default function Home() {
               setPaymentFormKey((key) => key + 1);
               setActiveModal("payment");
             }}
+            onDeletePayment={handleDeletePayment}
           />
         ) : null}
 

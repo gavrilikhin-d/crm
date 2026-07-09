@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { StudentLink } from "@/components/student-link";
 import { StudentAvatar } from "@/components/student-avatar";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useI18n } from "@/i18n/context";
 import { formatDateTime, formatFullDate } from "@/i18n/format";
-import type { Student } from "@crm/shared";
+import type { Payment, Student } from "@crm/shared";
 import { formatMoney } from "@crm/shared/currency";
 import { pageSectionClass } from "@/screens/dashboard/constants";
 import type { Snapshot } from "@/screens/dashboard/types";
@@ -16,11 +16,13 @@ import type { Snapshot } from "@/screens/dashboard/types";
 export function PaymentsView({
   payments,
   getStudent,
-  onAddPayment
+  onAddPayment,
+  onDeletePayment
 }: {
   payments: Snapshot["payments"];
   getStudent: (studentId: string) => Student | undefined;
   onAddPayment: () => void;
+  onDeletePayment: (payment: Payment) => void;
 }) {
   const { locale, t } = useI18n();
 
@@ -42,7 +44,7 @@ export function PaymentsView({
             return (
               <div
                 key={payment.id}
-                className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 rounded-lg border px-2.5 py-2 sm:gap-3 sm:px-3 sm:py-2.5"
+                className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2.5 rounded-lg border px-2.5 py-2 sm:gap-3 sm:px-3 sm:py-2.5"
               >
                 {student ? (
                   <StudentLink studentId={student.id} className="shrink-0">
@@ -71,6 +73,18 @@ export function PaymentsView({
                 <p className="shrink-0 text-right text-sm font-bold sm:text-base">
                   {formatMoney(payment.amount, payment.currency)}
                 </p>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  type="button"
+                  className="text-muted-foreground"
+                  onClick={() => onDeletePayment(payment)}
+                  aria-label={t("payments.deletePaymentAria", {
+                    student: student?.fullName ?? t("payments.studentDeleted")
+                  })}
+                >
+                  <Trash2 className="size-3.5 sm:size-4" />
+                </Button>
               </div>
             );
           })}
