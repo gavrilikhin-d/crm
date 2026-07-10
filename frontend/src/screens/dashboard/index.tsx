@@ -43,9 +43,9 @@ import {
   getMonthGridDays,
   getWeekDays,
   sameDate,
-  startOfDay,
-  toIsoFromDateTimeLocal
-} from "@/screens/schedule/utils/datetime-local";
+  startOfDay
+} from "@/screens/schedule/utils/calendar";
+import { toIsoFromDateTimeLocal } from "@/screens/schedule/utils/datetime-local";
 import { SessionsView } from "@/screens/sessions";
 import { PackageForm } from "@/screens/sessions/components/package-form";
 import { SettingsView } from "@/screens/settings";
