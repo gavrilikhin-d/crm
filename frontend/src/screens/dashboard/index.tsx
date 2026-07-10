@@ -997,6 +997,7 @@ export default function Home() {
       <LessonOverviewSheet
         lesson={selectedLesson}
         open={!!selectedLesson}
+        referenceNow={currentTime.getTime()}
         recurringSchedule={selectedRecurringSchedule}
         getStudent={getStudent}
         availableStudents={availableStudentsForSelectedLesson}

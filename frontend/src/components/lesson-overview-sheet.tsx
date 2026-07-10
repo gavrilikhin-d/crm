@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useState } from "react";
 import type { Lesson, RecurringDeleteScope, RecurringSchedule, Student } from "@crm/shared";
 import type { TeacherParticipantStatus } from "@crm/shared/lesson-attendance";
 import { RefreshCw, Trash2 } from "lucide-react";
@@ -35,6 +35,7 @@ function formatTimeRange(start: Date, durationMinutes: number, locale?: Locale):
 function LessonOverviewSheet({
   lesson,
   open,
+  referenceNow,
   recurringSchedule,
   getStudent,
   availableStudents,
@@ -47,6 +48,7 @@ function LessonOverviewSheet({
 }: {
   lesson: Lesson | null;
   open: boolean;
+  referenceNow: number;
   recurringSchedule?: RecurringSchedule;
   getStudent: (studentId: string) => Student | undefined;
   availableStudents: Student[];
@@ -66,17 +68,7 @@ function LessonOverviewSheet({
   const [adding, setAdding] = useState(false);
   const [savingTime, setSavingTime] = useState(false);
   const [statusUpdatingStudentId, setStatusUpdatingStudentId] = useState<string | null>(null);
-  const [referenceNow, setReferenceNow] = useState<number | null>(null);
   const weekdayLabels = getWeekdayShortLabels("sun", t);
-
-  useEffect(() => {
-    if (!open || !lesson) {
-      setReferenceNow(null);
-      return;
-    }
-
-    setReferenceNow(Date.now());
-  }, [lesson?.id, lesson?.startsAt, open]);
 
   function formatRecurringSchedule(schedule: RecurringSchedule): string {
     const weekday = weekdayLabels[schedule.weekday] ?? "—";
@@ -95,7 +87,6 @@ function LessonOverviewSheet({
   const canChangeParticipantStatus = lesson.status !== "cancelled_by_teacher";
   const canChangeTime = lesson.status !== "cancelled_by_teacher";
   const isFutureLesson =
-    referenceNow !== null &&
     lesson.status !== "completed" &&
     lesson.status !== "cancelled_by_teacher" &&
     lesson.status !== "cancelled_by_student" &&

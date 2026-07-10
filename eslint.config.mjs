@@ -50,6 +50,7 @@ export default defineConfig(
     "**/dist/**",
     "**/storybook-static/**",
     "**/coverage/**",
+    "**/playwright-report/**",
     "frontend/public/mockServiceWorker.js",
     "frontend/next-env.d.ts"
   ]),
