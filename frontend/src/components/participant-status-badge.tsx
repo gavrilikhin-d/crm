@@ -60,7 +60,7 @@ function ParticipantStatusBadge({
     <span
       className={cn(
         "group relative inline-flex",
-        "before:pointer-events-none before:absolute before:inset-x-[-0.25rem] before:top-full before:h-10 before:content-['']"
+        "before:pointer-events-none before:absolute before:-inset-x-1 before:top-full before:h-10 before:content-['']"
       )}
     >
       <button
