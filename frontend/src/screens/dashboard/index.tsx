@@ -43,8 +43,9 @@ import {
   getMonthGridDays,
   getWeekDays,
   sameDate,
-  startOfDay
-} from "@/screens/schedule/utils/calendar";
+  startOfDay,
+  toIsoFromDateTimeLocal
+} from "@/screens/schedule/utils/datetime-local";
 import { SessionsView } from "@/screens/sessions";
 import { PackageForm } from "@/screens/sessions/components/package-form";
 import { SettingsView } from "@/screens/settings";
@@ -579,7 +580,7 @@ export default function Home() {
     const lessonType = studentIds.length > 1 ? "group" : "individual";
     const repeatWeekly = data.repeatWeekly === "on";
     const payload = {
-      startsAt: String(data.startsAt),
+      startsAt: toIsoFromDateTimeLocal(String(data.startsAt)),
       studentIds,
       lessonType,
       durationMinutes: lessonDurationByType[lessonType],
@@ -763,8 +764,9 @@ export default function Home() {
       durationMinutes?: number;
     }
   ) {
+    const normalizedStartsAt = patch.startsAt ? toIsoFromDateTimeLocal(patch.startsAt) : undefined;
     const sameStartsAt =
-      patch.startsAt === undefined || new Date(lesson.startsAt).getTime() === new Date(patch.startsAt).getTime();
+      normalizedStartsAt === undefined || new Date(lesson.startsAt).getTime() === new Date(normalizedStartsAt).getTime();
     const sameDuration = patch.durationMinutes === undefined || lesson.durationMinutes === patch.durationMinutes;
     if (sameStartsAt && sameDuration) {
       return;
@@ -773,7 +775,10 @@ export default function Home() {
     await withRefresh(async () => {
       await api<Lesson>(`/api/lessons/${lesson.id}`, {
         method: "PATCH",
-        body: patch
+        body: {
+          ...patch,
+          startsAt: normalizedStartsAt
+        }
       });
       return t("toast.lessonUpdated");
     });
