@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useLocationCurrency } from "@/hooks/use-location-currency";
 import { useSnapshotAutoRefresh } from "@/hooks/use-snapshot-auto-refresh";
 import { useI18n } from "@/i18n/context";
 import { formatFullDate } from "@/i18n/format";
@@ -18,11 +19,12 @@ import type {
   AppSettings,
   Lesson,
   LessonPackage,
+  Payment,
   RecurringDeleteScope,
   Student,
   VacationPeriod
 } from "@crm/shared";
-import { resolveCurrency, type CurrencyCode } from "@crm/shared/currency";
+import { type CurrencyCode } from "@crm/shared/currency";
 import { ClientsView } from "@/screens/clients";
 import { DashboardSidebar } from "@/screens/dashboard/components/dashboard-sidebar";
 import { MobileFab } from "@/screens/dashboard/components/mobile-fab";
@@ -196,7 +198,16 @@ export default function Home() {
       ),
     [snapshot?.payments]
   );
-  const currency = resolveCurrency(snapshot?.settings.currency);
+  const applySettingsUpdate = useCallback((settings: AppSettings) => {
+    setSnapshot((current) => (current ? { ...current, settings: { ...current.settings, ...settings } } : current));
+  }, []);
+  const currency = useLocationCurrency({
+    accountId: snapshot?.account?.account.id,
+    settingsCurrency: snapshot?.settings.currency,
+    payments,
+    lessonPackages,
+    onCurrencyBootstrapped: applySettingsUpdate
+  });
   const lessonReminderMinutes = snapshot?.settings.lessonReminderMinutes ?? [1440, 120];
   const recurringSchedules = useMemo(() => snapshot?.recurringSchedules ?? [], [snapshot?.recurringSchedules]);
   const vacationPeriods = useMemo(() => snapshot?.vacationPeriods ?? [], [snapshot?.vacationPeriods]);
@@ -375,6 +386,12 @@ export default function Home() {
     });
   }, []);
 
+  const applyPaymentDelete = useCallback((paymentId: string) => {
+    setSnapshot((current) =>
+      current ? { ...current, payments: current.payments.filter((item) => item.id !== paymentId) } : current
+    );
+  }, []);
+
   const applyPackageDelete = useCallback((packageId: string) => {
     setSnapshot((current) =>
       current ? { ...current, lessonPackages: current.lessonPackages.filter((item) => item.id !== packageId) } : current
@@ -507,7 +524,7 @@ export default function Home() {
     try {
       const body: Record<string, unknown> = { fullName: payload.fullName.trim() };
       if (payload.avatarFile) {
-        body.avatarDataUrl = await readFileAsDataUrl(payload.avatarFile);
+        body.avatarDataUrl = await readFileAsDataUrl(payload.avatarFile, t("error.readFileFailed"));
       }
       const student = await api<Student>("/api/students", { method: "POST", body });
       applyStudentUpsert(student);
@@ -535,7 +552,7 @@ export default function Home() {
       if (payload.removeAvatar) {
         body.avatarDataUrl = null;
       } else if (payload.avatarFile) {
-        body.avatarDataUrl = await readFileAsDataUrl(payload.avatarFile);
+        body.avatarDataUrl = await readFileAsDataUrl(payload.avatarFile, t("error.readFileFailed"));
       }
       const student = await api<Student>(`/api/students/${studentId}`, { method: "PATCH", body });
       applyStudentUpsert(student);
@@ -798,6 +815,25 @@ export default function Home() {
     });
   }
 
+  async function handleDeletePayment(payment: Payment) {
+    const student = getStudent(payment.studentId);
+    if (
+      !window.confirm(
+        t("confirm.deletePayment", {
+          student: student?.fullName ?? t("payments.studentDeleted")
+        })
+      )
+    ) {
+      return;
+    }
+
+    await withRefresh(async () => {
+      await api(`/api/payments/${payment.id}`, { method: "DELETE" });
+      applyPaymentDelete(payment.id);
+      return t("toast.paymentDeleted");
+    });
+  }
+
   function shiftCalendar(direction: -1 | 1) {
     setSelectedDate((current) => addToDate(current, scheduleView, direction));
   }
@@ -891,6 +927,7 @@ export default function Home() {
               setPaymentFormKey((key) => key + 1);
               setActiveModal("payment");
             }}
+            onDeletePayment={handleDeletePayment}
           />
         ) : null}
 
@@ -960,6 +997,7 @@ export default function Home() {
       <LessonOverviewSheet
         lesson={selectedLesson}
         open={!!selectedLesson}
+        referenceNow={currentTime.getTime()}
         recurringSchedule={selectedRecurringSchedule}
         getStudent={getStudent}
         availableStudents={availableStudentsForSelectedLesson}

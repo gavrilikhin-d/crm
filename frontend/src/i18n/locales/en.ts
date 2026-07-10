@@ -195,6 +195,7 @@ const en = {
   payments: {
     title: "Payment history",
     addPaymentAria: "Add payment",
+    deletePaymentAria: "Delete payment for {student}",
     studentDeleted: "Student deleted",
     packageFallback: "Package"
   },
@@ -276,6 +277,7 @@ const en = {
     recurringLessonCreated: "Recurring lesson created.",
     enterLessonCountAndAmount: "Enter lesson count and amount.",
     paymentAdded: "Payment added.",
+    paymentDeleted: "Payment deleted.",
     packageAdded: "Package added.",
     currencyUpdated: "Currency updated.",
     lessonReminderMinutesUpdated: "Reminder time updated.",
@@ -306,7 +308,8 @@ const en = {
     removeParticipant: "Remove {name} from this lesson?",
     removeLastParticipant: "Remove {name}? The lesson will be deleted.",
     deleteLesson: "Delete lesson {date}?",
-    deletePackage: 'Delete package "{name}"? Existing payments will keep their lesson count.'
+    deletePackage: 'Delete package "{name}"? Existing payments will keep their lesson count.',
+    deletePayment: "Delete payment for {student}?"
   },
   common: {
     back: "Back",
@@ -326,6 +329,7 @@ const en = {
       description: "Student name and avatar",
       button: "Edit"
     },
+    telegram: "Telegram: ",
     telegramConnected: "Connected",
     telegramNotConnected: "Not connected",
     connectTelegram: "Connect Telegram",

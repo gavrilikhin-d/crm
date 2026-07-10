@@ -1,5 +1,3 @@
-export const defaultCalendarStartHour = 9;
-export const defaultCalendarEndHour = 22;
 export const hourHeight = 76;
 export const calendarHeaderHeight = 58;
 export const calendarStickyHeaderClass =

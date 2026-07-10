@@ -209,12 +209,19 @@ export function applyLessonCompletionCharges(db: Database, lesson: Lesson): void
   }
 }
 
-export function isPastLessonStart(startsAt: string, referenceNow = Date.now()): boolean {
-  return new Date(startsAt).getTime() <= referenceNow;
+export function getLessonEndTime(lesson: Pick<Lesson, "startsAt" | "durationMinutes">): number {
+  return new Date(lesson.startsAt).getTime() + lesson.durationMinutes * 60_000;
+}
+
+export function isPastLessonEnd(
+  lesson: Pick<Lesson, "startsAt" | "durationMinutes">,
+  referenceNow = Date.now()
+): boolean {
+  return getLessonEndTime(lesson) <= referenceNow;
 }
 
 export function finalizePastLesson(db: Database, lesson: Lesson, referenceNow = Date.now()): void {
-  if (!isPastLessonStart(lesson.startsAt, referenceNow)) {
+  if (!isPastLessonEnd(lesson, referenceNow)) {
     return;
   }
 
@@ -225,6 +232,48 @@ export function finalizePastLesson(db: Database, lesson: Lesson, referenceNow = 
   applyLessonCompletionCharges(db, lesson);
   lesson.status = "completed";
   lesson.updatedAt = now();
+}
+
+function reopenFutureLesson(db: Database, lesson: Lesson): void {
+  for (const participant of lesson.participants) {
+    if (
+      participant.status === "attended" ||
+      participant.status === "confirmed"
+    ) {
+      participant.status = "awaiting";
+    }
+    participant.balanceCharged = false;
+  }
+
+  lesson.status = "scheduled";
+  recalculateLesson(lesson, db.settings.individualDurationMinutes, db.settings.groupDurationMinutes);
+
+  for (const participant of lesson.participants) {
+    participant.hasDebt = getStudentBalance(db, participant.studentId).remainingLessons < 1;
+  }
+
+  lesson.updatedAt = now();
+}
+
+export function syncLessonCompletionWithSchedule(
+  db: Database,
+  lesson: Lesson,
+  referenceNow = Date.now()
+): void {
+  if (lesson.status === "cancelled_by_teacher" || lesson.status === "cancelled_by_student") {
+    return;
+  }
+
+  if (isPastLessonEnd(lesson, referenceNow)) {
+    if (lesson.status !== "completed") {
+      finalizePastLesson(db, lesson, referenceNow);
+    }
+    return;
+  }
+
+  if (lesson.status === "completed") {
+    reopenFutureLesson(db, lesson);
+  }
 }
 
 function lessonsForBalance(db: Database, extraLessons: Lesson[] = []): Lesson[] {
@@ -274,11 +323,46 @@ export function getStudentBalance(db: Database, studentId: string, extraLessons:
 export function refreshParticipantDebtFlags(db: Database, studentId: string, balance: StudentBalance): void {
   for (const lesson of db.lessons) {
     for (const participant of lesson.participants) {
-      if (participant.studentId === studentId && !participant.balanceCharged) {
+      if (participant.studentId !== studentId) {
+        continue;
+      }
+
+      if (!participant.balanceCharged) {
         participant.hasDebt = balance.remainingLessons < 1;
       }
     }
   }
+
+  const chargedParticipants = db.lessons
+    .flatMap((lesson) =>
+      lesson.participants
+        .filter((participant) => participant.studentId === studentId && participant.balanceCharged)
+        .map((participant) => ({ lesson, participant }))
+    )
+    .sort(
+      (first, second) =>
+        new Date(first.lesson.startsAt).getTime() - new Date(second.lesson.startsAt).getTime()
+    );
+
+  for (const entry of chargedParticipants) {
+    entry.participant.hasDebt = false;
+  }
+
+  const debtLessonCount = Math.min(balance.debtLessons, chargedParticipants.length);
+  for (let index = chargedParticipants.length - debtLessonCount; index < chargedParticipants.length; index += 1) {
+    chargedParticipants[index]!.participant.hasDebt = true;
+  }
+}
+
+export function collectParticipantDebtFlagUpdates(db: Database, studentId: string): Array<{ participantId: string; hasDebt: boolean }> {
+  return db.lessons.flatMap((lesson) =>
+    lesson.participants
+      .filter((participant) => participant.studentId === studentId)
+      .map((participant) => ({
+        participantId: participant.id,
+        hasDebt: participant.hasDebt
+      }))
+  );
 }
 
 export function buildLesson(

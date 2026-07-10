@@ -1,5 +1,5 @@
 import preview from "../../.storybook/preview";
-import { getStudent, lessons, recurringSchedules, students } from "../../.storybook/fixtures";
+import { getStudent, lessons, recurringSchedules, storyNow, students } from "../../.storybook/fixtures";
 import { LessonOverviewSheet } from "./lesson-overview-sheet";
 
 const meta = preview.meta({
@@ -13,6 +13,7 @@ export const GroupLesson = meta.story({
   args: {
     lesson: lessons[1],
     open: true,
+    referenceNow: storyNow.getTime(),
     recurringSchedule: recurringSchedules[0],
     getStudent,
     availableStudents: students.filter((student) => !lessons[1].participants.some((participant) => participant.studentId === student.id)),
@@ -29,6 +30,7 @@ export const CompletedLesson = meta.story({
   args: {
     lesson: lessons[2],
     open: true,
+    referenceNow: storyNow.getTime(),
     getStudent,
     availableStudents: students,
     onOpenChange: asyncNoop,

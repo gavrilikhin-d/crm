@@ -32,3 +32,4 @@ export const CompactDeclined = meta.story({
     </div>
   )
 });
+

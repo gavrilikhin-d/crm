@@ -1,11 +1,7 @@
 import { formatTime } from "@/i18n/format";
 import type { Locale } from "@/i18n/locale";
 import type { Lesson } from "@crm/shared";
-import {
-  defaultCalendarEndHour,
-  defaultCalendarStartHour,
-  hourHeight
-} from "@/screens/dashboard/constants";
+import { hourHeight } from "@/screens/dashboard/constants";
 import type { CalendarRange, ScheduleView } from "@/screens/dashboard/types";
 
 export type LessonLayout = {
@@ -67,9 +63,11 @@ export function sameDate(first: Date, second: Date): boolean {
   );
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(Math.trunc(value), min), max);
-}
+const fullDayCalendarRange: CalendarRange = {
+  startHour: 0,
+  endHour: 24,
+  hours: Array.from({ length: 24 }, (_, index) => index)
+};
 
 export function getDefaultLessonStartsAt(date: Date): string {
   return formatDateTimeLocal(new Date(date.getFullYear(), date.getMonth(), date.getDate(), 10, 0));
@@ -81,21 +79,11 @@ export function formatDateTimeLocal(value: Date): string {
 }
 
 export function getCalendarRangeWithCurrentTime(
-  lessons: Lesson[],
-  referenceDate: Date,
-  currentTime: Date | null
+  _lessons: Lesson[],
+  _referenceDate: Date,
+  _currentTime: Date | null
 ): CalendarRange {
-  const timeAnchor = currentTime
-    ? new Date(
-        referenceDate.getFullYear(),
-        referenceDate.getMonth(),
-        referenceDate.getDate(),
-        currentTime.getHours(),
-        currentTime.getMinutes()
-      )
-    : undefined;
-
-  return getCalendarRange(lessons, timeAnchor);
+  return fullDayCalendarRange;
 }
 
 export function getCalendarScrollAnchor(
@@ -122,36 +110,6 @@ export function getCalendarScrollAnchor(
   return 0;
 }
 
-function getCalendarRange(lessons: Lesson[], currentTime?: Date): CalendarRange {
-  const lessonStartHours = lessons.map((lesson) => new Date(lesson.startsAt).getHours());
-  const lessonEndHours = lessons.map((lesson) => {
-    const startsAt = new Date(lesson.startsAt);
-    const endMinutes = startsAt.getHours() * 60 + startsAt.getMinutes() + lesson.durationMinutes;
-    return Math.ceil(endMinutes / 60);
-  });
-  const currentHour = currentTime?.getHours();
-  const startHour = clamp(
-    Math.min(defaultCalendarStartHour, ...lessonStartHours, currentHour ?? defaultCalendarStartHour),
-    0,
-    23
-  );
-  const endHour = clamp(
-    Math.max(
-      defaultCalendarEndHour,
-      ...lessonEndHours,
-      currentHour !== undefined ? currentHour + 1 : defaultCalendarEndHour
-    ),
-    startHour + 1,
-    24
-  );
-
-  return {
-    startHour,
-    endHour,
-    hours: Array.from({ length: endHour - startHour }, (_, index) => startHour + index)
-  };
-}
-
 export function getCurrentTimeOffset(value: Date, calendarRange: CalendarRange): number | null {
   const currentMinutes = value.getHours() * 60 + value.getMinutes();
   const calendarStartMinutes = calendarRange.startHour * 60;
@@ -165,7 +123,7 @@ export function getCurrentTimeOffset(value: Date, calendarRange: CalendarRange):
 }
 
 export function formatHour(hour: number): string {
-  return `${hour}:00`;
+  return `${String(hour).padStart(2, "0")}:00`;
 }
 
 export function getLessonPosition(lesson: Lesson, calendarRange: CalendarRange) {
@@ -259,4 +217,54 @@ export function getLessonLayouts(lessons: Lesson[]): LessonLayout[] {
   flushCluster();
 
   return layouts;
+}
+
+function escapeSvgText(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+const vacationWatermarkDebugTiles = false;
+
+export function getVacationWatermarkStyle(label: string): {
+  backgroundImage: string;
+  backgroundSize: string;
+} {
+  const text = escapeSvgText(label.toUpperCase());
+  const fontSize = 10;
+  const padding = 10;
+  const charWidth = 7.2;
+  const textWidth = text.length * charWidth + 8;
+  const angle = -45;
+  const cos45 = Math.cos(Math.PI / 4);
+  const tileWidth = Math.ceil((textWidth + 2 * padding) * cos45);
+  const tileHeight = tileWidth;
+  const anchorX = padding;
+  const anchorY = tileHeight - padding;
+  const textAttrs = [
+    "fill='rgb(14,165,233)'",
+    "fill-opacity='0.15'",
+    `font-size='${fontSize}'`,
+    "font-weight='600'",
+    "font-family='system-ui,-apple-system,sans-serif'",
+    "letter-spacing='0.08em'",
+    "dominant-baseline='alphabetic'",
+    "text-anchor='start'"
+  ].join(" ");
+  const svg = [
+    `<svg xmlns='http://www.w3.org/2000/svg' width='${tileWidth}' height='${tileHeight}' viewBox='0 0 ${tileWidth} ${tileHeight}'>`,
+    vacationWatermarkDebugTiles
+      ? `<rect x='0.5' y='0.5' width='${tileWidth - 1}' height='${tileHeight - 1}' fill='none' stroke='red' stroke-width='1'/>`
+      : "",
+    `<text x='${anchorX}' y='${anchorY}' ${textAttrs} transform='rotate(${angle} ${anchorX} ${anchorY})'>${text}</text>`,
+    "</svg>"
+  ].join("");
+
+  return {
+    backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(svg)}")`,
+    backgroundSize: `${tileWidth}px ${tileHeight}px`
+  };
 }

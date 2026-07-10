@@ -13,7 +13,8 @@ export const WithPayments = meta.story({
   args: {
     payments,
     getStudent,
-    onAddPayment: fn()
+    onAddPayment: fn(),
+    onDeletePayment: fn()
   },
   parameters: {
     chromatic: {
@@ -29,6 +30,7 @@ export const Empty = meta.story({
   args: {
     payments: [],
     getStudent,
-    onAddPayment: fn()
+    onAddPayment: fn(),
+    onDeletePayment: fn()
   }
 });

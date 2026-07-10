@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { nanoid } from "nanoid";
-import type { LessonParticipant, Payment } from "@crm/shared";
+import type { LessonParticipant, ParticipantStatus, Payment } from "@crm/shared";
 import {
   createEmptyDatabase,
   createLessonRecord,
@@ -13,6 +13,7 @@ import {
   applyLessonCompletionCharges,
   applyTeacherParticipantStatusUpdate,
   buildLesson,
+  collectParticipantDebtFlagUpdates,
   getStudentBalance,
   hasExactLessonDuplicate,
   hasRecurringLesson,
@@ -20,8 +21,10 @@ import {
   materializeRecurringLessons,
   now,
   recalculateLesson,
+  refreshParticipantDebtFlags,
   shouldChargeParticipant,
-  skipRecurringOccurrence
+  skipRecurringOccurrence,
+  syncLessonCompletionWithSchedule
 } from "./store-logic";
 
 function createPayment(studentId: string, lessonCount: number): Payment {
@@ -345,6 +348,215 @@ describe("past lesson creation", () => {
       remainingLessons: 0,
       debtLessons: 1
     });
+  });
+
+  test("does not complete lesson until end time has passed", () => {
+    const referenceNow = new Date("2025-06-01T10:30:00.000Z").getTime();
+    const startsAt = "2025-06-01T10:00:00.000Z";
+    const alice = createStudentRecord("Alice");
+    const db = createEmptyDatabase({ students: [alice] });
+    const lesson = createLessonRecord({ db, startsAt: futureStartsAt, studentIds: [alice.id] });
+    lesson.startsAt = startsAt;
+    lesson.durationMinutes = 60;
+    db.lessons.push(lesson);
+
+    syncLessonCompletionWithSchedule(db, lesson, referenceNow);
+
+    expect(lesson.status).toBe("scheduled");
+    expect(lesson.participants[0]?.status).toBe("awaiting");
+    expect(lesson.participants[0]?.balanceCharged).toBe(false);
+
+    syncLessonCompletionWithSchedule(db, lesson, new Date("2025-06-01T11:00:00.000Z").getTime());
+
+    expect(lesson.status).toBe("completed");
+    expect(lesson.participants[0]?.status).toBe("attended");
+  });
+});
+
+describe("refreshParticipantDebtFlags", () => {
+  const pastStartsAt = "2020-06-01T10:00:00.000Z";
+
+  test("clears debt flag on charged lessons when payment clears debt", () => {
+    const alice = createStudentRecord("Alice");
+    const db = createEmptyDatabase({ students: [alice] });
+    const lesson = buildLesson(db, {
+      startsAt: pastStartsAt,
+      lessonType: "individual",
+      studentIds: [alice.id]
+    });
+    db.lessons.push(lesson);
+
+    expect(lesson.participants[0]?.balanceCharged).toBe(true);
+    expect(lesson.participants[0]?.hasDebt).toBe(true);
+
+    db.payments.push(createPayment(alice.id, 4));
+    const balance = getStudentBalance(db, alice.id);
+    expect(balance.debtLessons).toBe(0);
+
+    refreshParticipantDebtFlags(db, alice.id, balance);
+
+    expect(lesson.participants[0]?.hasDebt).toBe(false);
+    expect(collectParticipantDebtFlagUpdates(db, alice.id)).toEqual([
+      { participantId: lesson.participants[0]!.id, hasDebt: false }
+    ]);
+  });
+
+  test("clears oldest debt flags first when payment only partially covers debt", () => {
+    const alice = createStudentRecord("Alice");
+    const db = createEmptyDatabase({ students: [alice] });
+
+    const olderLesson = buildLesson(db, {
+      startsAt: "2020-06-01T10:00:00.000Z",
+      lessonType: "individual",
+      studentIds: [alice.id]
+    });
+    const newerLesson = buildLesson(db, {
+      startsAt: "2020-06-02T10:00:00.000Z",
+      lessonType: "individual",
+      studentIds: [alice.id]
+    });
+    db.lessons.push(olderLesson, newerLesson);
+
+    expect(olderLesson.participants[0]?.hasDebt).toBe(true);
+    expect(newerLesson.participants[0]?.hasDebt).toBe(true);
+
+    db.payments.push(createPayment(alice.id, 1));
+    const balance = getStudentBalance(db, alice.id);
+    expect(balance.debtLessons).toBe(1);
+
+    refreshParticipantDebtFlags(db, alice.id, balance);
+
+    expect(olderLesson.participants[0]?.hasDebt).toBe(false);
+    expect(newerLesson.participants[0]?.hasDebt).toBe(true);
+  });
+
+  test("restores debt flags on newest charged lessons when payment is removed", () => {
+    const alice = createStudentRecord("Alice");
+    const db = createEmptyDatabase({ students: [alice] });
+
+    const olderLesson = buildLesson(db, {
+      startsAt: "2020-06-01T10:00:00.000Z",
+      lessonType: "individual",
+      studentIds: [alice.id]
+    });
+    const newerLesson = buildLesson(db, {
+      startsAt: "2020-06-02T10:00:00.000Z",
+      lessonType: "individual",
+      studentIds: [alice.id]
+    });
+    db.lessons.push(olderLesson, newerLesson);
+
+    const payment = createPayment(alice.id, 1);
+    db.payments.push(payment);
+
+    let balance = getStudentBalance(db, alice.id);
+    refreshParticipantDebtFlags(db, alice.id, balance);
+    expect(olderLesson.participants[0]?.hasDebt).toBe(false);
+    expect(newerLesson.participants[0]?.hasDebt).toBe(true);
+
+    db.payments = db.payments.filter((item) => item.id !== payment.id);
+    balance = getStudentBalance(db, alice.id);
+    expect(balance.debtLessons).toBe(2);
+
+    refreshParticipantDebtFlags(db, alice.id, balance);
+
+    expect(olderLesson.participants[0]?.hasDebt).toBe(true);
+    expect(newerLesson.participants[0]?.hasDebt).toBe(true);
+  });
+});
+
+describe("syncLessonCompletionWithSchedule", () => {
+  const pastStartsAt = "2020-06-01T10:00:00.000Z";
+  const futureStartsAt = futureDate(14, 18, 0);
+  const referenceNow = new Date("2025-01-01T12:00:00.000Z").getTime();
+
+  test("completes future lesson when moved to the past", () => {
+    const alice = createStudentRecord("Alice");
+    const db = createEmptyDatabase({ students: [alice] });
+    const lesson = createLessonRecord({ db, startsAt: futureStartsAt, studentIds: [alice.id] });
+    lesson.startsAt = pastStartsAt;
+    db.lessons.push(lesson);
+
+    syncLessonCompletionWithSchedule(db, lesson, referenceNow);
+
+    expect(lesson.status).toBe("completed");
+    expect(lesson.participants[0]?.status).toBe("attended");
+  });
+
+  test("reopens completed lesson when moved to the future", () => {
+    const alice = createStudentRecord("Alice");
+    const db = createEmptyDatabase({
+      students: [alice],
+      payments: [createPayment(alice.id, 4)]
+    });
+    const lesson = buildLesson(db, {
+      startsAt: pastStartsAt,
+      lessonType: "individual",
+      studentIds: [alice.id]
+    });
+    db.lessons.push(lesson);
+    expect(lesson.status).toBe("completed");
+    expect(getStudentBalance(db, alice.id).remainingLessons).toBe(3);
+
+    lesson.startsAt = futureStartsAt;
+    syncLessonCompletionWithSchedule(db, lesson, referenceNow);
+
+    expect(lesson.status).toBe("scheduled");
+    expect(lesson.participants[0]?.status).toBe("awaiting");
+    expect(lesson.participants[0]?.balanceCharged).toBe(false);
+    expect(getStudentBalance(db, alice.id).remainingLessons).toBe(4);
+  });
+
+  test("resets confirmed participant to awaiting when completed lesson is moved to the future", () => {
+    const alice = createStudentRecord("Alice");
+    const db = createEmptyDatabase({
+      students: [alice],
+      payments: [createPayment(alice.id, 4)]
+    });
+    const lesson = createLessonRecord({ db, startsAt: futureStartsAt, studentIds: [alice.id] });
+    lesson.participants[0]!.status = "confirmed";
+    db.lessons.push(lesson);
+
+    lesson.startsAt = pastStartsAt;
+    syncLessonCompletionWithSchedule(db, lesson, referenceNow);
+    expect(lesson.status).toBe("completed");
+    expect(lesson.participants[0]?.status as ParticipantStatus).toBe("attended");
+
+    lesson.startsAt = futureStartsAt;
+    syncLessonCompletionWithSchedule(db, lesson, referenceNow);
+
+    expect(lesson.status).toBe("scheduled");
+    expect(lesson.participants[0]?.status as ParticipantStatus).toBe("awaiting");
+  });
+
+  test("keeps completed lesson completed when rescheduled within the past", () => {
+    const alice = createStudentRecord("Alice");
+    const db = createEmptyDatabase({ students: [alice] });
+    const lesson = buildLesson(db, {
+      startsAt: pastStartsAt,
+      lessonType: "individual",
+      studentIds: [alice.id]
+    });
+    db.lessons.push(lesson);
+
+    lesson.startsAt = "2019-06-01T10:00:00.000Z";
+    syncLessonCompletionWithSchedule(db, lesson, referenceNow);
+
+    expect(lesson.status).toBe("completed");
+    expect(lesson.participants[0]?.status).toBe("attended");
+  });
+
+  test("leaves future lesson scheduled when still in the future", () => {
+    const alice = createStudentRecord("Alice");
+    const db = createEmptyDatabase({ students: [alice] });
+    const lesson = createLessonRecord({ db, startsAt: futureStartsAt, studentIds: [alice.id] });
+    db.lessons.push(lesson);
+
+    syncLessonCompletionWithSchedule(db, lesson, referenceNow);
+
+    expect(lesson.status).toBe("scheduled");
+    expect(lesson.participants[0]?.status).toBe("awaiting");
+    expect(lesson.participants[0]?.balanceCharged).toBe(false);
   });
 });
 

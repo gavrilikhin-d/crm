@@ -108,6 +108,7 @@ const protectedRoutes: Array<{ method: string; pattern: RegExp; handler: Handler
   route("POST", /^\/api\/lessons\/([^/]+)\/participants\/([^/]+)\/status$/, setParticipantStatus),
 
   route("POST", /^\/api\/payments$/, createPayment),
+  route("DELETE", /^\/api\/payments\/([^/]+)$/, deletePayment),
   route("POST", /^\/api\/balance-adjustments$/, createAdjustment)
 ];
 
@@ -546,6 +547,12 @@ async function createPayment(request: IncomingMessage, response: ServerResponse,
     }),
     201
   );
+  broadcastSnapshotMessage(ctx!, { type: "snapshot:stale" });
+}
+
+async function deletePayment(_request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray, ctx?: AuthContext) {
+  await store.deletePayment(ctx!, match[1]);
+  jsonOk(response, { ok: true });
   broadcastSnapshotMessage(ctx!, { type: "snapshot:stale" });
 }
 

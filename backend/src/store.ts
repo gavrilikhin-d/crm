@@ -39,6 +39,7 @@ import {
   deleteLessonsByIds,
   deleteAccountRecord,
   deleteLessonPackageRecord,
+  deletePaymentRecord,
   deleteRecurringScheduleRecord,
   deleteStudentRecords,
   deleteVacationPeriodById,
@@ -91,7 +92,7 @@ import {
   buildLesson,
   buildRecurringSchedule,
   createTelegramBindToken,
-  finalizePastLesson,
+  syncLessonCompletionWithSchedule,
   getStudentBalance,
   hasExactLessonDuplicate,
   materializeRecurringLessons,
@@ -102,6 +103,7 @@ import {
   parseReminderMinutes,
   recalculateLesson,
   refreshParticipantDebtFlags,
+  collectParticipantDebtFlagUpdates,
   skipRecurringOccurrence
 } from "./store-logic";
 
@@ -671,7 +673,7 @@ export class Store {
     lesson.durationMinutes = durationMinutes;
     lesson.recurringScheduleId = undefined;
     lesson.updatedAt = now();
-    finalizePastLesson(db, lesson);
+    syncLessonCompletionWithSchedule(db, lesson);
 
     await Promise.all([
       replaceLesson(lesson),
@@ -952,15 +954,8 @@ export class Store {
     await insertPayment(ctx.accountId, payment);
 
     const balance = getStudentBalance({ ...db, payments: [...db.payments, payment] }, input.studentId);
-    refreshParticipantDebtFlags(db, input.studentId, balance);
-    const flags = db.lessons.flatMap((lesson) =>
-      lesson.participants
-        .filter((participant) => participant.studentId === input.studentId && !participant.balanceCharged)
-        .map((participant) => ({
-          participantId: participant.id,
-          hasDebt: participant.hasDebt
-        }))
-    );
+    refreshParticipantDebtFlags({ ...db, payments: [...db.payments, payment] }, input.studentId, balance);
+    const flags = collectParticipantDebtFlagUpdates({ ...db, payments: [...db.payments, payment] }, input.studentId);
     await replaceParticipantDebtFlags(flags);
     await Promise.all(
       db.lessons
@@ -969,6 +964,26 @@ export class Store {
     );
 
     return payment;
+  }
+
+  async deletePayment(ctx: AuthContext, paymentId: string): Promise<void> {
+    const db = await loadAccountDatabase(ctx.accountId);
+    const payment = mustFind(db.payments, paymentId, "Payment");
+    const studentId = payment.studentId;
+
+    await deletePaymentRecord(payment.id);
+
+    const updatedPayments = db.payments.filter((item) => item.id !== paymentId);
+    const updatedDb = { ...db, payments: updatedPayments };
+    const balance = getStudentBalance(updatedDb, studentId);
+    refreshParticipantDebtFlags(updatedDb, studentId, balance);
+    const flags = collectParticipantDebtFlagUpdates(updatedDb, studentId);
+    await replaceParticipantDebtFlags(flags);
+    await Promise.all(
+      db.lessons
+        .filter((lesson) => lesson.participants.some((participant) => participant.studentId === studentId))
+        .map((lesson) => replaceLesson(lesson))
+    );
   }
 
   async createAdjustment(
@@ -986,19 +1001,13 @@ export class Store {
     };
     await insertBalanceAdjustment(ctx.accountId, adjustment);
 
-    const balance = getStudentBalance(
-      { ...db, balanceAdjustments: [...db.balanceAdjustments, adjustment] },
-      input.studentId
-    );
-    refreshParticipantDebtFlags(db, input.studentId, balance);
-    const flags = db.lessons.flatMap((lesson) =>
-      lesson.participants
-        .filter((participant) => participant.studentId === input.studentId && !participant.balanceCharged)
-        .map((participant) => ({
-          participantId: participant.id,
-          hasDebt: participant.hasDebt
-        }))
-    );
+    const updatedDb = {
+      ...db,
+      balanceAdjustments: [...db.balanceAdjustments, adjustment]
+    };
+    const balance = getStudentBalance(updatedDb, input.studentId);
+    refreshParticipantDebtFlags(updatedDb, input.studentId, balance);
+    const flags = collectParticipantDebtFlagUpdates(updatedDb, input.studentId);
     await replaceParticipantDebtFlags(flags);
     await Promise.all(
       db.lessons

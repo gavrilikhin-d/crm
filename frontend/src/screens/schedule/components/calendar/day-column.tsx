@@ -16,6 +16,7 @@ import {
   getLessonStartsAtFromOffset,
   formatDateTimeLocal,
   formatTimeRange,
+  getVacationWatermarkStyle,
   sameDate
 } from "@/screens/schedule/utils/calendar";
 
@@ -168,6 +169,8 @@ export function DayColumn({
   }, [calculateResizePreview, onLessonUpdate, resizingLesson]);
 
   const resizePreview = resizePreviewState ?? resizePreviewProp ?? null;
+  const vacationLabel = vacationPeriod?.label ?? t("calendar.vacation.label");
+  const vacationWatermark = getVacationWatermarkStyle(vacationLabel);
 
   return (
     <div
@@ -269,22 +272,19 @@ export function DayColumn({
       {vacationOverlay ? (
         <div
           className={cn(
-            "pointer-events-none absolute inset-x-1 z-5 flex justify-center bg-[repeating-linear-gradient(-45deg,rgba(14,165,233,0.08),rgba(14,165,233,0.08)_8px,transparent_8px,transparent_16px)]",
-            vacationOverlay.isFullDay ? "inset-0 items-start pt-3" : "items-center rounded-md border border-sky-200/80"
+            "pointer-events-none absolute inset-x-1 z-5 bg-sky-50/60 dark:bg-sky-950/25",
+            vacationOverlay.isFullDay ? "inset-0" : "rounded-md border border-sky-200/60 dark:border-sky-800/60"
           )}
-          style={
-            vacationOverlay.isFullDay
-              ? undefined
+          style={{
+            ...(vacationOverlay.isFullDay
+              ? vacationWatermark
               : {
                   top: vacationTop,
-                  height: Math.max(vacationHeight, 28)
-                }
-          }
-        >
-          <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-sky-700 dark:bg-sky-900 dark:text-sky-200">
-            {vacationPeriod?.label ?? t("calendar.vacation.label")}
-          </span>
-        </div>
+                  height: Math.max(vacationHeight, 28),
+                  ...vacationWatermark
+                })
+          }}
+        />
       ) : null}
       {currentTimeOffset !== null && currentTime ? (
         <CurrentTimeMarker top={currentTimeOffset} currentTime={currentTime} />

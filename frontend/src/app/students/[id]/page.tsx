@@ -2,9 +2,9 @@
 
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import type { Database, Lesson, LessonPackage, RecurringSchedule, Student, StudentBalance } from "@crm/shared";
+import type { Database, Lesson, LessonPackage, Payment, RecurringSchedule, Student, StudentBalance } from "@crm/shared";
 import { formatMoney } from "@crm/shared/currency";
 import { TelegramIcon } from "@/components/icons/telegram-icon";
 import { ParticipantStatusBadge } from "@/components/participant-status-badge";
@@ -114,7 +114,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
       if (payload.removeAvatar) {
         body.avatarDataUrl = null;
       } else if (payload.avatarFile) {
-        body.avatarDataUrl = await readFileAsDataUrl(payload.avatarFile);
+        body.avatarDataUrl = await readFileAsDataUrl(payload.avatarFile, t("error.readFileFailed"));
       }
       const updated = await api<Student>(`/api/students/${id}`, { method: "PATCH", body });
       setSnapshot((current) => {
@@ -137,6 +137,29 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
   async function copyTelegramBindText(text: string) {
     await navigator.clipboard.writeText(text);
     toast.success(t("toast.telegramLinkCopied"));
+  }
+
+  async function handleDeletePayment(payment: Payment) {
+    if (!student || !window.confirm(t("confirm.deletePayment", { student: student.fullName }))) {
+      return;
+    }
+
+    try {
+      await api(`/api/payments/${payment.id}`, { method: "DELETE" });
+      setSnapshot((current) => {
+        if (!current) {
+          return current;
+        }
+
+        return {
+          ...current,
+          payments: current.payments.filter((item) => item.id !== payment.id)
+        };
+      });
+      toast.success(t("toast.paymentDeleted"));
+    } catch (deleteError) {
+      toast.error(deleteError instanceof Error ? deleteError.message : t("toast.actionFailed"));
+    }
   }
 
   if (loading) {
@@ -217,7 +240,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
               </div>
               <div className="grid gap-2 text-sm sm:grid-cols-2">
                 <p className="flex items-center gap-1.5">
-                  <span className="text-muted-foreground">Telegram: </span>
+                  <span className="text-muted-foreground">{t("student.telegram")}</span>
                   {student.telegramChatId ? (
                     <span className="inline-flex items-center gap-1">
                       <TelegramIcon className="size-3.5 shrink-0" />
@@ -274,7 +297,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
               return (
                 <div
                   key={payment.id}
-                  className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2.5 rounded-lg border px-2.5 py-2 sm:gap-3 sm:px-3 sm:py-2.5"
+                  className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-2.5 rounded-lg border px-2.5 py-2 sm:gap-3 sm:px-3 sm:py-2.5"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-stone-900 sm:text-base">
@@ -291,6 +314,16 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
                   <p className="shrink-0 text-right text-sm font-bold sm:text-base">
                     {formatMoney(payment.amount, payment.currency)}
                   </p>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    type="button"
+                    className="text-muted-foreground"
+                    onClick={() => void handleDeletePayment(payment)}
+                    aria-label={t("payments.deletePaymentAria", { student: student?.fullName ?? "" })}
+                  >
+                    <Trash2 className="size-3.5 sm:size-4" />
+                  </Button>
                 </div>
               );
             })

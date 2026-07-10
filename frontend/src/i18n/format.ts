@@ -11,14 +11,16 @@ function formatDate(value: string | Date, options?: Intl.DateTimeFormatOptions, 
 function formatTime(value: Date, locale?: Locale): string {
   return new Intl.DateTimeFormat(getLocaleTag(locale), {
     hour: "numeric",
-    minute: "2-digit"
+    minute: "2-digit",
+    hour12: false
   }).format(value);
 }
 
 function formatFullDate(value: string | Date, locale?: Locale): string {
   return new Intl.DateTimeFormat(getLocaleTag(locale), {
     dateStyle: "medium",
-    timeStyle: "short"
+    timeStyle: "short",
+    hour12: false
   }).format(new Date(value));
 }
 
@@ -27,7 +29,8 @@ function formatDateTime(value: string | Date, locale?: Locale): string {
     day: "numeric",
     month: "short",
     hour: "numeric",
-    minute: "2-digit"
+    minute: "2-digit",
+    hour12: false
   }).format(new Date(value));
 }
 
