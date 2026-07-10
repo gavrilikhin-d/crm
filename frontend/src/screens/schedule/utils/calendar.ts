@@ -227,29 +227,39 @@ function escapeSvgText(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
+const vacationWatermarkDebugTiles = false;
+
 export function getVacationWatermarkStyle(label: string): {
   backgroundImage: string;
   backgroundSize: string;
 } {
   const text = escapeSvgText(label.toUpperCase());
   const fontSize = 10;
-  const padding = 14;
+  const padding = 10;
   const charWidth = 7.2;
-  const labelWidth = text.length * charWidth + 8;
-  const angleRadians = (40 * Math.PI) / 180;
-  const textExtentX = labelWidth * Math.cos(angleRadians) + fontSize * Math.sin(angleRadians);
-  const textExtentY = labelWidth * Math.sin(angleRadians) + fontSize * Math.cos(angleRadians);
-  const tileWidth = Math.ceil(2 * (textExtentX + padding) + padding);
-  const tileHeight = Math.ceil(textExtentY * 2 + padding * 2);
-  const rowOneX = padding;
-  const rowOneY = tileHeight - padding;
-  const rowTwoX = Math.round(tileWidth / 2);
-  const rowTwoY = Math.round(tileHeight / 2);
-  const textAttrs = `fill='rgba(14,165,233,0.15)' font-size='${fontSize}' font-weight='600' font-family='system-ui,-apple-system,sans-serif' letter-spacing='0.08em'`;
+  const textWidth = text.length * charWidth + 8;
+  const angle = -45;
+  const cos45 = Math.cos(Math.PI / 4);
+  const tileWidth = Math.ceil((textWidth + 2 * padding) * cos45);
+  const tileHeight = tileWidth;
+  const anchorX = padding;
+  const anchorY = tileHeight - padding;
+  const textAttrs = [
+    "fill='rgb(14,165,233)'",
+    "fill-opacity='0.15'",
+    `font-size='${fontSize}'`,
+    "font-weight='600'",
+    "font-family='system-ui,-apple-system,sans-serif'",
+    "letter-spacing='0.08em'",
+    "dominant-baseline='alphabetic'",
+    "text-anchor='start'"
+  ].join(" ");
   const svg = [
     `<svg xmlns='http://www.w3.org/2000/svg' width='${tileWidth}' height='${tileHeight}' viewBox='0 0 ${tileWidth} ${tileHeight}'>`,
-    `<text x='${rowOneX}' y='${rowOneY}' ${textAttrs} transform='rotate(-40 ${rowOneX} ${rowOneY})'>${text}</text>`,
-    `<text x='${rowTwoX}' y='${rowTwoY}' ${textAttrs} transform='rotate(-40 ${rowTwoX} ${rowTwoY})'>${text}</text>`,
+    vacationWatermarkDebugTiles
+      ? `<rect x='0.5' y='0.5' width='${tileWidth - 1}' height='${tileHeight - 1}' fill='none' stroke='red' stroke-width='1'/>`
+      : "",
+    `<text x='${anchorX}' y='${anchorY}' ${textAttrs} transform='rotate(${angle} ${anchorX} ${anchorY})'>${text}</text>`,
     "</svg>"
   ].join("");
 
