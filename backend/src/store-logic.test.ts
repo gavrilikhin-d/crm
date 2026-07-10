@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { nanoid } from "nanoid";
-import type { LessonParticipant, Payment } from "@crm/shared";
+import type { LessonParticipant, ParticipantStatus, Payment } from "@crm/shared";
 import {
   createEmptyDatabase,
   createLessonRecord,
@@ -520,13 +520,13 @@ describe("syncLessonCompletionWithSchedule", () => {
     lesson.startsAt = pastStartsAt;
     syncLessonCompletionWithSchedule(db, lesson, referenceNow);
     expect(lesson.status).toBe("completed");
-    expect(lesson.participants[0]?.status).toBe("attended");
+    expect(lesson.participants[0]?.status as ParticipantStatus).toBe("attended");
 
     lesson.startsAt = futureStartsAt;
     syncLessonCompletionWithSchedule(db, lesson, referenceNow);
 
     expect(lesson.status).toBe("scheduled");
-    expect(lesson.participants[0]?.status).toBe("awaiting");
+    expect(lesson.participants[0]?.status as ParticipantStatus).toBe("awaiting");
   });
 
   test("keeps completed lesson completed when rescheduled within the past", () => {
