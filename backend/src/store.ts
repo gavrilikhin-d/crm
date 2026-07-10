@@ -92,7 +92,6 @@ import {
   buildLesson,
   buildRecurringSchedule,
   createTelegramBindToken,
-  finalizePastLesson,
   syncLessonCompletionWithSchedule,
   getStudentBalance,
   hasExactLessonDuplicate,
