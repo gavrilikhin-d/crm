@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useI18n } from "@/i18n/context";
-import { formatFullDate, formatMonth, formatWeekRange } from "@/i18n/format";
+import { formatLongDate, formatMonth, formatWeekRange } from "@/i18n/format";
 import type { Lesson, Student, VacationPeriod } from "@crm/shared";
 import { pageSectionClass } from "@/screens/dashboard/constants";
 import type { CalendarRange, ScheduleView } from "@/screens/dashboard/types";
@@ -50,6 +50,7 @@ export function ScheduleScreen({
   onShiftCalendar,
   onGoToToday,
   getStudent,
+  onSelectDay,
   onSelectLesson,
   onLessonUpdate,
   onLessonSubmit
@@ -81,6 +82,7 @@ export function ScheduleScreen({
   onShiftCalendar: (direction: -1 | 1) => void;
   onGoToToday: () => void;
   getStudent: (studentId: string) => Student | undefined;
+  onSelectDay: (day: Date) => void;
   onSelectLesson: (lesson: Lesson) => void;
   onLessonUpdate: (lesson: Lesson, patch: { startsAt?: string; durationMinutes?: number }) => Promise<void>;
   onLessonSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -123,7 +125,7 @@ export function ScheduleScreen({
           </ToggleGroup>
 
           <div className="text-center text-xs font-extrabold uppercase tracking-wide text-stone-400 sm:min-w-52">
-            {scheduleView === "day" ? formatFullDate(selectedDate.toISOString(), locale) : null}
+            {scheduleView === "day" ? formatLongDate(selectedDate, locale) : null}
             {scheduleView === "week" ? formatWeekRange(weekDays, locale) : null}
             {scheduleView === "month" ? formatMonth(selectedDate, locale) : null}
           </div>
@@ -219,6 +221,7 @@ export function ScheduleScreen({
             lessons={monthLessons}
             vacationPeriods={vacationPeriods}
             getStudent={getStudent}
+            onSelectDay={onSelectDay}
             onSelectLesson={onSelectLesson}
           />
         ) : null}

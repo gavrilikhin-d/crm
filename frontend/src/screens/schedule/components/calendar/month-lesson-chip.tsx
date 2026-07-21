@@ -31,7 +31,10 @@ export function MonthLessonChip({
       <button
         type="button"
         className="flex w-full min-w-0 items-center gap-1 overflow-hidden rounded border bg-card px-1 py-0.5 text-left transition-colors hover:bg-muted/50"
-        onClick={onSelect}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelect();
+        }}
       >
         <span className="shrink-0 text-[0.625rem] font-semibold tabular-nums leading-none">
           {formatTime(startsAt, locale)}
@@ -48,7 +51,10 @@ export function MonthLessonChip({
     <button
       type="button"
       className="flex w-full min-w-0 flex-col gap-0.5 overflow-hidden rounded-md border bg-card px-2 py-1 text-left transition-colors hover:bg-muted/50"
-      onClick={onSelect}
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelect();
+      }}
     >
       <div className="flex min-w-0 items-start justify-between gap-1">
         <span className="truncate text-[0.62rem] font-semibold tabular-nums leading-tight">

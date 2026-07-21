@@ -17,6 +17,7 @@ export const CurrentMonth = meta.story({
     lessons,
     vacationPeriods,
     getStudent,
+    onSelectDay: fn(),
     onSelectLesson: fn()
   },
   parameters: {
