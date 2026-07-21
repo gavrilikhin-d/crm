@@ -46,6 +46,7 @@ const baseArgs = {
   onShiftCalendar: fn(),
   onGoToToday: fn(),
   getStudent,
+  onSelectDay: fn(),
   onSelectLesson: fn(),
   onLessonUpdate: fn(),
   onLessonSubmit: fn()

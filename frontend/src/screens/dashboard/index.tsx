@@ -847,6 +847,11 @@ export default function Home() {
     setSelectedDate(startOfDay(new Date()));
   }
 
+  function openDayView(day: Date) {
+    setSelectedDate(startOfDay(day));
+    setScheduleView("day");
+  }
+
   function openLessonDialog() {
     setActiveSection("schedule");
     setLessonDialogOpen(true);
@@ -906,6 +911,7 @@ export default function Home() {
             onShiftCalendar={shiftCalendar}
             onGoToToday={goToToday}
             getStudent={getStudent}
+            onSelectDay={openDayView}
             onSelectLesson={openLessonOverview}
             onLessonUpdate={handleLessonUpdate}
             onLessonSubmit={handleLessonSubmit}

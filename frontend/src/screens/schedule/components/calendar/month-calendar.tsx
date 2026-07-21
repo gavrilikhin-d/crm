@@ -16,6 +16,7 @@ export function MonthCalendar({
   lessons,
   vacationPeriods,
   getStudent,
+  onSelectDay,
   onSelectLesson
 }: {
   selectedDate: Date;
@@ -24,6 +25,7 @@ export function MonthCalendar({
   lessons: Lesson[];
   vacationPeriods: VacationPeriod[];
   getStudent: (studentId: string) => Student | undefined;
+  onSelectDay: (day: Date) => void;
   onSelectLesson: (lesson: Lesson) => void;
 }) {
   const { t } = useI18n();
@@ -49,11 +51,12 @@ export function MonthCalendar({
         return (
           <div
             className={cn(
-              "min-h-16 min-w-0 overflow-hidden border-b border-r border-stone-100 p-1 sm:min-h-28 sm:p-1.5 md:min-h-32 md:p-2",
+              "min-h-16 min-w-0 cursor-pointer overflow-hidden border-b border-r border-stone-100 p-1 transition-colors hover:bg-stone-50 sm:min-h-28 sm:p-1.5 md:min-h-32 md:p-2",
               isToday && "ring-1 ring-inset ring-stone-200",
-              vacationPeriod && "bg-sky-50/80 dark:bg-sky-950/30"
+              vacationPeriod && "bg-sky-50/80 hover:bg-sky-50 dark:bg-sky-950/30 dark:hover:bg-sky-950/50"
             )}
             key={day.toISOString()}
+            onClick={() => onSelectDay(day)}
           >
             <div
               className={cn(
