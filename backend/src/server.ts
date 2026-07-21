@@ -745,13 +745,16 @@ async function getTelegramProfile(request: IncomingMessage, response: ServerResp
 async function updateTelegramPreferences(request: IncomingMessage, response: ServerResponse) {
   const body = await readJson(request);
   requireFields(body, ["userId"]);
-  if (!("lessonReminderMinutes" in body)) {
-    throw new Error("Missing required field: lessonReminderMinutes");
+  if (!("lessonReminderMinutes" in body) && !("timezone" in body)) {
+    throw new Error("Missing required field: lessonReminderMinutes or timezone");
   }
   jsonOk(
     response,
     await store.updateTelegramStudentPreferences(String(body.userId), {
-      lessonReminderMinutes: body.lessonReminderMinutes
+      ...(Object.prototype.hasOwnProperty.call(body, "lessonReminderMinutes")
+        ? { lessonReminderMinutes: body.lessonReminderMinutes }
+        : {}),
+      ...(Object.prototype.hasOwnProperty.call(body, "timezone") ? { timezone: body.timezone } : {})
     })
   );
 }

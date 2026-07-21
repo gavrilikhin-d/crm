@@ -50,6 +50,13 @@
       "when": 1783272000000,
       "tag": "0006_analytics_views",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784650000000,
+      "tag": "0007_notification_timezone",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,5 @@
 import type { Database, Lesson, ParticipantStatus, Student } from "@crm/shared";
+import { resolveNotificationTimeZone } from "@crm/shared/timezone";
 
 const MINUTE_MS = 60_000;
 
@@ -14,6 +15,7 @@ type PendingLessonReminder = {
   lesson: Lesson;
   scheduledFor: string;
   dedupeKey: string;
+  timeZone: string;
 };
 
 function isSkippedLessonStatus(status: Lesson["status"]): boolean {
@@ -70,7 +72,11 @@ function collectPendingLessonReminders(workerSnapshots: WorkerSnapshot[], nowMs:
             student,
             lesson,
             scheduledFor,
-            dedupeKey: `lesson:${lesson.id}:${student.id}:${leadMinutes}`
+            dedupeKey: `lesson:${lesson.id}:${student.id}:${leadMinutes}`,
+            timeZone: resolveNotificationTimeZone({
+              studentTimeZone: student.timezone,
+              teacherTimeZone: worker.settings.timezone
+            })
           });
         }
       }

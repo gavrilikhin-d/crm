@@ -59,6 +59,7 @@ export interface Student {
   telegramChatId?: string;
   telegramBindToken: string;
   lessonReminderMinutes?: number[] | null;
+  timezone?: string | null;
   status: StudentStatus;
   defaultLessonPrice: number;
   createdAt: string;
@@ -177,6 +178,7 @@ export interface AppSettings {
   defaultSingleLessonPrice: number;
   currency: string;
   cancellationPolicy: "free" | "paid";
+  timezone: string;
 }
 
 export interface Database {
@@ -205,8 +207,9 @@ export interface TelegramStudentProfile {
     id: string;
     fullName: string;
     lessonReminderMinutes?: number[] | null;
+    timezone?: string | null;
   };
-  settings: Pick<AppSettings, "lessonReminderMinutes">;
+  settings: Pick<AppSettings, "lessonReminderMinutes" | "timezone">;
   balance: StudentBalance;
   upcomingLessons: Lesson[];
   scheduleDays: number;

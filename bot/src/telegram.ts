@@ -5,6 +5,7 @@ import type { Context } from "telegraf";
 import type { Lesson, Student, TelegramStudentProfile } from "@crm/shared";
 import { withSentrySpan } from "@crm/shared/sentry-tracing";
 import { lessonReminderKeyboard, parseLessonCallback } from "@crm/shared/lesson-callback";
+import { formatLessonDateTimeInTimeZone } from "@crm/shared/timezone";
 import {
   bindTelegramChat,
   getTelegramStudentProfile,
@@ -14,6 +15,7 @@ import {
 import {
   ATTEND_COMMANDS,
   DECLINE_COMMANDS,
+  attendanceLessonKeyboard,
   findLessonByScheduleIndex,
   formatAttendancePrompt,
   formatAttendanceResult,
@@ -21,14 +23,36 @@ import {
   parseLessonIndex,
   type AttendanceIntent
 } from "./attendance";
-import { formatHelpMessage, registerBotCommands } from "./commands";
+import {
+  commandReplyKeyboard,
+  commandSuggestionLabels,
+  formatHelpMessage,
+  registerBotCommands,
+  resolveCommandReplyLabel,
+  resolveCommandSuggestion
+} from "./commands";
 import { BotInteraction, answerCallback, replyToUser } from "./interaction-log";
 import { log } from "./logger";
-import { formatBalanceMessage, formatNotLinkedMessage, formatScheduleMessage, type BotReply } from "./messages";
 import {
+  formatBalanceMessage,
+  formatNotLinkedMessage,
+  formatScheduleMessage,
+  resolveProfileTimeZone,
+  type BotReply
+} from "./messages";
+import {
+  formatTimezoneSettingsMessage,
+  resolveTimezoneCallback,
+  resolveTimezoneInput,
+  timezoneSettingsKeyboard
+} from "./timezone-picker";
+import {
+  ATTENDANCE_SCHEDULE_DAYS,
   DEFAULT_SCHEDULE_DAYS,
   parseScheduleDaysFromPhrase,
   parseScheduleDaysFromPayload,
+  resolveScheduleDaysCallback,
+  scheduleDaysKeyboard,
   SCHEDULE_COMMANDS
 } from "./schedule-days";
 
@@ -75,7 +99,7 @@ export function getTelegramBot(): Telegraf | null {
       interaction.meta.group = isGroup;
 
       if (!payload || !ctx.chat || !ctx.from) {
-        await replyToUser(
+        await replyWithCommandMenu(
           ctx,
           interaction,
           [
@@ -100,20 +124,15 @@ export function getTelegramBot(): Telegraf | null {
               `${student.fullName}, ваш Telegram подключен.`,
               "Напоминания и команды будут работать в этом чате для вас лично.",
               "",
-              "Расписание: /schedule (7 дней) или /schedule 14",
-              "Баланс: /balance",
-              "Напоминания: /notifications или /notifications 45, 120"
+              "Выберите действие кнопкой ниже."
             ]
           : [
               `${student.fullName}, Telegram подключен. Теперь сюда будут приходить напоминания о занятиях.`,
               "",
-              "Спросить расписание: /schedule (7 дней) или /schedule 14",
-              "Спросить баланс: /balance",
-              "Настроить напоминания: /notifications или /notifications 45, 120",
-              "Ответ по занятию: /attend 1 или /decline 1"
+              "Выберите действие кнопкой ниже."
             ];
 
-        await replyToUser(ctx, interaction, connectedLines.join("\n"));
+        await replyWithCommandMenu(ctx, interaction, connectedLines.join("\n"));
         interaction.meta.linked = true;
       } catch (error) {
         interaction.outcome = "error";
@@ -141,7 +160,10 @@ export function getTelegramBot(): Telegraf | null {
       const { days, error } = parseScheduleDaysFromPayload(ctx.payload);
       if (error) {
         interaction.outcome = "validation_error";
-        await replyToUser(ctx, interaction, error);
+        await ctx.reply(`${error}\n\nВыберите период:`, {
+          reply_markup: scheduleDaysKeyboard(DEFAULT_SCHEDULE_DAYS)
+        });
+        interaction.noteMessageKind("plain_text");
         return;
       }
 
@@ -183,13 +205,29 @@ export function getTelegramBot(): Telegraf | null {
     }
   });
 
+  bot.command(["timezone", "tz", "часовойпояс"], async (ctx) => {
+    const interaction = new BotInteraction("command:timezone", ctx);
+
+    try {
+      if (!isPrivateChat(ctx)) {
+        interaction.outcome = "skipped";
+        await replyToUser(ctx, interaction, "Часовой пояс можно настроить в личном чате с ботом.");
+        return;
+      }
+
+      await handleTimezoneCommand(ctx, interaction, ctx.payload);
+    } finally {
+      interaction.flush();
+    }
+  });
+
   bot.command(["help", "помощь"], async (ctx) => {
     const interaction = new BotInteraction("command:help", ctx);
 
     try {
       const isGroup = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
       interaction.meta.group = isGroup;
-      await replyToUser(ctx, interaction, formatHelpMessage(isGroup));
+      await replyWithCommandMenu(ctx, interaction, formatHelpMessage(isGroup));
     } finally {
       interaction.flush();
     }
@@ -210,6 +248,30 @@ export function getTelegramBot(): Telegraf | null {
 
     try {
       await replyWithAttendance(ctx, interaction, "declined", ctx.payload);
+    } finally {
+      interaction.flush();
+    }
+  });
+
+  bot.hears(commandSuggestionLabels, async (ctx) => {
+    const interaction = new BotInteraction("hears:command_button", ctx);
+
+    try {
+      if (!isPrivateChat(ctx)) {
+        interaction.outcome = "skipped";
+        return;
+      }
+
+      const text =
+        ctx.message && "text" in ctx.message && typeof ctx.message.text === "string" ? ctx.message.text : "";
+      const command = resolveCommandReplyLabel(text);
+      if (!command) {
+        interaction.outcome = "validation_error";
+        return;
+      }
+
+      interaction.meta.command = command;
+      await runCommandSuggestion(ctx, interaction, command);
     } finally {
       interaction.flush();
     }
@@ -328,6 +390,187 @@ export function getTelegramBot(): Telegraf | null {
     }
   });
 
+  bot.hears(/^(?:часовой\s*пояс|timezone|tz)$/i, async (ctx) => {
+    const interaction = new BotInteraction("hears:timezone", ctx);
+
+    try {
+      if (!isPrivateChat(ctx)) {
+        interaction.outcome = "skipped";
+        return;
+      }
+
+      await handleTimezoneCommand(ctx, interaction);
+    } finally {
+      interaction.flush();
+    }
+  });
+
+  bot.hears(/^(?:часовой\s*пояс|timezone|tz)\s+(.+)$/i, async (ctx) => {
+    const interaction = new BotInteraction("hears:timezone:set", ctx);
+
+    try {
+      if (!isPrivateChat(ctx)) {
+        interaction.outcome = "skipped";
+        return;
+      }
+
+      await handleTimezoneCommand(ctx, interaction, ctx.match[1]);
+    } finally {
+      interaction.flush();
+    }
+  });
+
+  bot.action(/^cmd:[a-z]+$/, async (ctx) => {
+    const interaction = new BotInteraction("callback:command", ctx);
+
+    try {
+      const callbackData =
+        "data" in ctx.callbackQuery && typeof ctx.callbackQuery.data === "string"
+          ? ctx.callbackQuery.data
+          : "";
+      const command = resolveCommandSuggestion(callbackData);
+      if (!command) {
+        interaction.outcome = "validation_error";
+        await answerCallback(ctx, interaction, "Не удалось распознать команду.", { show_alert: true });
+        return;
+      }
+
+      interaction.meta.command = command;
+      await answerCallback(ctx, interaction, "Ок");
+      await runCommandSuggestion(ctx, interaction, command);
+    } catch (error) {
+      interaction.outcome = "error";
+      log.error("Telegram command suggestion callback failed", {
+        err: error,
+        handler: interaction.handler,
+        userId: interaction.userId,
+        chatId: interaction.chatId
+      });
+      await answerCallback(ctx, interaction, "Не удалось выполнить команду.", { show_alert: true }).catch(
+        () => undefined
+      );
+    } finally {
+      interaction.flush();
+    }
+  });
+
+  bot.action(/^sch:d:\d+$/, async (ctx) => {
+    const interaction = new BotInteraction("callback:schedule_days", ctx);
+
+    try {
+      const userId = ctx.from?.id;
+      if (!userId) {
+        interaction.outcome = "validation_error";
+        await answerCallback(ctx, interaction, "Не удалось определить пользователя.", { show_alert: true });
+        return;
+      }
+
+      const callbackData =
+        "data" in ctx.callbackQuery && typeof ctx.callbackQuery.data === "string"
+          ? ctx.callbackQuery.data
+          : "";
+      const days = resolveScheduleDaysCallback(callbackData);
+      if (days === null) {
+        interaction.outcome = "validation_error";
+        await answerCallback(ctx, interaction, "Не удалось выбрать период.", { show_alert: true });
+        return;
+      }
+
+      interaction.meta.days = days;
+      const profile = await getTelegramStudentProfile(userId, { days });
+      const reply = formatScheduleMessage(profile);
+      interaction.meta.lessonCount = profile.upcomingLessons.length;
+      await answerCallback(ctx, interaction, `Расписание на ${days} дн.`);
+
+      if (typeof reply === "string") {
+        await ctx.editMessageText(reply, { reply_markup: scheduleDaysKeyboard(days) }).catch(() => undefined);
+        interaction.noteMessageKind("plain_text");
+      } else {
+        await ctx
+          .editMessageText(reply.text, {
+            parse_mode: reply.parse_mode,
+            reply_markup: scheduleDaysKeyboard(days)
+          })
+          .catch(() => undefined);
+        interaction.noteMessageKind("html_text");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown schedule error";
+      if (message.includes("not found")) {
+        interaction.outcome = "not_linked";
+        await answerCallback(ctx, interaction, "Сначала подключите Telegram по ссылке от преподавателя.", {
+          show_alert: true
+        });
+        return;
+      }
+      interaction.outcome = "error";
+      log.error("Telegram schedule days callback failed", {
+        err: error,
+        handler: interaction.handler,
+        userId: interaction.userId,
+        chatId: interaction.chatId
+      });
+      await answerCallback(ctx, interaction, "Не удалось обновить расписание.", { show_alert: true });
+    } finally {
+      interaction.flush();
+    }
+  });
+
+  bot.action(/^tz:(?:s:[a-z0-9]+|r)$/, async (ctx) => {
+    const interaction = new BotInteraction("callback:timezone", ctx);
+
+    try {
+      const userId = ctx.from?.id;
+      if (!userId) {
+        interaction.outcome = "validation_error";
+        await answerCallback(ctx, interaction, "Не удалось определить пользователя.", { show_alert: true });
+        return;
+      }
+
+      const callbackData =
+        "data" in ctx.callbackQuery && typeof ctx.callbackQuery.data === "string"
+          ? ctx.callbackQuery.data
+          : "";
+      const nextTimezone = resolveTimezoneCallback(callbackData);
+      if (nextTimezone === "invalid") {
+        interaction.outcome = "validation_error";
+        await answerCallback(ctx, interaction, "Не удалось выбрать часовой пояс.", { show_alert: true });
+        return;
+      }
+
+      const updatedProfile = await updateTelegramStudentPreferences({
+        userId,
+        timezone: nextTimezone
+      });
+      await answerCallback(ctx, interaction, "Часовой пояс обновлён.");
+      await ctx
+        .editMessageText(formatTimezoneSettingsMessage(updatedProfile), {
+          reply_markup: timezoneSettingsKeyboard(updatedProfile)
+        })
+        .catch(() => undefined);
+      interaction.noteMessageKind("plain_text");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown timezone settings error";
+      if (message.includes("not found")) {
+        interaction.outcome = "not_linked";
+        await answerCallback(ctx, interaction, "Сначала подключите Telegram по ссылке от преподавателя.", {
+          show_alert: true
+        });
+        return;
+      }
+      interaction.outcome = "error";
+      log.error("Telegram timezone settings callback failed", {
+        err: error,
+        handler: interaction.handler,
+        userId: interaction.userId,
+        chatId: interaction.chatId
+      });
+      await answerCallback(ctx, interaction, "Не удалось обновить часовой пояс.", { show_alert: true });
+    } finally {
+      interaction.flush();
+    }
+  });
+
   bot.action(/^nt:(?:t:\d+|r)$/, async (ctx) => {
     const interaction = new BotInteraction("callback:notifications", ctx);
 
@@ -411,7 +654,7 @@ export function getTelegramBot(): Telegraf | null {
       const { lessonId, studentId, action } = parsed;
       interaction.meta.action = action;
 
-      const profile = await getTelegramStudentProfile(userId);
+      const profile = await getTelegramStudentProfile(userId, { days: ATTENDANCE_SCHEDULE_DAYS });
       if (profile.student.id !== studentId) {
         interaction.outcome = "validation_error";
         await answerCallback(ctx, interaction, "Эта кнопка предназначена для другого ученика.", { show_alert: true });
@@ -490,13 +733,13 @@ export async function startTelegramBot(): Promise<void> {
   }
 }
 
-export async function sendLessonReminder(student: Student, lesson: Lesson): Promise<void> {
+export async function sendLessonReminder(student: Student, lesson: Lesson, timeZone: string): Promise<void> {
   const instance = getTelegramBot();
   if (!instance || !student.telegramChatId) {
     return;
   }
 
-  await instance.telegram.sendMessage(student.telegramChatId, formatLessonReminder(student, lesson), {
+  await instance.telegram.sendMessage(student.telegramChatId, formatLessonReminder(student, lesson, timeZone), {
     reply_markup: lessonKeyboard(lesson.id, student.id)
   });
 }
@@ -529,7 +772,19 @@ async function replyWithSchedule(ctx: Context, interaction: BotInteraction, days
     const profile = await getTelegramStudentProfile(userId, { days });
     const reply = formatScheduleMessage(profile);
     interaction.meta.lessonCount = profile.upcomingLessons.length;
-    await replyToUser(ctx, interaction, reply);
+    const keyboard = scheduleDaysKeyboard(days);
+
+    if (typeof reply === "string") {
+      await ctx.reply(reply, { reply_markup: keyboard });
+      interaction.noteMessageKind("plain_text");
+      return;
+    }
+
+    await ctx.reply(reply.text, {
+      parse_mode: reply.parse_mode,
+      reply_markup: keyboard
+    });
+    interaction.noteMessageKind("html_text");
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown profile error";
     if (message.includes("not found")) {
@@ -681,11 +936,11 @@ async function replyWithAttendance(
   }
 
   try {
-    const profile = await getTelegramStudentProfile(userId);
+    const profile = await getTelegramStudentProfile(userId, { days: ATTENDANCE_SCHEDULE_DAYS });
 
     if (!index) {
       interaction.meta.mode = "prompt";
-      await replyToUser(ctx, interaction, formatAttendancePrompt(profile, intent));
+      await replyWithAttendancePrompt(ctx, interaction, profile, intent);
       return;
     }
 
@@ -693,10 +948,12 @@ async function replyWithAttendance(
     if (!lesson) {
       interaction.outcome = "validation_error";
       interaction.meta.mode = "not_found";
-      await replyToUser(
+      await replyWithAttendancePrompt(
         ctx,
         interaction,
-        `Занятие №${index} не найдено.\n\n${formatAttendancePrompt(profile, intent)}`
+        profile,
+        intent,
+        `Занятие №${index} не найдено.`
       );
       return;
     }
@@ -704,10 +961,12 @@ async function replyWithAttendance(
     if (!isActionableLesson(lesson, profile.student.id)) {
       interaction.outcome = "validation_error";
       interaction.meta.mode = "not_actionable";
-      await replyToUser(
+      await replyWithAttendancePrompt(
         ctx,
         interaction,
-        `Занятие №${index} недоступно для изменения.\n\n${formatAttendancePrompt(profile, intent)}`
+        profile,
+        intent,
+        `Занятие №${index} недоступно для изменения.`
       );
       return;
     }
@@ -721,7 +980,11 @@ async function replyWithAttendance(
       status
     });
 
-    await replyToUser(ctx, interaction, formatAttendanceResult(updated, profile.student.id, intent));
+    await replyToUser(
+      ctx,
+      interaction,
+      formatAttendanceResult(updated, profile.student.id, intent, resolveProfileTimeZone(profile))
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown attendance error";
     if (message.includes("not found")) {
@@ -742,6 +1005,80 @@ async function replyWithAttendance(
       chatId: interaction.chatId
     });
     await replyToUser(ctx, interaction, "Не удалось обновить ответ. Попробуйте позже.");
+  }
+}
+
+async function replyWithAttendancePrompt(
+  ctx: Context,
+  interaction: BotInteraction,
+  profile: TelegramStudentProfile,
+  intent: AttendanceIntent,
+  prefix?: string
+): Promise<void> {
+  const text = [prefix, formatAttendancePrompt(profile, intent)].filter(Boolean).join("\n\n");
+  const keyboard = attendanceLessonKeyboard(profile, intent);
+  await ctx.reply(text, keyboard ? { reply_markup: keyboard } : undefined);
+  interaction.noteMessageKind("plain_text");
+}
+
+async function replyWithCommandMenu(
+  ctx: Context,
+  interaction: BotInteraction,
+  text: string
+): Promise<void> {
+  await ctx.reply(text, { reply_markup: commandReplyKeyboard() });
+  interaction.noteMessageKind("plain_text");
+}
+
+async function runCommandSuggestion(
+  ctx: Context,
+  interaction: BotInteraction,
+  command: string
+): Promise<void> {
+  if (command === "help") {
+    const isGroup = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
+    await replyWithCommandMenu(ctx, interaction, formatHelpMessage(isGroup));
+    return;
+  }
+
+  if (command === "schedule") {
+    interaction.meta.days = DEFAULT_SCHEDULE_DAYS;
+    await replyWithSchedule(ctx, interaction, DEFAULT_SCHEDULE_DAYS);
+    return;
+  }
+
+  if (command === "balance") {
+    await replyWithProfile(ctx, interaction, formatBalanceMessage);
+    return;
+  }
+
+  if (command === "notifications") {
+    if (!isPrivateChat(ctx)) {
+      interaction.outcome = "skipped";
+      await replyToUser(ctx, interaction, "Настройки напоминаний доступны в личном чате с ботом.");
+      return;
+    }
+    await replyWithNotificationSettings(ctx, interaction);
+    return;
+  }
+
+  if (command === "timezone") {
+    if (!isPrivateChat(ctx)) {
+      interaction.outcome = "skipped";
+      await replyToUser(ctx, interaction, "Часовой пояс можно настроить в личном чате с ботом.");
+      return;
+    }
+    await handleTimezoneCommand(ctx, interaction);
+    return;
+  }
+
+  if (command === "attend") {
+    await replyWithAttendance(ctx, interaction, "confirmed");
+    return;
+  }
+
+  if (command === "decline") {
+    await replyWithAttendance(ctx, interaction, "declined");
   }
 }
 
@@ -967,10 +1304,8 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, message: string):
   }
 }
 
-function formatLessonReminder(student: Student, lesson: Lesson): string {
-  const startsAt = new Date(lesson.startsAt);
-  const date = new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium" }).format(startsAt);
-  const timeRange = formatLessonTimeRange(startsAt, lesson.durationMinutes);
+function formatLessonReminder(student: Student, lesson: Lesson, timeZone: string): string {
+  const { date, timeRange } = formatLessonDateTimeInTimeZone(lesson.startsAt, lesson.durationMinutes, timeZone);
 
   const kind = lesson.effectiveType === "group" ? "групповое" : "индивидуальное";
   const participant = lesson.participants.find((item) => item.studentId === student.id);
@@ -989,10 +1324,98 @@ function formatLessonReminder(student: Student, lesson: Lesson): string {
     .join("\n");
 }
 
-function formatLessonTimeRange(startsAt: Date, durationMinutes: number): string {
-  const formatter = new Intl.DateTimeFormat("ru-RU", { hour: "numeric", minute: "2-digit" });
-  const endsAt = new Date(startsAt.getTime() + durationMinutes * 60_000);
-  return `${formatter.format(startsAt)}–${formatter.format(endsAt)}`;
+async function handleTimezoneCommand(
+  ctx: Context,
+  interaction: BotInteraction,
+  payload?: string
+): Promise<void> {
+  const userId = ctx.from?.id;
+  if (!userId) {
+    interaction.outcome = "skipped";
+    return;
+  }
+
+  const raw = payload?.trim();
+  try {
+    if (!raw) {
+      await replyWithTimezoneSettings(ctx, interaction);
+      return;
+    }
+
+    const resolved = resolveTimezoneInput(raw);
+    if (!resolved) {
+      interaction.outcome = "validation_error";
+      await replyWithTimezoneSettings(
+        ctx,
+        interaction,
+        "Не удалось распознать часовой пояс. Выберите город кнопкой или напишите, например: Москва."
+      );
+      return;
+    }
+
+    const profile = await updateTelegramStudentPreferences({
+      userId,
+      timezone: resolved === "reset" ? null : resolved
+    });
+    const prefix =
+      resolved === "reset"
+        ? "Часовой пояс сброшен к настройкам преподавателя."
+        : "Часовой пояс обновлён.";
+    await ctx.reply(formatTimezoneSettingsMessage(profile, prefix), {
+      reply_markup: timezoneSettingsKeyboard(profile)
+    });
+    interaction.noteMessageKind("plain_text");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown timezone error";
+    if (message.includes("not found")) {
+      interaction.outcome = "not_linked";
+      await replyToUser(ctx, interaction, formatNotLinkedMessage());
+      return;
+    }
+    interaction.outcome = "error";
+    log.error("Telegram timezone command failed", {
+      err: error,
+      handler: interaction.handler,
+      userId: interaction.userId,
+      chatId: interaction.chatId
+    });
+    await replyToUser(ctx, interaction, "Не удалось обновить часовой пояс. Попробуйте позже.");
+  }
+}
+
+async function replyWithTimezoneSettings(
+  ctx: Context,
+  interaction: BotInteraction,
+  prefix?: string
+): Promise<void> {
+  const userId = ctx.from?.id;
+  if (!userId) {
+    interaction.outcome = "skipped";
+    return;
+  }
+
+  try {
+    const profile = await getTelegramStudentProfile(userId);
+    await ctx.reply(formatTimezoneSettingsMessage(profile, prefix), {
+      reply_markup: timezoneSettingsKeyboard(profile)
+    });
+    interaction.noteMessageKind("plain_text");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown timezone error";
+    if (message.includes("not found")) {
+      interaction.outcome = "not_linked";
+      await replyToUser(ctx, interaction, formatNotLinkedMessage());
+      return;
+    }
+    interaction.outcome = "error";
+    log.error("Telegram timezone settings query failed", {
+      err: error,
+      handler: interaction.handler,
+      userId: interaction.userId,
+      chatId: interaction.chatId
+    });
+    await replyToUser(ctx, interaction, "Не удалось получить настройки часового пояса. Попробуйте позже.");
+  }
 }
 
 function formatParticipantResult(lesson: Lesson, studentId: string, action: string): string {

@@ -1,6 +1,10 @@
+import type { InlineKeyboardMarkup } from "@telegraf/types";
+
 const DEFAULT_SCHEDULE_DAYS = 7;
+const ATTENDANCE_SCHEDULE_DAYS = 60;
 const MIN_SCHEDULE_DAYS = 1;
 const MAX_SCHEDULE_DAYS = 90;
+const SCHEDULE_DAY_PRESETS = [7, 14, 30, 60] as const;
 
 const SCHEDULE_COMMANDS = ["schedule", "shedule", "lessons", "расписание"] as const;
 
@@ -50,12 +54,41 @@ function parseScheduleDaysFromPhrase(text: string): number | undefined {
   return parsed;
 }
 
+function scheduleDaysKeyboard(activeDays: number): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      SCHEDULE_DAY_PRESETS.map((days) => ({
+        text: `${activeDays === days ? "✓ " : ""}${days} дн.`,
+        callback_data: `sch:d:${days}`
+      }))
+    ]
+  };
+}
+
+function resolveScheduleDaysCallback(callbackData: string): number | null {
+  const match = callbackData.match(/^sch:d:(\d+)$/);
+  if (!match) {
+    return null;
+  }
+
+  const days = Number(match[1]);
+  if (!Number.isInteger(days) || days < MIN_SCHEDULE_DAYS || days > MAX_SCHEDULE_DAYS) {
+    return null;
+  }
+
+  return days;
+}
+
 export {
+  ATTENDANCE_SCHEDULE_DAYS,
   DEFAULT_SCHEDULE_DAYS,
   MAX_SCHEDULE_DAYS,
   MIN_SCHEDULE_DAYS,
   SCHEDULE_COMMANDS,
+  SCHEDULE_DAY_PRESETS,
   normalizeScheduleDays,
   parseScheduleDaysFromPhrase,
-  parseScheduleDaysFromPayload
+  parseScheduleDaysFromPayload,
+  resolveScheduleDaysCallback,
+  scheduleDaysKeyboard
 };

@@ -371,7 +371,8 @@ export async function ensureAccountDefaults(accountId: string): Promise<void> {
       groupDurationMinutes: defaults.groupDurationMinutes,
       defaultSingleLessonPrice: defaults.defaultSingleLessonPrice,
       currency: defaults.currency,
-      cancellationPolicy: defaults.cancellationPolicy
+      cancellationPolicy: defaults.cancellationPolicy,
+      timezone: defaults.timezone
     });
   }
 }
@@ -385,7 +386,8 @@ export async function updateAppSettings(accountId: string, settings: AppSettings
       groupDurationMinutes: settings.groupDurationMinutes,
       defaultSingleLessonPrice: settings.defaultSingleLessonPrice,
       currency: settings.currency,
-      cancellationPolicy: settings.cancellationPolicy
+      cancellationPolicy: settings.cancellationPolicy,
+      timezone: settings.timezone
     })
     .where(eq(appSettings.accountId, accountId));
 }
@@ -401,6 +403,7 @@ export async function insertStudent(accountId: string, student: Student): Promis
     telegramChatId: student.telegramChatId ?? null,
     telegramBindToken: student.telegramBindToken,
     lessonReminderMinutes: student.lessonReminderMinutes ?? null,
+    timezone: student.timezone ?? null,
     status: student.status,
     defaultLessonPrice: student.defaultLessonPrice,
     createdAt: student.createdAt,
@@ -435,6 +438,7 @@ export async function updateStudentRecord(student: Student): Promise<void> {
       telegramChatId: student.telegramChatId ?? null,
       telegramBindToken: student.telegramBindToken,
       lessonReminderMinutes: student.lessonReminderMinutes ?? null,
+      timezone: student.timezone ?? null,
       status: student.status,
       defaultLessonPrice: student.defaultLessonPrice,
       updatedAt: student.updatedAt
@@ -446,11 +450,24 @@ export async function updateStudentReminderMinutes(
   studentId: string,
   lessonReminderMinutes: number[] | null
 ): Promise<Student | null> {
+  return updateStudentTelegramPreferences(studentId, { lessonReminderMinutes });
+}
+
+export async function updateStudentTelegramPreferences(
+  studentId: string,
+  patch: {
+    lessonReminderMinutes?: number[] | null;
+    timezone?: string | null;
+  }
+): Promise<Student | null> {
   const timestamp = new Date().toISOString();
   const rows = await db
     .update(students)
     .set({
-      lessonReminderMinutes,
+      ...(patch.lessonReminderMinutes !== undefined
+        ? { lessonReminderMinutes: patch.lessonReminderMinutes }
+        : {}),
+      ...(patch.timezone !== undefined ? { timezone: patch.timezone } : {}),
       updatedAt: timestamp
     })
     .where(eq(students.id, studentId))
@@ -701,7 +718,8 @@ export async function assignLegacyDataToAccount(accountId: string): Promise<void
         groupDurationMinutes: row.groupDurationMinutes,
         defaultSingleLessonPrice: row.defaultSingleLessonPrice,
         currency: row.currency,
-        cancellationPolicy: row.cancellationPolicy
+        cancellationPolicy: row.cancellationPolicy,
+        timezone: row.timezone || "Europe/Minsk"
       })
       .onConflictDoNothing();
     await db.delete(appSettings).where(eq(appSettings.accountId, "default" as never));
@@ -732,6 +750,7 @@ function mapStudent(row: typeof students.$inferSelect): Student {
     telegramChatId: row.telegramChatId ?? undefined,
     telegramBindToken: row.telegramBindToken,
     lessonReminderMinutes: row.lessonReminderMinutes ?? null,
+    timezone: row.timezone ?? null,
     status: row.status as Student["status"],
     defaultLessonPrice: row.defaultLessonPrice,
     createdAt: row.createdAt,
@@ -875,7 +894,8 @@ function mapSettings(row: typeof appSettings.$inferSelect): AppSettings {
     groupDurationMinutes: row.groupDurationMinutes,
     defaultSingleLessonPrice: row.defaultSingleLessonPrice,
     currency: row.currency,
-    cancellationPolicy: row.cancellationPolicy as AppSettings["cancellationPolicy"]
+    cancellationPolicy: row.cancellationPolicy as AppSettings["cancellationPolicy"],
+    timezone: row.timezone || "Europe/Minsk"
   };
 }
 

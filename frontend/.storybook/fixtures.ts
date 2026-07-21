@@ -213,7 +213,8 @@ const settings: AppSettings = {
   groupDurationMinutes: 90,
   defaultSingleLessonPrice: 3500,
   currency: "BYN",
-  cancellationPolicy: "paid"
+  cancellationPolicy: "paid",
+  timezone: "Europe/Minsk"
 };
 
 const accountInfo: AccountInfo = {

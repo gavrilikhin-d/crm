@@ -26,7 +26,8 @@ const settings: Database["settings"] = {
   groupDurationMinutes: 90,
   defaultSingleLessonPrice: 3000,
   currency: "RUB",
-  cancellationPolicy: "free"
+  cancellationPolicy: "free",
+  timezone: "Europe/Minsk"
 };
 
 const sendPaymentReminder = mock(() => Promise.resolve());
