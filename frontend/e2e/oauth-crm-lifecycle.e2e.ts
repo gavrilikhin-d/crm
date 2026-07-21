@@ -49,7 +49,7 @@ test("oauth user can create CRM data, relogin with data, delete account, and rel
   crmData
 }) => {
   await loginWithLocalOidc(page, localOidcUser);
-  await expect(page.getByRole("heading", { name: "Schedule" })).toBeVisible();
+  await expectDashboardReady(page);
 
   await createPackage(page, crmData.packageName);
   await createStudent(page, crmData.firstStudent);
@@ -59,20 +59,20 @@ test("oauth user can create CRM data, relogin with data, delete account, and rel
   await createLesson(page, crmData.secondStudent, true);
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Schedule" })).toBeVisible();
+  await expectDashboardReady(page);
 
   await expectCrmDataVisible(page, crmData);
 
   await signOut(page);
   await loginWithLocalOidc(page, localOidcUser);
-  await expect(page.getByRole("heading", { name: "Schedule" })).toBeVisible();
+  await expectDashboardReady(page);
   await expectCrmDataVisible(page, crmData);
 
   await deleteAccount(page, localOidcUser);
   await expect(page).toHaveURL(/\/login$/);
 
   await loginWithLocalOidc(page, localOidcUser);
-  await expect(page.getByRole("heading", { name: "Schedule" })).toBeVisible();
+  await expectDashboardReady(page);
 
   await expect(page.getByText(crmData.firstStudent)).toHaveCount(0);
   await expect(page.getByText(crmData.secondStudent)).toHaveCount(0);
@@ -171,9 +171,25 @@ async function deleteAccount(page: Page, user: LocalOidcUser) {
   );
 }
 
+async function expectDashboardReady(page: Page) {
+  await expect(page.getByRole("heading", { level: 1, name: "Schedule", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Main navigation").getByRole("button", { name: "Packages", exact: true })).toBeVisible();
+}
+
 async function openSection(page: Page, name: NavSection) {
-  await page.getByRole("button", { name, exact: true }).click();
-  await expect(page.getByRole("heading", { name: headingByNavName(name) })).toBeVisible();
+  const heading = headingByNavName(name);
+  const navButton =
+    name === "Settings"
+      ? page.getByRole("button", { name, exact: true })
+      : page.getByLabel("Main navigation").getByRole("button", { name, exact: true });
+  const pageHeading = page.getByRole("heading", { level: 1, name: heading, exact: true });
+
+  await expect(async () => {
+    if (!(await pageHeading.isVisible().catch(() => false))) {
+      await navButton.click();
+    }
+    await expect(pageHeading).toBeVisible();
+  }).toPass();
 }
 
 async function verifySectionContains(page: Page, section: NavSection, ...texts: string[]) {
