@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Lesson, TelegramStudentProfile } from "@crm/shared";
 import {
+  attendanceLessonKeyboard,
   findLessonByScheduleIndex,
   formatAttendancePrompt,
   formatAttendanceResult,
@@ -11,7 +12,7 @@ import {
 function createProfile(lessons: Lesson[]): TelegramStudentProfile {
   return {
     student: { id: "s1", fullName: "Alice" },
-    settings: { lessonReminderMinutes: [1440, 120] },
+    settings: { lessonReminderMinutes: [1440, 120], timezone: "Europe/Minsk" },
     balance: {
       studentId: "s1",
       paidLessons: 1,
@@ -118,7 +119,25 @@ describe("formatAttendancePrompt", () => {
 
     expect(text).toContain("1.");
     expect(text).toContain("буду");
-    expect(text).toContain("/attend 1");
+    expect(text).toContain("Нажмите кнопку ниже");
+  });
+});
+
+describe("attendanceLessonKeyboard", () => {
+  test("builds buttons only for actionable lessons", () => {
+    const profile = createProfile([
+      createLesson({ id: "l1", startsAt: futureStartsAt() }),
+      createLesson({
+        id: "l2",
+        startsAt: futureStartsAt(172_800_000),
+        status: "completed"
+      })
+    ]);
+
+    const keyboard = attendanceLessonKeyboard(profile, "confirmed");
+    const button = keyboard?.inline_keyboard[0]?.[0] as { callback_data?: string } | undefined;
+    expect(keyboard?.inline_keyboard).toHaveLength(1);
+    expect(button?.callback_data).toContain("l1");
   });
 });
 
@@ -130,7 +149,7 @@ describe("formatAttendanceResult", () => {
       hasDebt: true
     });
 
-    const text = formatAttendanceResult(lesson, "s1", "declined");
+    const text = formatAttendanceResult(lesson, "s1", "declined", "Europe/Minsk");
 
     expect(text).toContain("не буду");
     expect(text).toContain("балансу");

@@ -4,8 +4,12 @@ import { formatBalanceMessage, formatNotLinkedMessage, formatScheduleMessage } f
 
 function createProfile(input?: Partial<TelegramStudentProfile>): TelegramStudentProfile {
   return {
-    student: { id: "s1", fullName: "Alice <Test>" },
-    settings: input?.settings ?? { lessonReminderMinutes: [1440, 120] },
+    student: {
+      id: "s1",
+      fullName: "Alice <Test>",
+      ...input?.student
+    },
+    settings: input?.settings ?? { lessonReminderMinutes: [1440, 120], timezone: "Europe/Minsk" },
     balance: {
       studentId: "s1",
       paidLessons: 2,
@@ -110,17 +114,17 @@ describe("formatScheduleMessage", () => {
     }
 
     expect(reply.text).toContain("<b>1.");
-    expect(reply.text).toContain("/attend N");
+    expect(reply.text).toContain("/attend");
   });
 
-  test("shows actual lesson time range from duration", () => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(18, 0, 0, 0);
+  test("shows actual lesson time range from duration in teacher timezone", () => {
+    // 18:00 Europe/Minsk == 15:00 UTC
+    const startsAt = "2024-04-02T15:00:00.000Z";
 
     const reply = formatScheduleMessage(
       createProfile({
-        upcomingLessons: [createLesson(tomorrow.toISOString(), 75)]
+        settings: { lessonReminderMinutes: [1440, 120], timezone: "Europe/Minsk" },
+        upcomingLessons: [createLesson(startsAt, 75)]
       })
     );
 
@@ -128,8 +132,26 @@ describe("formatScheduleMessage", () => {
       throw new Error("expected html reply");
     }
 
-    const timeFormatter = new Intl.DateTimeFormat("ru-RU", { hour: "numeric", minute: "2-digit" });
-    const endsAt = new Date(tomorrow.getTime() + 75 * 60_000);
-    expect(reply.text).toContain(`${timeFormatter.format(tomorrow)}–${timeFormatter.format(endsAt)}`);
+    expect(reply.text).toContain("18:00–19:15");
+  });
+
+  test("uses student timezone override for schedule times", () => {
+    // 18:00 Europe/Moscow == 15:00 UTC
+    const startsAt = "2024-04-02T15:00:00.000Z";
+
+    const reply = formatScheduleMessage(
+      createProfile({
+        student: { id: "s1", fullName: "Alice <Test>", timezone: "Europe/Moscow" },
+        settings: { lessonReminderMinutes: [1440, 120], timezone: "UTC" },
+        upcomingLessons: [createLesson(startsAt, 60)]
+      })
+    );
+
+    if (typeof reply === "string") {
+      throw new Error("expected html reply");
+    }
+
+    expect(reply.text).toContain("18:00–19:00");
+    expect(reply.text).not.toContain("15:00–16:00");
   });
 });

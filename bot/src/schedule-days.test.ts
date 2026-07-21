@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import {
   DEFAULT_SCHEDULE_DAYS,
   parseScheduleDaysFromPayload,
-  parseScheduleDaysFromPhrase
+  parseScheduleDaysFromPhrase,
+  resolveScheduleDaysCallback,
+  scheduleDaysKeyboard
 } from "./schedule-days";
 
 describe("parseScheduleDaysFromPayload", () => {
@@ -31,5 +33,21 @@ describe("parseScheduleDaysFromPhrase", () => {
   test("returns undefined for unrelated phrases", () => {
     expect(parseScheduleDaysFromPhrase("баланс")).toBeUndefined();
     expect(parseScheduleDaysFromPhrase("расписание на 100 дней")).toBeUndefined();
+  });
+});
+
+describe("schedule days keyboard", () => {
+  test("marks active period and resolves callbacks", () => {
+    const keyboard = scheduleDaysKeyboard(14);
+    const buttons = (keyboard.inline_keyboard[0] ?? []) as Array<{ callback_data?: string; text: string }>;
+    expect(buttons.map((button) => button.callback_data)).toEqual([
+      "sch:d:7",
+      "sch:d:14",
+      "sch:d:30",
+      "sch:d:60"
+    ]);
+    expect(buttons.find((button) => button.callback_data === "sch:d:14")?.text).toContain("✓");
+    expect(resolveScheduleDaysCallback("sch:d:30")).toBe(30);
+    expect(resolveScheduleDaysCallback("sch:d:0")).toBeNull();
   });
 });

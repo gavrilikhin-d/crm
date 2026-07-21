@@ -33,6 +33,7 @@ export const students = pgTable(
     telegramChatId: text("telegram_chat_id"),
     telegramBindToken: text("telegram_bind_token").notNull(),
     lessonReminderMinutes: jsonb("lesson_reminder_minutes").$type<number[] | null>(),
+    timezone: text("timezone"),
     status: text("status").notNull(),
     defaultLessonPrice: integer("default_lesson_price").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull(),
@@ -210,7 +211,8 @@ export const appSettings = pgTable("app_settings", {
   groupDurationMinutes: integer("group_duration_minutes").notNull(),
   defaultSingleLessonPrice: integer("default_single_lesson_price").notNull(),
   currency: text("currency").notNull(),
-  cancellationPolicy: text("cancellation_policy").notNull()
+  cancellationPolicy: text("cancellation_policy").notNull(),
+  timezone: text("timezone").notNull().default("Europe/Minsk")
 });
 
 export const vacationPeriods = pgTable("vacation_periods", {

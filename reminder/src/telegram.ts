@@ -1,5 +1,7 @@
 import { Telegraf } from "telegraf";
 import type { Lesson, Student } from "@crm/shared";
+import { lessonReminderKeyboard } from "@crm/shared/lesson-callback";
+import { formatLessonDateTimeInTimeZone } from "@crm/shared/timezone";
 
 let bot: Telegraf | null = null;
 
@@ -22,13 +24,13 @@ function getTelegramToken(): string | undefined {
   return process.env.TELEGRAM_BOT_TOKEN?.trim() || undefined;
 }
 
-export async function sendLessonReminder(student: Student, lesson: Lesson): Promise<void> {
+export async function sendLessonReminder(student: Student, lesson: Lesson, timeZone: string): Promise<void> {
   const instance = getTelegramBot();
   if (!instance || !student.telegramChatId) {
     return;
   }
 
-  await instance.telegram.sendMessage(student.telegramChatId, formatLessonReminder(student, lesson), {
+  await instance.telegram.sendMessage(student.telegramChatId, formatLessonReminder(student, lesson, timeZone), {
     reply_markup: lessonReminderKeyboard(lesson.id, student.id)
   });
 }
@@ -50,12 +52,8 @@ export async function sendPaymentReminder(student: Student, unpaidLessons: numbe
   );
 }
 
-import { lessonReminderKeyboard } from "@crm/shared/lesson-callback";
-
-function formatLessonReminder(student: Student, lesson: Lesson): string {
-  const startsAt = new Date(lesson.startsAt);
-  const date = new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium" }).format(startsAt);
-  const timeRange = formatLessonTimeRange(startsAt, lesson.durationMinutes);
+function formatLessonReminder(student: Student, lesson: Lesson, timeZone: string): string {
+  const { date, timeRange } = formatLessonDateTimeInTimeZone(lesson.startsAt, lesson.durationMinutes, timeZone);
 
   const kind = lesson.effectiveType === "group" ? "групповое" : "индивидуальное";
   const participant = lesson.participants.find((item) => item.studentId === student.id);
@@ -72,10 +70,4 @@ function formatLessonReminder(student: Student, lesson: Lesson): string {
   ]
     .filter(Boolean)
     .join("\n");
-}
-
-function formatLessonTimeRange(startsAt: Date, durationMinutes: number): string {
-  const formatter = new Intl.DateTimeFormat("ru-RU", { hour: "numeric", minute: "2-digit" });
-  const endsAt = new Date(startsAt.getTime() + durationMinutes * 60_000);
-  return `${formatter.format(startsAt)}–${formatter.format(endsAt)}`;
 }

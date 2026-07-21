@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "./load-env.js";
 import { initSentryNode, suppressSentryTracing } from "@crm/shared/sentry-node";
 import { parameterizePath, withIncomingHttpSpan } from "@crm/shared/sentry-tracing";
 import { createServer } from "node:http";

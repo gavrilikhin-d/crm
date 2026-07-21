@@ -44,7 +44,8 @@ export async function runReminderTick(): Promise<void> {
           student: item.student,
           lesson: item.lesson,
           scheduledFor: item.scheduledFor,
-          dedupeKey: item.dedupeKey
+          dedupeKey: item.dedupeKey,
+          timeZone: item.timeZone
         });
       }
     },
@@ -116,6 +117,7 @@ async function sendReminderOnce(input: {
   lesson: Lesson;
   scheduledFor: string;
   dedupeKey: string;
+  timeZone: string;
 }): Promise<void> {
   return withSentrySpan(
     "reminder.send_lesson",
@@ -142,7 +144,7 @@ async function sendReminderOnce(input: {
       }
 
       try {
-        await sendLessonReminder(input.student, input.lesson);
+        await sendLessonReminder(input.student, input.lesson, input.timeZone);
         const status = input.student.telegramChatId ? "sent" : "skipped";
         await updateReminder(reminder.id, {
           status,

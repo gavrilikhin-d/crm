@@ -1,10 +1,7 @@
 import type { Lesson, TelegramStudentProfile } from "@crm/shared";
+import { formatLessonWhenInTimeZone, resolveNotificationTimeZone } from "@crm/shared/timezone";
 
 type BotReply = string | { text: string; parse_mode: "HTML" };
-
-const weekdayFormatter = new Intl.DateTimeFormat("ru-RU", { weekday: "short" });
-const dayMonthFormatter = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short" });
-const timeFormatter = new Intl.DateTimeFormat("ru-RU", { hour: "numeric", minute: "2-digit" });
 
 function formatBalanceMessage(profile: TelegramStudentProfile): BotReply {
   const { balance } = profile;
@@ -26,6 +23,7 @@ function formatBalanceMessage(profile: TelegramStudentProfile): BotReply {
 function formatScheduleMessage(profile: TelegramStudentProfile): BotReply {
   const days = profile.scheduleDays;
   const header = `📅 <b>Занятия на ${days} ${pluralDays(days)}</b>`;
+  const timeZone = resolveProfileTimeZone(profile);
 
   if (!profile.upcomingLessons.length) {
     return {
@@ -34,7 +32,7 @@ function formatScheduleMessage(profile: TelegramStudentProfile): BotReply {
         "",
         `На ближайшие ${days} ${pluralDays(days)} занятий нет.`,
         "",
-        `<i>Другой период: /schedule 14</i>`
+        `<i>Другой период — кнопки ниже</i>`
       ].join("\n"),
       parse_mode: "HTML"
     };
@@ -42,7 +40,7 @@ function formatScheduleMessage(profile: TelegramStudentProfile): BotReply {
 
   const now = new Date();
   const blocks = profile.upcomingLessons.map((lesson, index) =>
-    formatLessonBlock(index + 1, profile.student.id, lesson, now)
+    formatLessonBlock(index + 1, profile.student.id, lesson, now, timeZone)
   );
 
   return {
@@ -52,8 +50,8 @@ function formatScheduleMessage(profile: TelegramStudentProfile): BotReply {
       "",
       ...blocks,
       "",
-      `<i>Другой период: /schedule 14</i>`,
-      `<i>Ответ по занятию: /attend N или /decline N</i>`
+      `<i>Другой период — кнопки ниже</i>`,
+      `<i>Ответ по занятию: /attend или /decline</i>`
     ].join("\n\n"),
     parse_mode: "HTML"
   };
@@ -66,36 +64,19 @@ function formatNotLinkedMessage(): string {
   ].join("\n");
 }
 
-function formatLessonBlock(index: number, studentId: string, lesson: Lesson, now: Date): string {
+function formatLessonBlock(
+  index: number,
+  studentId: string,
+  lesson: Lesson,
+  now: Date,
+  timeZone: string
+): string {
   const participant = lesson.participants.find((item) => item.studentId === studentId);
-  const when = formatLessonWhen(new Date(lesson.startsAt), lesson.durationMinutes, now);
+  const when = formatLessonWhenInTimeZone(lesson.startsAt, lesson.durationMinutes, timeZone, now);
   const kind = lesson.effectiveType === "group" ? "Групповое" : "Индивидуальное";
   const tags = formatLessonTags(participant, lesson.status);
 
   return [`<b>${index}. ${escapeHtml(when)}</b>`, `${kind}${tags.length ? `\n${tags.join(" · ")}` : ""}`].join("\n");
-}
-
-function formatLessonWhen(startsAt: Date, durationMinutes: number, now: Date): string {
-  const timeRange = formatLessonTimeRange(startsAt, durationMinutes);
-
-  if (sameDay(startsAt, now)) {
-    return `Сегодня · ${timeRange}`;
-  }
-
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  if (sameDay(startsAt, tomorrow)) {
-    return `Завтра · ${timeRange}`;
-  }
-
-  const weekday = capitalize(weekdayFormatter.format(startsAt));
-  const dayMonth = dayMonthFormatter.format(startsAt);
-  return `${weekday}, ${dayMonth} · ${timeRange}`;
-}
-
-function formatLessonTimeRange(startsAt: Date, durationMinutes: number): string {
-  const endsAt = new Date(startsAt.getTime() + durationMinutes * 60_000);
-  return `${timeFormatter.format(startsAt)}–${timeFormatter.format(endsAt)}`;
 }
 
 function formatLessonTags(
@@ -121,16 +102,11 @@ function formatLessonTags(
   return tags;
 }
 
-function sameDay(left: Date, right: Date): boolean {
-  return (
-    left.getFullYear() === right.getFullYear() &&
-    left.getMonth() === right.getMonth() &&
-    left.getDate() === right.getDate()
-  );
-}
-
-function capitalize(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
+function resolveProfileTimeZone(profile: TelegramStudentProfile): string {
+  return resolveNotificationTimeZone({
+    studentTimeZone: profile.student.timezone,
+    teacherTimeZone: profile.settings.timezone
+  });
 }
 
 function escapeHtml(value: string): string {
@@ -161,4 +137,10 @@ function pluralLessons(count: number): string {
   return "занятий";
 }
 
-export { formatBalanceMessage, formatNotLinkedMessage, formatScheduleMessage, type BotReply };
+export {
+  formatBalanceMessage,
+  formatNotLinkedMessage,
+  formatScheduleMessage,
+  resolveProfileTimeZone,
+  type BotReply
+};

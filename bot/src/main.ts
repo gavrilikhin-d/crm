@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "./load-env.js";
 import { initSentryNode } from "@crm/shared/sentry-node";
 import { startTelegramBot } from "./telegram";
 import { log } from "./logger";

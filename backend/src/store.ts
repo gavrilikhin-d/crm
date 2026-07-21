@@ -26,6 +26,7 @@ import { dedupeLessonsByOccurrence } from "@crm/shared/lesson-dedupe";
 import { lessonOverlapsVacation, normalizeVacationPeriod } from "@crm/shared/vacation";
 import { getPlanLimits } from "@crm/shared/plans";
 import { isSupportedCurrency } from "@crm/shared/currency";
+import { isValidTimeZone } from "@crm/shared/timezone";
 import type { AuthContext } from "./auth";
 import {
   deleteStudentAvatar,
@@ -60,7 +61,7 @@ import {
   replaceParticipantDebtFlags,
   updateRecurringScheduleRecord,
   updateReminderRecord,
-  updateStudentReminderMinutes,
+  updateStudentTelegramPreferences,
   updateStudentRecord,
   updateAppSettings,
   upsertAccountByGoogle
@@ -271,10 +272,12 @@ export class Store {
       student: {
         id: student.id,
         fullName: student.fullName,
-        lessonReminderMinutes: student.lessonReminderMinutes ?? null
+        lessonReminderMinutes: student.lessonReminderMinutes ?? null,
+        timezone: student.timezone ?? null
       },
       settings: {
-        lessonReminderMinutes: db.settings.lessonReminderMinutes
+        lessonReminderMinutes: db.settings.lessonReminderMinutes,
+        timezone: db.settings.timezone
       },
       balance,
       upcomingLessons,
@@ -284,7 +287,7 @@ export class Store {
 
   async updateTelegramStudentPreferences(
     userId: string | number,
-    input: { lessonReminderMinutes?: unknown }
+    input: { lessonReminderMinutes?: unknown; timezone?: unknown }
   ): Promise<TelegramStudentProfile> {
     const linked = await findStudentByTelegramUser(String(userId));
     if (!linked) {
@@ -292,12 +295,33 @@ export class Store {
     }
 
     const db = await loadAccountDatabase(linked.accountId);
-    const nextLessonReminderMinutes =
-      input.lessonReminderMinutes === null
-        ? null
-        : normalizeReminderMinutes(input.lessonReminderMinutes, db.settings.lessonReminderMinutes);
+    const patch: {
+      lessonReminderMinutes?: number[] | null;
+      timezone?: string | null;
+    } = {};
 
-    const updated = await updateStudentReminderMinutes(linked.id, nextLessonReminderMinutes);
+    if ("lessonReminderMinutes" in input) {
+      patch.lessonReminderMinutes =
+        input.lessonReminderMinutes === null
+          ? null
+          : normalizeReminderMinutes(input.lessonReminderMinutes, db.settings.lessonReminderMinutes);
+    }
+
+    if ("timezone" in input) {
+      if (input.timezone === null || input.timezone === "") {
+        patch.timezone = null;
+      } else if (typeof input.timezone === "string" && isValidTimeZone(input.timezone.trim())) {
+        patch.timezone = input.timezone.trim();
+      } else {
+        throw new StoreValidationError("invalid_timezone", "Invalid timezone");
+      }
+    }
+
+    if (!Object.keys(patch).length) {
+      throw new StoreValidationError("invalid_preferences", "No preferences provided");
+    }
+
+    const updated = await updateStudentTelegramPreferences(linked.id, patch);
     if (!updated) {
       throw new Error("Student not found");
     }

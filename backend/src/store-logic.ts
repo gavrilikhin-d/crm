@@ -48,7 +48,8 @@ export function createDefaultSettings(): AppSettings {
     groupDurationMinutes: 90,
     defaultSingleLessonPrice: 3000,
     currency: "BYN",
-    cancellationPolicy: "free"
+    cancellationPolicy: "free",
+    timezone: process.env.APP_TIMEZONE?.trim() || "Europe/Minsk"
   };
 }
 

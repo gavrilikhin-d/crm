@@ -41,7 +41,8 @@ export async function getTelegramStudentProfile(
 
 export async function updateTelegramStudentPreferences(input: {
   userId: number | string;
-  lessonReminderMinutes: number[] | null;
+  lessonReminderMinutes?: number[] | null;
+  timezone?: string | null;
 }): Promise<TelegramStudentProfile> {
   return api<TelegramStudentProfile>("/internal/telegram/preferences", {
     method: "PATCH",
