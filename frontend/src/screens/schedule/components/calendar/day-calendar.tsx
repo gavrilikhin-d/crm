@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useI18n } from "@/i18n/context";
 import { formatWeekday } from "@/i18n/format";
-import type { Lesson, Student, VacationPeriod } from "@crm/shared";
+import type { Lesson, Payment, Student, VacationPeriod } from "@crm/shared";
 import { getVacationPeriodForDate } from "@crm/shared/vacation";
 import { cn } from "@/lib/utils";
 import { calendarStickyHeaderClass } from "@/screens/dashboard/constants";
@@ -17,6 +17,8 @@ export function DayCalendar({
   calendarRange,
   currentTime,
   lessons,
+  packageProgressLessons = [],
+  payments = [],
   vacationPeriods,
   getStudent,
   onSelectLesson,
@@ -26,6 +28,8 @@ export function DayCalendar({
   calendarRange: CalendarRange;
   currentTime: Date | null;
   lessons: Lesson[];
+  packageProgressLessons?: Lesson[];
+  payments?: Payment[];
   vacationPeriods: VacationPeriod[];
   getStudent: (studentId: string) => Student | undefined;
   onSelectLesson: (lesson: Lesson) => void;
@@ -63,6 +67,8 @@ export function DayCalendar({
         calendarRange={calendarRange}
         currentTime={currentTime}
         lessons={lessons}
+        packageProgressLessons={packageProgressLessons}
+        payments={payments}
         vacationPeriod={vacationPeriod}
         draggedLesson={draggedLesson}
         getStudent={getStudent}

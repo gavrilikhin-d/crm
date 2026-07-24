@@ -893,6 +893,8 @@ export default function Home() {
             dayLessons={dayLessons}
             weekLessons={weekLessons}
             monthLessons={monthLessons}
+            packageProgressLessons={lessons}
+            payments={payments}
             dayCalendarRange={dayCalendarRange}
             dayScrollAnchor={dayScrollAnchor}
             weekCalendarRange={weekCalendarRange}

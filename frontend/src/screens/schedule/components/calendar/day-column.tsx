@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/context";
 import { formatDateTime } from "@/i18n/format";
-import type { Lesson, Student, VacationPeriod } from "@crm/shared";
+import type { Lesson, Payment, Student, VacationPeriod } from "@crm/shared";
 import { getVacationDayOverlay } from "@crm/shared/vacation";
 import type { CalendarRange } from "@/screens/dashboard/types";
 import { hourHeight } from "@/screens/dashboard/constants";
@@ -47,6 +47,8 @@ export function DayColumn({
   calendarRange,
   currentTime,
   lessons,
+  packageProgressLessons = [],
+  payments = [],
   vacationPeriod,
   draggedLesson,
   resizePreview: resizePreviewProp,
@@ -60,6 +62,8 @@ export function DayColumn({
   calendarRange: CalendarRange;
   currentTime: Date | null;
   lessons: Lesson[];
+  packageProgressLessons?: Lesson[];
+  payments?: Payment[];
   vacationPeriod?: VacationPeriod;
   draggedLesson?: DraggedLesson | null;
   resizePreview?: LessonResizePreview | null;
@@ -296,6 +300,8 @@ export function DayColumn({
           calendarRange={calendarRange}
           lane={lane}
           lanes={lanes}
+          packageProgressLessons={packageProgressLessons}
+          payments={payments}
           getStudent={getStudent}
           onSelect={() => onSelectLesson(lesson)}
           onDragStart={

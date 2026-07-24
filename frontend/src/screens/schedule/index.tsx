@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useI18n } from "@/i18n/context";
 import { formatLongDate, formatMonth, formatWeekRange } from "@/i18n/format";
-import type { Lesson, Student, VacationPeriod } from "@crm/shared";
+import type { Lesson, Payment, Student, VacationPeriod } from "@crm/shared";
 import { pageSectionClass } from "@/screens/dashboard/constants";
 import type { CalendarRange, ScheduleView } from "@/screens/dashboard/types";
 import { getDefaultLessonStartsAt, sameDate } from "@/screens/schedule/utils/calendar";
@@ -32,6 +32,8 @@ export function ScheduleScreen({
   dayLessons,
   weekLessons,
   monthLessons,
+  packageProgressLessons,
+  payments,
   dayCalendarRange,
   dayScrollAnchor,
   weekCalendarRange,
@@ -64,6 +66,8 @@ export function ScheduleScreen({
   dayLessons: Lesson[];
   weekLessons: Lesson[];
   monthLessons: Lesson[];
+  packageProgressLessons: Lesson[];
+  payments: Payment[];
   dayCalendarRange: CalendarRange;
   dayScrollAnchor: number;
   weekCalendarRange: CalendarRange;
@@ -184,6 +188,8 @@ export function ScheduleScreen({
               calendarRange={dayCalendarRange}
               currentTime={currentTime}
               lessons={dayLessons}
+              packageProgressLessons={packageProgressLessons}
+              payments={payments}
               vacationPeriods={vacationPeriods}
               getStudent={getStudent}
               onSelectLesson={onSelectLesson}
@@ -205,6 +211,8 @@ export function ScheduleScreen({
               calendarRange={weekCalendarRange}
               currentTime={currentTime}
               lessons={weekLessons}
+              packageProgressLessons={packageProgressLessons}
+              payments={payments}
               vacationPeriods={vacationPeriods}
               getStudent={getStudent}
               onSelectLesson={onSelectLesson}
@@ -219,6 +227,8 @@ export function ScheduleScreen({
             monthDays={monthDays}
             currentTime={currentTime}
             lessons={monthLessons}
+            packageProgressLessons={packageProgressLessons}
+            payments={payments}
             vacationPeriods={vacationPeriods}
             getStudent={getStudent}
             onSelectDay={onSelectDay}

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Lesson, Student } from "@crm/shared";
+import type { Lesson, Payment, Student } from "@crm/shared";
 import {
   buildGoogleCalendarDescription,
   buildGoogleCalendarEvent,
@@ -66,7 +66,7 @@ describe("google calendar event", () => {
     expect(buildGoogleCalendarEvent(lesson, students).summary).toBe("Anna Ivanova");
   });
 
-  test("marks declined participants with strikethrough in description", () => {
+  test("marks declined participants without HTML in description", () => {
     const groupLesson: Lesson = {
       ...lesson,
       effectiveType: "group",
@@ -83,8 +83,11 @@ describe("google calendar event", () => {
     };
 
     expect(buildGoogleCalendarSummary(groupLesson, students)).toBe("Anna Ivanova");
-    expect(buildGoogleCalendarDescription(groupLesson, students)).toContain("<s>Boris Petrov</s> — отказался");
+    expect(buildGoogleCalendarDescription(groupLesson, students)).toContain("Boris Petrov — отказался");
+    expect(buildGoogleCalendarDescription(groupLesson, students)).not.toContain("<s>");
+    expect(buildGoogleCalendarDescription(groupLesson, students)).not.toContain("<br>");
     expect(buildGoogleCalendarDescription(groupLesson, students)).toContain("Anna Ivanova — подтвердил");
+    expect(buildGoogleCalendarDescription(groupLesson, students)).toContain("\n");
   });
 
   test("keeps partially cancelled group events active with declined participants marked", () => {
@@ -109,7 +112,8 @@ describe("google calendar event", () => {
     expect(event.summary).toBe("Anna Ivanova");
     expect(event.description).toContain("Формат: Групповое");
     expect(event.description).toContain("Anna Ivanova — подтвердил");
-    expect(event.description).toContain("<s>Boris Petrov</s> — отказался");
+    expect(event.description).toContain("Boris Petrov — отказался");
+    expect(event.description).not.toContain("<s>");
     expect(event.reminders).toBeUndefined();
     expect(event.transparency).toBeUndefined();
   });
@@ -124,7 +128,8 @@ describe("google calendar event", () => {
 
     expect(event.summary).toBe("Отменено: Anna Ivanova");
     expect(event.description).toContain("Статус: отменено учеником");
-    expect(event.description).toContain("<s>Anna Ivanova</s> — отказался");
+    expect(event.description).toContain("Anna Ivanova — отказался");
+    expect(event.description).not.toContain("<s>");
     expect(event.reminders).toEqual({ useDefault: false, overrides: [] });
     expect(event.transparency).toBe("transparent");
   });
@@ -150,10 +155,52 @@ describe("google calendar event", () => {
 
     expect(event.summary).toBe("Отменено: Anna Ivanova, Boris Petrov");
     expect(event.description).toContain("Формат: Групповое");
-    expect(event.description).toContain("<s>Anna Ivanova</s> — отказался");
-    expect(event.description).toContain("<s>Boris Petrov</s> — отказался");
+    expect(event.description).toContain("Anna Ivanova — отказался");
+    expect(event.description).toContain("Boris Petrov — отказался");
+    expect(event.description).not.toContain("<s>");
     expect(event.reminders).toEqual({ useDefault: false, overrides: [] });
     expect(event.transparency).toBe("transparent");
+  });
+
+  test("appends package progress after participant names", () => {
+    const priorLessons: Lesson[] = [
+      {
+        ...lesson,
+        id: "lesson-prior-1",
+        startsAt: "2026-06-28T10:00:00.000Z",
+        participants: [{ ...lesson.participants[0], id: "participant-prior-1", status: "confirmed" }]
+      },
+      {
+        ...lesson,
+        id: "lesson-prior-2",
+        startsAt: "2026-06-29T10:00:00.000Z",
+        participants: [{ ...lesson.participants[0], id: "participant-prior-2", status: "confirmed" }]
+      },
+      {
+        ...lesson,
+        participants: [{ ...lesson.participants[0], status: "confirmed" }]
+      }
+    ];
+    const payments: Payment[] = [
+      {
+        id: "payment-1",
+        studentId: anna.id,
+        amount: 400,
+        currency: "USD",
+        paidAt: "2026-06-01T00:00:00.000Z",
+        method: "cash",
+        lessonCount: 8,
+        createdAt: "2026-06-01T00:00:00.000Z"
+      }
+    ];
+    const progressContext = { lessons: priorLessons, payments };
+    const currentLesson = priorLessons[2]!;
+
+    expect(buildGoogleCalendarSummary(currentLesson, students, progressContext)).toBe("Anna Ivanova 3/8");
+    expect(buildGoogleCalendarDescription(currentLesson, students, progressContext)).toContain(
+      "Anna Ivanova 3/8 — подтвердил"
+    );
+    expect(buildGoogleCalendarDescription(currentLesson, students, progressContext)).not.toContain("<br>");
   });
 
   test("builds updated payloads when lesson type changes", () => {

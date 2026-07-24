@@ -134,6 +134,33 @@ async function refreshCredentialsIfNeeded(accountId: string, credentials: Google
   return next;
 }
 
+async function getActiveGoogleCalendarAuth(accountId: string): Promise<{
+  accessToken: string;
+  calendarId: string;
+  auth: ReturnType<typeof createOAuthClient>;
+}> {
+  const credentials = await getAccountGoogleCalendar(accountId);
+  if (!credentials?.refreshToken) {
+    throw new Error("Google Calendar is not connected");
+  }
+
+  const active = await refreshCredentialsIfNeeded(accountId, credentials);
+  if (!active.accessToken) {
+    throw new Error("Google Calendar access token is missing");
+  }
+
+  const auth = createOAuthClient({
+    accessToken: active.accessToken,
+    refreshToken: active.refreshToken
+  });
+
+  return {
+    accessToken: active.accessToken,
+    calendarId: active.calendarId,
+    auth
+  };
+}
+
 export async function withGoogleCalendarClient<T>(
   accountId: string,
   run: (calendar: ReturnType<typeof google.calendar>, calendarId: string) => Promise<T>,
@@ -143,18 +170,25 @@ export async function withGoogleCalendarClient<T>(
     operation,
     "google.calendar",
     async () => {
-      const credentials = await getAccountGoogleCalendar(accountId);
-      if (!credentials?.refreshToken) {
-        throw new Error("Google Calendar is not connected");
-      }
-
-      const active = await refreshCredentialsIfNeeded(accountId, credentials);
-      const auth = createOAuthClient({
-        accessToken: active.accessToken,
-        refreshToken: active.refreshToken
-      });
+      const { auth, calendarId } = await getActiveGoogleCalendarAuth(accountId);
       const calendar = google.calendar({ version: "v3", auth });
-      return run(calendar, active.calendarId);
+      return run(calendar, calendarId);
+    },
+    { "account.id": accountId }
+  );
+}
+
+export async function withGoogleCalendarAccessToken<T>(
+  accountId: string,
+  run: (accessToken: string, calendarId: string) => Promise<T>,
+  operation = "google.calendar.api"
+): Promise<T> {
+  return withSentrySpan(
+    operation,
+    "google.calendar",
+    async () => {
+      const { accessToken, calendarId } = await getActiveGoogleCalendarAuth(accountId);
+      return run(accessToken, calendarId);
     },
     { "account.id": accountId }
   );
