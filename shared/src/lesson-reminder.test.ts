@@ -7,9 +7,9 @@ import {
   isLessonReminderStillValid,
   isSkippedLessonStatus,
   isSkippedParticipantStatus,
-  lessonReminderDedupeKey,
-  parseLessonReminderDedupeKey,
-  planLessonReminderSync
+  lessonReminderIdentityKey,
+  planLessonReminderSync,
+  utcDateKey
 } from "./lesson-reminder";
 
 function createStudent(id: string, overrides: Partial<Student> = {}): Student {
@@ -74,7 +74,6 @@ describe("desiredLessonReminders", () => {
 
     expect(desired).toHaveLength(1);
     expect(desired[0]).toMatchObject({
-      dedupeKey: "lesson:l1:s1:60",
       leadMinutes: 60,
       scheduledFor: "2026-06-30T17:00:00.000Z",
       studentId: "s1",
@@ -130,7 +129,7 @@ describe("desiredLessonReminders", () => {
       nowMs: Date.parse("2026-06-30T10:00:00.000Z")
     });
 
-    expect(desired.map((item) => item.dedupeKey)).toEqual(["lesson:approved:s1:60"]);
+    expect(desired.map((item) => item.leadMinutes)).toEqual([60]);
   });
 
   test("does not schedule past lessons", () => {
@@ -160,7 +159,7 @@ describe("desiredLessonReminders", () => {
       nowMs: Date.parse("2026-06-30T10:00:00.000Z")
     });
 
-    expect(desired.map((item) => item.dedupeKey)).toEqual(["lesson:l1:s1:1440", "lesson:l1:s1:60"]);
+    expect(desired.map((item) => item.leadMinutes)).toEqual([1440, 60]);
   });
 
   test("uses student reminder override before account defaults", () => {
@@ -172,7 +171,7 @@ describe("desiredLessonReminders", () => {
       nowMs: Date.parse("2026-06-30T10:00:00.000Z")
     });
 
-    expect(desired.map((item) => item.dedupeKey)).toEqual(["lesson:l1:s1:30"]);
+    expect(desired.map((item) => item.leadMinutes)).toEqual([30]);
   });
 
   test("falls back to account defaults when student override is empty", () => {
@@ -191,7 +190,6 @@ describe("planLessonReminderSync", () => {
           studentId: "s1",
           leadMinutes: 60,
           scheduledFor: "2026-06-30T17:00:00.000Z",
-          dedupeKey: "lesson:l1:s1:60",
           timeZone: "Europe/Minsk"
         }
       ],
@@ -201,7 +199,7 @@ describe("planLessonReminderSync", () => {
     expect(actions).toEqual([
       {
         type: "insert",
-        desired: expect.objectContaining({ dedupeKey: "lesson:l1:s1:60" })
+        desired: expect.objectContaining({ leadMinutes: 60, studentId: "s1" })
       }
     ]);
   });
@@ -215,7 +213,7 @@ describe("planLessonReminderSync", () => {
       scheduledFor: "2026-06-30T16:00:00.000Z",
       status: "pending",
       claimedAt: "2026-06-30T15:00:00.000Z",
-      dedupeKey: "lesson:l1:s1:60",
+      leadMinutes: 60,
       createdAt: "2026-06-01T00:00:00.000Z"
     };
 
@@ -227,7 +225,6 @@ describe("planLessonReminderSync", () => {
           studentId: "s1",
           leadMinutes: 60,
           scheduledFor: "2026-06-30T17:00:00.000Z",
-          dedupeKey: "lesson:l1:s1:60",
           timeZone: "Europe/Minsk"
         }
       ],
@@ -253,7 +250,7 @@ describe("planLessonReminderSync", () => {
       scheduledFor: "2026-06-30T16:00:00.000Z",
       status: "sent",
       sentAt: "2026-06-30T16:00:00.000Z",
-      dedupeKey: "lesson:l1:s1:60",
+      leadMinutes: 60,
       createdAt: "2026-06-01T00:00:00.000Z"
     };
 
@@ -265,7 +262,6 @@ describe("planLessonReminderSync", () => {
           studentId: "s1",
           leadMinutes: 60,
           scheduledFor: "2026-07-01T17:00:00.000Z",
-          dedupeKey: "lesson:l1:s1:60",
           timeZone: "Europe/Minsk"
         }
       ],
@@ -290,7 +286,7 @@ describe("planLessonReminderSync", () => {
       studentId: "s1",
       scheduledFor: "2026-06-30T17:00:00.000Z",
       status: "pending",
-      dedupeKey: "lesson:l1:s1:60",
+      leadMinutes: 60,
       createdAt: "2026-06-01T00:00:00.000Z"
     };
 
@@ -312,7 +308,7 @@ describe("planLessonReminderSync", () => {
       scheduledFor: "2026-06-30T17:00:00.000Z",
       status: "sent",
       sentAt: "2026-06-30T17:00:00.000Z",
-      dedupeKey: "lesson:l1:s1:60",
+      leadMinutes: 60,
       createdAt: "2026-06-01T00:00:00.000Z"
     };
 
@@ -325,7 +321,6 @@ describe("planLessonReminderSync", () => {
             studentId: "s1",
             leadMinutes: 60,
             scheduledFor: "2026-06-30T17:00:00.000Z",
-            dedupeKey: "lesson:l1:s1:60",
             timeZone: "Europe/Minsk"
           }
         ],
@@ -343,13 +338,9 @@ describe("helpers", () => {
     expect(isSkippedParticipantStatus("confirmed")).toBe(false);
   });
 
-  test("dedupe key parse/roundtrip", () => {
-    expect(lessonReminderDedupeKey("l1", "s1", 60)).toBe("lesson:l1:s1:60");
-    expect(parseLessonReminderDedupeKey("lesson:l1:s1:60")).toEqual({
-      lessonId: "l1",
-      studentId: "s1",
-      leadMinutes: 60
-    });
+  test("identity helpers", () => {
+    expect(lessonReminderIdentityKey("l1", "s1", 60)).toBe("l1:s1:60");
+    expect(utcDateKey("2026-06-30T18:05:00.000Z")).toBe("2026-06-30");
   });
 
   test("isLessonReminderStillValid", () => {
@@ -369,7 +360,6 @@ describe("helpers", () => {
       })
     ).toBe(false);
   });
-
 });
 
 describe("coalesceLessonReminderDeliveries", () => {

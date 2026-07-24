@@ -78,7 +78,7 @@ describe.skipIf(!databaseAvailable)("account deletion integration", () => {
         studentId: alice.id,
         scheduledFor: futureDate(13, 18, 0),
         status: "pending",
-        dedupeKey: `account-delete-${ctx.accountId}`
+        leadMinutes: 60
       });
       await store.setParticipantStatus(ctx, lesson.id, alice.id, "confirmed", "attend");
       await store.createVacationPeriod(ctx, {

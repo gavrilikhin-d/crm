@@ -186,13 +186,19 @@ export const reminders = pgTable(
     sentAt: timestamp("sent_at", { withTimezone: true, mode: "string" }),
     error: text("error"),
     claimedAt: timestamp("claimed_at", { withTimezone: true, mode: "string" }),
-    dedupeKey: text("dedupe_key").notNull().unique(),
+    leadMinutes: integer("lead_minutes"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull()
   },
   (table) => [
     index("reminders_pending_scheduled_for_idx")
       .on(table.scheduledFor)
-      .where(sql`${table.status} = 'pending'`)
+      .where(sql`${table.status} = 'pending'`),
+    uniqueIndex("reminders_lesson_unique_idx")
+      .on(table.lessonId, table.studentId, table.leadMinutes)
+      .where(sql`${table.type} = 'lesson'`),
+    uniqueIndex("reminders_payment_day_unique_idx")
+      .on(table.studentId, sql`((timezone('UTC', ${table.scheduledFor}))::date)`)
+      .where(sql`${table.type} = 'payment'`)
   ]
 );
 

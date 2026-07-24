@@ -141,7 +141,7 @@ export interface Reminder {
   sentAt?: string;
   error?: string;
   claimedAt?: string;
-  dedupeKey: string;
+  leadMinutes?: number;
   createdAt: string;
 }
 

@@ -26,7 +26,6 @@ const paymentContext: PaymentReminderContext = {
 const claimed: ClaimedLessonReminder = {
   reminderId: "rem-lesson-1",
   accountId: "acc-1",
-  dedupeKey: "lesson:l1:s1:60",
   leadMinutes: 60,
   scheduledFor: "2026-06-30T17:00:00.000Z",
   timeZone: "Europe/Minsk",
@@ -61,7 +60,6 @@ const upsertReminder = mock(() =>
     studentId: student.id,
     scheduledFor: "2026-06-30T12:00:00.000Z",
     status: "pending",
-    dedupeKey: "payment:s-pay:2026-06-30",
     createdAt: "2026-06-30T12:00:00.000Z"
   } satisfies Reminder)
 );

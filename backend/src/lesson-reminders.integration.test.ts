@@ -26,11 +26,13 @@ describe.skipIf(!databaseAvailable)("write-time lesson reminders + claim", () =>
       });
 
       const rows = await db.select().from(reminders).where(eq(reminders.accountId, ctx.accountId));
-      const keys = rows.map((row) => row.dedupeKey).sort();
+      const keys = rows
+        .map((row) => `${row.lessonId}:${row.studentId}:${row.leadMinutes}`)
+        .sort();
 
       expect(keys).toEqual([
-        `lesson:${lesson.id}:${student.id}:120`,
-        `lesson:${lesson.id}:${student.id}:60`
+        `${lesson.id}:${student.id}:120`,
+        `${lesson.id}:${student.id}:60`
       ].sort());
       expect(rows.every((row) => row.status === "pending")).toBe(true);
     } finally {

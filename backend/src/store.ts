@@ -27,8 +27,8 @@ import {
   coalesceLessonReminderDeliveries,
   desiredLessonReminders,
   isLessonReminderStillValid,
-  parseLessonReminderDedupeKey,
   planLessonReminderSync,
+  utcDateKey,
   type ClaimedLessonReminder,
   type PaymentReminderContext
 } from "@crm/shared/lesson-reminder";
@@ -1357,7 +1357,7 @@ export class Store {
             studentId: action.desired.studentId,
             scheduledFor: action.desired.scheduledFor,
             status: "pending",
-            dedupeKey: action.desired.dedupeKey,
+            leadMinutes: action.desired.leadMinutes,
             createdAt: now()
           };
           await insertReminder(accountId, created);
@@ -1379,6 +1379,7 @@ export class Store {
         }
 
         reminder.scheduledFor = action.desired.scheduledFor;
+        reminder.leadMinutes = action.desired.leadMinutes;
         reminder.claimedAt = undefined;
         if (action.reArm) {
           reminder.status = "pending";
@@ -1438,14 +1439,13 @@ export class Store {
 
       const lesson = db.lessons.find((item) => item.id === reminder.lessonId);
       const student = db.students.find((item) => item.id === reminder.studentId);
-      const parsed = parseLessonReminderDedupeKey(reminder.dedupeKey);
-      const leadMinutes = parsed?.leadMinutes;
+      const leadMinutes = reminder.leadMinutes;
 
       if (!lesson || !student || leadMinutes == null || !isLessonReminderStillValid({ lesson, studentId: student.id })) {
         await this.updateReminder(reminder.accountId, reminder.id, {
           status: "skipped",
           error: "Reminder no longer valid",
-          leadMinutes: leadMinutes ?? null,
+          ...(leadMinutes != null ? { leadMinutes } : {}),
           telegramChatId: student?.telegramChatId ?? null
         });
         continue;
@@ -1454,7 +1454,6 @@ export class Store {
       payloads.push({
         reminderId: reminder.id,
         accountId: reminder.accountId,
-        dedupeKey: reminder.dedupeKey,
         leadMinutes,
         scheduledFor: reminder.scheduledFor,
         timeZone: resolveNotificationTimeZone({
@@ -1512,7 +1511,7 @@ export class Store {
 
   async upsertReminder(accountId: string, reminder: Omit<Reminder, "id" | "createdAt">): Promise<Reminder> {
     const db = await loadAccountDatabase(accountId);
-    const existing = db.reminders.find((item) => item.dedupeKey === reminder.dedupeKey);
+    const existing = findExistingReminder(db.reminders, reminder);
     if (existing) {
       return existing;
     }
@@ -1531,6 +1530,9 @@ export class Store {
     const reminder = mustFind(db.reminders, id, "Reminder");
     const { telegramChatId, leadMinutes, ...reminderPatch } = patch;
     Object.assign(reminder, reminderPatch);
+    if (leadMinutes !== undefined) {
+      reminder.leadMinutes = leadMinutes ?? undefined;
+    }
     if (reminder.status === "sent" || reminder.status === "failed" || reminder.status === "skipped") {
       reminder.claimedAt = undefined;
     }
@@ -1546,7 +1548,8 @@ export class Store {
         channel: "telegram",
         type: deliveryType,
         status: reminder.status,
-        leadMinutes: deliveryType === "lesson_reminder" ? (leadMinutes ?? null) : null,
+        leadMinutes:
+          deliveryType === "lesson_reminder" ? (leadMinutes ?? reminder.leadMinutes ?? null) : null,
         telegramChatId: telegramChatId ?? null,
         error: reminder.error ?? null
       });
@@ -1592,6 +1595,33 @@ export class Store {
   calculateBalanceFor(db: Database, studentId: string): StudentBalance {
     return getStudentBalance(db, studentId);
   }
+}
+
+function findExistingReminder(
+  reminders: Reminder[],
+  candidate: Omit<Reminder, "id" | "createdAt">
+): Reminder | undefined {
+  if (candidate.type === "lesson") {
+    return reminders.find(
+      (item) =>
+        item.type === "lesson" &&
+        item.lessonId === candidate.lessonId &&
+        item.studentId === candidate.studentId &&
+        item.leadMinutes === candidate.leadMinutes
+    );
+  }
+
+  if (candidate.type === "payment") {
+    const day = utcDateKey(candidate.scheduledFor);
+    return reminders.find(
+      (item) =>
+        item.type === "payment" &&
+        item.studentId === candidate.studentId &&
+        utcDateKey(item.scheduledFor) === day
+    );
+  }
+
+  return undefined;
 }
 
 export const store = new Store();

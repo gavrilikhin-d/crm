@@ -8,7 +8,6 @@ export type DesiredLessonReminder = {
   studentId: string;
   leadMinutes: number;
   scheduledFor: string;
-  dedupeKey: string;
   timeZone: string;
 };
 
@@ -20,7 +19,6 @@ export type ReminderSyncAction =
 export type ClaimedLessonReminder = {
   reminderId: string;
   accountId: string;
-  dedupeKey: string;
   leadMinutes: number;
   scheduledFor: string;
   timeZone: string;
@@ -53,23 +51,12 @@ export function getStudentLessonReminderMinutes(
   return student.lessonReminderMinutes?.length ? student.lessonReminderMinutes : settings.lessonReminderMinutes;
 }
 
-export function lessonReminderDedupeKey(lessonId: string, studentId: string, leadMinutes: number): string {
-  return `lesson:${lessonId}:${studentId}:${leadMinutes}`;
+export function lessonReminderIdentityKey(lessonId: string, studentId: string, leadMinutes: number): string {
+  return `${lessonId}:${studentId}:${leadMinutes}`;
 }
 
-export function parseLessonReminderDedupeKey(
-  dedupeKey: string
-): { lessonId: string; studentId: string; leadMinutes: number } | null {
-  const match = /^lesson:([^:]+):([^:]+):(\d+)$/.exec(dedupeKey);
-  if (!match) {
-    return null;
-  }
-
-  return {
-    lessonId: match[1]!,
-    studentId: match[2]!,
-    leadMinutes: Number(match[3])
-  };
+export function utcDateKey(isoTimestamp: string): string {
+  return new Date(isoTimestamp).toISOString().slice(0, 10);
 }
 
 export function isLessonReminderStillValid(input: {
@@ -157,7 +144,6 @@ export function desiredLessonReminders(input: {
         studentId: student.id,
         leadMinutes,
         scheduledFor: new Date(startsAtMs - leadMinutes * LESSON_REMINDER_MINUTE_MS).toISOString(),
-        dedupeKey: lessonReminderDedupeKey(lesson.id, student.id, leadMinutes),
         timeZone: resolveNotificationTimeZone({
           studentTimeZone: student.timezone,
           teacherTimeZone: settings.timezone
@@ -174,15 +160,22 @@ export function planLessonReminderSync(input: {
   desired: DesiredLessonReminder[];
   lessonId: string;
 }): ReminderSyncAction[] {
-  const desiredByKey = new Map(input.desired.map((item) => [item.dedupeKey, item]));
+  const desiredByKey = new Map(
+    input.desired.map((item) => [lessonReminderIdentityKey(item.lessonId, item.studentId, item.leadMinutes), item])
+  );
   const existingForLesson = input.existing.filter(
     (item) => item.type === "lesson" && item.lessonId === input.lessonId
   );
-  const existingByKey = new Map(existingForLesson.map((item) => [item.dedupeKey, item]));
+  const existingByKey = new Map(
+    existingForLesson
+      .filter((item) => item.studentId != null && item.leadMinutes != null)
+      .map((item) => [lessonReminderIdentityKey(item.lessonId!, item.studentId!, item.leadMinutes!), item])
+  );
   const actions: ReminderSyncAction[] = [];
 
   for (const desired of input.desired) {
-    const existing = existingByKey.get(desired.dedupeKey);
+    const key = lessonReminderIdentityKey(desired.lessonId, desired.studentId, desired.leadMinutes);
+    const existing = existingByKey.get(key);
     if (!existing) {
       actions.push({ type: "insert", desired });
       continue;
@@ -206,10 +199,11 @@ export function planLessonReminderSync(input: {
   }
 
   for (const existing of existingForLesson) {
-    if (existing.status !== "pending") {
+    if (existing.status !== "pending" || existing.studentId == null || existing.leadMinutes == null) {
       continue;
     }
-    if (!desiredByKey.has(existing.dedupeKey)) {
+    const key = lessonReminderIdentityKey(existing.lessonId!, existing.studentId, existing.leadMinutes);
+    if (!desiredByKey.has(key)) {
       actions.push({ type: "skip", reminderId: existing.id });
     }
   }

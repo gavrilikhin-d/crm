@@ -93,8 +93,7 @@ export async function sendManualPaymentReminder(studentId: string): Promise<{ se
         type: "payment",
         studentId,
         scheduledFor: new Date().toISOString(),
-        status: "pending",
-        dedupeKey: `payment:${studentId}:${new Date().toISOString().slice(0, 10)}`
+        status: "pending"
       });
 
       try {

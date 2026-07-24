@@ -100,7 +100,7 @@ export async function claimPendingLessonReminderRows(limit: number): Promise<Cla
       r.sent_at,
       r.error,
       r.claimed_at,
-      r.dedupe_key,
+      r.lead_minutes,
       r.created_at
   `);
 
@@ -119,6 +119,13 @@ function mapClaimedReminderRow(row: Record<string, unknown>): ClaimedReminderRow
     }
     return String(value);
   };
+  const asNumber = (value: unknown): number | undefined => {
+    if (value == null) {
+      return undefined;
+    }
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
 
   return {
     id: String(get("id", "id")),
@@ -131,7 +138,7 @@ function mapClaimedReminderRow(row: Record<string, unknown>): ClaimedReminderRow
     sentAt: asString(get("sent_at", "sentAt")),
     error: asString(get("error", "error")),
     claimedAt: asString(get("claimed_at", "claimedAt")),
-    dedupeKey: String(get("dedupe_key", "dedupeKey")),
+    leadMinutes: asNumber(get("lead_minutes", "leadMinutes")),
     createdAt: asString(get("created_at", "createdAt"))!
   };
 }
@@ -743,7 +750,7 @@ export async function insertReminder(accountId: string, reminder: Reminder): Pro
     sentAt: reminder.sentAt ?? null,
     error: reminder.error ?? null,
     claimedAt: reminder.claimedAt ?? null,
-    dedupeKey: reminder.dedupeKey,
+    leadMinutes: reminder.leadMinutes ?? null,
     createdAt: reminder.createdAt
   });
 }
@@ -760,7 +767,7 @@ export async function updateReminderRecord(reminder: Reminder): Promise<void> {
       sentAt: reminder.sentAt ?? null,
       error: reminder.error ?? null,
       claimedAt: reminder.claimedAt ?? null,
-      dedupeKey: reminder.dedupeKey
+      leadMinutes: reminder.leadMinutes ?? null
     })
     .where(eq(reminders.id, reminder.id));
 }
@@ -961,7 +968,7 @@ function mapReminder(row: typeof reminders.$inferSelect): Reminder {
     sentAt: row.sentAt ?? undefined,
     error: row.error ?? undefined,
     claimedAt: row.claimedAt ?? undefined,
-    dedupeKey: row.dedupeKey,
+    leadMinutes: row.leadMinutes ?? undefined,
     createdAt: row.createdAt
   };
 }
