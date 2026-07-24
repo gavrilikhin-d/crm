@@ -79,6 +79,23 @@ function resolveScheduleDaysCallback(callbackData: string): number | null {
   return days;
 }
 
+function resolveActiveScheduleDaysFromMarkup(markup: InlineKeyboardMarkup | undefined): number | null {
+  const buttons = markup?.inline_keyboard.flat() ?? [];
+  const hasScheduleDays = buttons.some((button) => button.callback_data?.startsWith("sch:d:"));
+  if (!hasScheduleDays) {
+    return null;
+  }
+
+  const active = buttons.find(
+    (button) => button.callback_data?.startsWith("sch:d:") && button.text.startsWith("✓ ")
+  );
+  if (active?.callback_data) {
+    return resolveScheduleDaysCallback(active.callback_data);
+  }
+
+  return DEFAULT_SCHEDULE_DAYS;
+}
+
 export {
   ATTENDANCE_SCHEDULE_DAYS,
   DEFAULT_SCHEDULE_DAYS,
@@ -89,6 +106,7 @@ export {
   normalizeScheduleDays,
   parseScheduleDaysFromPhrase,
   parseScheduleDaysFromPayload,
+  resolveActiveScheduleDaysFromMarkup,
   resolveScheduleDaysCallback,
   scheduleDaysKeyboard
 };

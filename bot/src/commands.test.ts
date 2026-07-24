@@ -15,7 +15,8 @@ describe("command suggestions", () => {
 
     expect(callbacks).toContain("cmd:schedule");
     expect(callbacks).toContain("cmd:balance");
-    expect(callbacks).toContain("cmd:attend");
+    expect(callbacks).not.toContain("cmd:attend");
+    expect(callbacks).not.toContain("cmd:decline");
     expect(callbacks).toContain("cmd:help");
   });
 
@@ -29,7 +30,9 @@ describe("command suggestions", () => {
     expect(keyboard.is_persistent).toBe(true);
     expect(labels).toContain("📅 Расписание");
     expect(labels).toContain("💰 Баланс");
-    expect(labels).toContain("❓ Помощь");
+    expect(labels).not.toContain("👍 Буду");
+    expect(labels).not.toContain("👎 Не буду");
+    expect(labels).toContain("🔔 Напоминания");
   });
 
   test("resolves known command callbacks and reply labels", () => {
@@ -37,6 +40,6 @@ describe("command suggestions", () => {
     expect(resolveCommandSuggestion("cmd:unknown")).toBeNull();
     expect(resolveCommandSuggestion("tz:r")).toBeNull();
     expect(resolveCommandReplyLabel("📅 Расписание")).toBe("schedule");
-    expect(resolveCommandReplyLabel("👍 Буду")).toBe("attend");
+    expect(resolveCommandReplyLabel("👍 Буду")).toBeNull();
   });
 });

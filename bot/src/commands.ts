@@ -3,12 +3,10 @@ import type { Telegram } from "telegraf";
 
 const botCommands: BotCommand[] = [
   { command: "start", description: "Подключить Telegram и открыть меню" },
-  { command: "schedule", description: "Расписание — выбрать период кнопкой" },
+  { command: "schedule", description: "Расписание — период и ответ по занятию" },
   { command: "balance", description: "Сколько занятий осталось" },
   { command: "notifications", description: "Настроить напоминания — кнопки или минуты" },
   { command: "timezone", description: "Выбрать часовой пояс кнопкой или городом" },
-  { command: "attend", description: "Подтвердить занятие — выбрать кнопкой" },
-  { command: "decline", description: "Отказаться от занятия — выбрать кнопкой" },
   { command: "help", description: "Список команд" }
 ];
 
@@ -20,8 +18,6 @@ type CommandSuggestion = {
 const commandSuggestions: CommandSuggestion[] = [
   { id: "schedule", label: "📅 Расписание" },
   { id: "balance", label: "💰 Баланс" },
-  { id: "attend", label: "👍 Буду" },
-  { id: "decline", label: "👎 Не буду" },
   { id: "notifications", label: "🔔 Напоминания" },
   { id: "timezone", label: "🌍 Часовой пояс" },
   { id: "help", label: "❓ Помощь" }
@@ -47,9 +43,7 @@ function commandReplyKeyboard(): ReplyKeyboardMarkup {
   return {
     keyboard: [
       [{ text: "📅 Расписание" }, { text: "💰 Баланс" }],
-      [{ text: "👍 Буду" }, { text: "👎 Не буду" }],
       [{ text: "🔔 Напоминания" }, { text: "🌍 Часовой пояс" }],
-      [{ text: "❓ Помощь" }]
     ],
     resize_keyboard: true,
     is_persistent: true
@@ -75,11 +69,10 @@ function formatHelpMessage(isGroup = false): string {
     "Доступные команды:",
     ...botCommands.map((item) => `/${item.command} — ${item.description}`),
     "",
-    "Расписание: /schedule — период можно выбрать кнопками 7/14/30/60.",
+    "Расписание: /schedule — период кнопками 7/14/30/60, ответ по занятию кнопками или «буду 1» / «не буду 1».",
     "Напоминания: /notifications — выбрать интервалы, или напишите: 45, 15 мин, 3 ч.",
     "Часовой пояс: /timezone — выбрать город кнопкой, или напишите «Москва», «Минск».",
     "Работает и /shedule (с опечаткой).",
-    "Ответ по занятию: /attend или /decline — выбрать занятие кнопкой.",
     "",
     "Можно нажать кнопку под полем ввода."
   ];
@@ -97,11 +90,20 @@ function formatHelpMessage(isGroup = false): string {
 }
 
 async function registerBotCommands(telegram: Telegram): Promise<void> {
-  const scopes = [{ type: "all_private_chats" as const }, { type: "all_group_chats" as const }];
+  // Default scope + chat scopes. Also clear stale language-specific lists so removed
+  // commands like /attend and /decline disappear from Telegram's "/" menu.
+  const scopeOptions: Array<{ scope?: { type: "all_private_chats" | "all_group_chats" } }> = [
+    {},
+    { scope: { type: "all_private_chats" } },
+    { scope: { type: "all_group_chats" } }
+  ];
 
-  for (const scope of scopes) {
-    await telegram.setMyCommands(botCommands, { scope });
-    await telegram.setMyCommands(botCommands, { scope, language_code: "ru" });
+  for (const options of scopeOptions) {
+    await telegram.deleteMyCommands(options).catch(() => undefined);
+    await telegram.deleteMyCommands({ ...options, language_code: "ru" }).catch(() => undefined);
+    await telegram.deleteMyCommands({ ...options, language_code: "en" }).catch(() => undefined);
+    await telegram.setMyCommands(botCommands, options);
+    await telegram.setMyCommands(botCommands, { ...options, language_code: "ru" });
   }
 }
 

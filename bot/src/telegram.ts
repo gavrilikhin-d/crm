@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { Telegraf } from "telegraf";
 import type { InlineKeyboardMarkup } from "@telegraf/types";
 import type { Context } from "telegraf";
-import type { Lesson, Student, TelegramStudentProfile } from "@crm/shared";
+import type { Lesson, Student } from "@crm/shared";
 import { withSentrySpan } from "@crm/shared/sentry-tracing";
 import { lessonReminderKeyboard, parseLessonCallback } from "@crm/shared/lesson-callback";
 import { formatLessonDateTimeInTimeZone } from "@crm/shared/timezone";
@@ -13,14 +13,12 @@ import {
   updateTelegramStudentPreferences
 } from "./backend-client";
 import {
-  ATTEND_COMMANDS,
-  DECLINE_COMMANDS,
-  attendanceLessonKeyboard,
   findLessonByScheduleIndex,
-  formatAttendancePrompt,
   formatAttendanceResult,
   isActionableLesson,
+  parseAttendancePhrase,
   parseLessonIndex,
+  scheduleKeyboard,
   type AttendanceIntent
 } from "./attendance";
 import {
@@ -60,6 +58,7 @@ import {
   DEFAULT_SCHEDULE_DAYS,
   parseScheduleDaysFromPhrase,
   parseScheduleDaysFromPayload,
+  resolveActiveScheduleDaysFromMarkup,
   resolveScheduleDaysCallback,
   scheduleDaysKeyboard,
   SCHEDULE_COMMANDS
@@ -241,26 +240,6 @@ export function getTelegramBot(): Telegraf | null {
     }
   });
 
-  bot.command([...ATTEND_COMMANDS], async (ctx) => {
-    const interaction = new BotInteraction("command:attend", ctx, { intent: "confirmed" });
-
-    try {
-      await replyWithAttendance(ctx, interaction, "confirmed", ctx.payload);
-    } finally {
-      interaction.flush();
-    }
-  });
-
-  bot.command([...DECLINE_COMMANDS], async (ctx) => {
-    const interaction = new BotInteraction("command:decline", ctx, { intent: "declined" });
-
-    try {
-      await replyWithAttendance(ctx, interaction, "declined", ctx.payload);
-    } finally {
-      interaction.flush();
-    }
-  });
-
   bot.hears(commandSuggestionLabels, async (ctx) => {
     const interaction = new BotInteraction("hears:command_button", ctx);
 
@@ -285,8 +264,8 @@ export function getTelegramBot(): Telegraf | null {
     }
   });
 
-  bot.hears(/^буду\s+(\d+)$/i, async (ctx) => {
-    const interaction = new BotInteraction("hears:attend", ctx, { intent: "confirmed" });
+  bot.hears(/^(?:буду|не\s+буду)(?:\s+\d+)?$/i, async (ctx) => {
+    const interaction = new BotInteraction("hears:attendance", ctx);
 
     try {
       if (!isPrivateChat(ctx)) {
@@ -294,22 +273,21 @@ export function getTelegramBot(): Telegraf | null {
         return;
       }
 
-      await replyWithAttendance(ctx, interaction, "confirmed", ctx.match[1]);
-    } finally {
-      interaction.flush();
-    }
-  });
-
-  bot.hears(/^не\s+буду\s+(\d+)$/i, async (ctx) => {
-    const interaction = new BotInteraction("hears:decline", ctx, { intent: "declined" });
-
-    try {
-      if (!isPrivateChat(ctx)) {
-        interaction.outcome = "skipped";
+      const text =
+        ctx.message && "text" in ctx.message && typeof ctx.message.text === "string" ? ctx.message.text : "";
+      const parsed = parseAttendancePhrase(text);
+      if (!parsed) {
+        interaction.outcome = "validation_error";
         return;
       }
 
-      await replyWithAttendance(ctx, interaction, "declined", ctx.match[1]);
+      interaction.meta.intent = parsed.intent;
+      await replyWithAttendance(
+        ctx,
+        interaction,
+        parsed.intent,
+        parsed.index !== undefined ? String(parsed.index) : undefined
+      );
     } finally {
       interaction.flush();
     }
@@ -484,6 +462,16 @@ export function getTelegramBot(): Telegraf | null {
     }
   });
 
+  bot.action(/^sch:n$/, async (ctx) => {
+    const interaction = new BotInteraction("callback:schedule_lesson_label", ctx);
+
+    try {
+      await answerCallback(ctx, interaction, "Нажмите 👍 или 👎");
+    } finally {
+      interaction.flush();
+    }
+  });
+
   bot.action(/^sch:d:\d+$/, async (ctx) => {
     const interaction = new BotInteraction("callback:schedule_days", ctx);
 
@@ -512,14 +500,15 @@ export function getTelegramBot(): Telegraf | null {
       interaction.meta.lessonCount = profile.upcomingLessons.length;
       await answerCallback(ctx, interaction, `Расписание на ${days} дн.`);
 
+      const keyboard = scheduleKeyboard(profile, days);
       if (typeof reply === "string") {
-        await ctx.editMessageText(reply, { reply_markup: scheduleDaysKeyboard(days) }).catch(() => undefined);
+        await ctx.editMessageText(reply, { reply_markup: keyboard }).catch(() => undefined);
         interaction.noteMessageKind("plain_text");
       } else {
         await ctx
           .editMessageText(reply.text, {
             parse_mode: reply.parse_mode,
-            reply_markup: scheduleDaysKeyboard(days)
+            reply_markup: keyboard
           })
           .catch(() => undefined);
         interaction.noteMessageKind("html_text");
@@ -702,9 +691,36 @@ export function getTelegramBot(): Telegraf | null {
       interaction.meta.status = status;
       const lesson = await setParticipantStatus({ lessonId, studentId, status, action });
       await answerCallback(ctx, interaction, action === "attend" ? "Отмечено: будете" : "Отмечено: не будете");
-      await ctx.editMessageReplyMarkup(undefined).catch(() => undefined);
-      interaction.noteMessageKind("markup_cleared");
-      await replyToUser(ctx, interaction, formatParticipantResult(lesson, studentId, action));
+
+      const callbackMessage =
+        ctx.callbackQuery && "message" in ctx.callbackQuery ? ctx.callbackQuery.message : undefined;
+      const existingMarkup =
+        callbackMessage && "reply_markup" in callbackMessage
+          ? (callbackMessage.reply_markup as InlineKeyboardMarkup | undefined)
+          : undefined;
+      const scheduleDays = resolveActiveScheduleDaysFromMarkup(existingMarkup);
+
+      if (scheduleDays !== null) {
+        const updatedProfile = await getTelegramStudentProfile(userId, { days: scheduleDays });
+        const reply = formatScheduleMessage(updatedProfile);
+        const keyboard = scheduleKeyboard(updatedProfile, scheduleDays);
+        if (typeof reply === "string") {
+          await ctx.editMessageText(reply, { reply_markup: keyboard }).catch(() => undefined);
+          interaction.noteMessageKind("plain_text");
+        } else {
+          await ctx
+            .editMessageText(reply.text, {
+              parse_mode: reply.parse_mode,
+              reply_markup: keyboard
+            })
+            .catch(() => undefined);
+          interaction.noteMessageKind("html_text");
+        }
+      } else {
+        await ctx.editMessageReplyMarkup(undefined).catch(() => undefined);
+        interaction.noteMessageKind("markup_cleared");
+        await replyToUser(ctx, interaction, formatParticipantResult(lesson, studentId, action));
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown attendance error";
       if (message.includes("past lesson")) {
@@ -791,7 +807,12 @@ export async function sendPaymentReminder(student: Student, unpaidLessons: numbe
   );
 }
 
-async function replyWithSchedule(ctx: Context, interaction: BotInteraction, days: number): Promise<void> {
+async function replyWithSchedule(
+  ctx: Context,
+  interaction: BotInteraction,
+  days: number,
+  prefix?: string
+): Promise<void> {
   const userId = ctx.from?.id;
   if (!userId) {
     interaction.outcome = "skipped";
@@ -802,15 +823,19 @@ async function replyWithSchedule(ctx: Context, interaction: BotInteraction, days
     const profile = await getTelegramStudentProfile(userId, { days });
     const reply = formatScheduleMessage(profile);
     interaction.meta.lessonCount = profile.upcomingLessons.length;
-    const keyboard = scheduleDaysKeyboard(days);
+    const keyboard = scheduleKeyboard(profile, days);
+    const text =
+      typeof reply === "string"
+        ? [prefix, reply].filter(Boolean).join("\n\n")
+        : [prefix, reply.text].filter(Boolean).join("\n\n");
 
     if (typeof reply === "string") {
-      await ctx.reply(reply, { reply_markup: keyboard });
+      await ctx.reply(text, { reply_markup: keyboard });
       interaction.noteMessageKind("plain_text");
       return;
     }
 
-    await ctx.reply(reply.text, {
+    await ctx.reply(text, {
       parse_mode: reply.parse_mode,
       reply_markup: keyboard
     });
@@ -966,41 +991,38 @@ async function replyWithAttendance(
     return;
   }
 
-  if (index) {
-    interaction.meta.lessonIndex = index;
+  const verb = intent === "confirmed" ? "подтвердить" : "отказаться";
+
+  if (!index) {
+    interaction.meta.mode = "prompt";
+    await replyWithSchedule(
+      ctx,
+      interaction,
+      DEFAULT_SCHEDULE_DAYS,
+      `Выберите занятие, чтобы ${verb}: кнопкой ниже или напишите «${intent === "confirmed" ? "буду" : "не буду"} 1».`
+    );
+    return;
   }
+
+  interaction.meta.lessonIndex = index;
 
   try {
     const profile = await getTelegramStudentProfile(userId, { days: ATTENDANCE_SCHEDULE_DAYS });
-
-    if (!index) {
-      interaction.meta.mode = "prompt";
-      await replyWithAttendancePrompt(ctx, interaction, profile, intent);
-      return;
-    }
-
     const lesson = findLessonByScheduleIndex(profile, index);
     if (!lesson) {
       interaction.outcome = "validation_error";
       interaction.meta.mode = "not_found";
-      await replyWithAttendancePrompt(
-        ctx,
-        interaction,
-        profile,
-        intent,
-        `Занятие №${index} не найдено.`
-      );
+      await replyWithSchedule(ctx, interaction, DEFAULT_SCHEDULE_DAYS, `Занятие №${index} не найдено.`);
       return;
     }
 
     if (!isActionableLesson(lesson, profile.student.id)) {
       interaction.outcome = "validation_error";
       interaction.meta.mode = "not_actionable";
-      await replyWithAttendancePrompt(
+      await replyWithSchedule(
         ctx,
         interaction,
-        profile,
-        intent,
+        DEFAULT_SCHEDULE_DAYS,
         `Занятие №${index} недоступно для изменения.`
       );
       return;
@@ -1041,19 +1063,6 @@ async function replyWithAttendance(
     });
     await replyToUser(ctx, interaction, "Не удалось обновить ответ. Попробуйте позже.");
   }
-}
-
-async function replyWithAttendancePrompt(
-  ctx: Context,
-  interaction: BotInteraction,
-  profile: TelegramStudentProfile,
-  intent: AttendanceIntent,
-  prefix?: string
-): Promise<void> {
-  const text = [prefix, formatAttendancePrompt(profile, intent)].filter(Boolean).join("\n\n");
-  const keyboard = attendanceLessonKeyboard(profile, intent);
-  await ctx.reply(text, keyboard ? { reply_markup: keyboard } : undefined);
-  interaction.noteMessageKind("plain_text");
 }
 
 async function replyWithCommandMenu(
@@ -1104,16 +1113,6 @@ async function runCommandSuggestion(
       return;
     }
     await handleTimezoneCommand(ctx, interaction);
-    return;
-  }
-
-  if (command === "attend") {
-    await replyWithAttendance(ctx, interaction, "confirmed");
-    return;
-  }
-
-  if (command === "decline") {
-    await replyWithAttendance(ctx, interaction, "declined");
   }
 }
 

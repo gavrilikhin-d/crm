@@ -98,7 +98,7 @@ describe("formatScheduleMessage", () => {
     expect(reply.text).toContain("занятий нет");
   });
 
-  test("numbers lessons and includes attend hint", () => {
+  test("numbers lessons and includes attendance hint", () => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     tomorrow.setHours(18, 0, 0, 0);
@@ -114,7 +114,8 @@ describe("formatScheduleMessage", () => {
     }
 
     expect(reply.text).toContain("<b>1.");
-    expect(reply.text).toContain("/attend");
+    expect(reply.text).toContain("буду 1");
+    expect(reply.text).not.toContain("/attend");
   });
 
   test("shows actual lesson time range from duration in teacher timezone", () => {

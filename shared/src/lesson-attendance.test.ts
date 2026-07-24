@@ -43,10 +43,27 @@ describe("canStudentChangeParticipantStatus", () => {
     expect(canStudentChangeParticipantStatus(lesson, now)).toBe(false);
   });
 
-  test("blocks changes for completed and cancelled lessons", () => {
+  test("blocks changes for completed and teacher-cancelled lessons", () => {
     const future = createLesson({ startsAt: "2026-07-01T18:00:00.000Z" });
     expect(canStudentChangeParticipantStatus({ ...future, status: "completed" }, now)).toBe(false);
     expect(canStudentChangeParticipantStatus({ ...future, status: "cancelled_by_teacher" }, now)).toBe(false);
+  });
+
+  test("allows reversing a student decline on cancelled_by_student lessons", () => {
+    const future = createLesson({
+      startsAt: "2026-07-01T18:00:00.000Z",
+      status: "cancelled_by_student",
+      participants: [
+        {
+          id: "participant-1",
+          studentId: "student-1",
+          status: "declined",
+          balanceCharged: false,
+          hasDebt: false
+        }
+      ]
+    });
+    expect(canStudentChangeParticipantStatus(future, now)).toBe(true);
   });
 });
 
