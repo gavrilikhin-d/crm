@@ -47,9 +47,11 @@ import {
   findStudentByBindToken,
   findStudentByTelegramUser,
   getAccountById,
+  insertActivityEvent,
   insertBalanceAdjustment,
   insertLessonPackage,
   insertLessons,
+  insertNotificationDelivery,
   insertPayment,
   insertRecurringSchedule,
   insertReminder,
@@ -64,8 +66,10 @@ import {
   updateStudentTelegramPreferences,
   updateStudentRecord,
   updateAppSettings,
-  upsertAccountByGoogle
+  upsertAccountByGoogle,
+  type ActivityActorType
 } from "./db/repository";
+
 import {
   assertCanCreateLesson,
   assertCanCreatePackage,
@@ -107,6 +111,35 @@ import {
   collectParticipantDebtFlagUpdates,
   skipRecurringOccurrence
 } from "./store-logic";
+
+export type ReminderUpdatePatch = Partial<Reminder> & {
+  telegramChatId?: string | null;
+  leadMinutes?: number | null;
+};
+
+function recordActivity(
+  accountId: string,
+  action: string,
+  options: {
+    actorType: ActivityActorType;
+    actorStudentId?: string | null;
+    entityType?: string | null;
+    entityId?: string | null;
+    metadata?: Record<string, unknown> | null;
+  }
+): void {
+  void insertActivityEvent({
+    accountId,
+    action,
+    actorType: options.actorType,
+    actorStudentId: options.actorStudentId,
+    entityType: options.entityType,
+    entityId: options.entityId,
+    metadata: options.metadata
+  }).catch((error) => {
+    console.warn("[activity] Failed to record activity", { accountId, action, err: error });
+  });
+}
 
 export { parseReminderMinutes, PlanLimitError };
 
@@ -206,6 +239,12 @@ export class Store {
     }
 
     await insertStudent(ctx.accountId, student);
+    recordActivity(ctx.accountId, "student.create", {
+      actorType: "teacher",
+      entityType: "student",
+      entityId: student.id,
+      metadata: { fullName: student.fullName, status: student.status }
+    });
     return student;
   }
 
@@ -236,6 +275,13 @@ export class Store {
     student.telegramUsername = optional(username) ?? student.telegramUsername;
     student.updatedAt = now();
     await updateStudentRecord(student);
+    recordActivity(linked.accountId, "telegram.bind", {
+      actorType: "student",
+      actorStudentId: student.id,
+      entityType: "student",
+      entityId: student.id,
+      metadata: { telegramUserId, telegramChatId: student.telegramChatId }
+    });
     return student;
   }
 
@@ -326,6 +372,25 @@ export class Store {
       throw new Error("Student not found");
     }
 
+    if ("lessonReminderMinutes" in patch) {
+      recordActivity(linked.accountId, "student.reminder_minutes.update", {
+        actorType: "student",
+        actorStudentId: linked.id,
+        entityType: "student",
+        entityId: linked.id,
+        metadata: { lessonReminderMinutes: patch.lessonReminderMinutes }
+      });
+    }
+    if ("timezone" in patch) {
+      recordActivity(linked.accountId, "student.timezone.update", {
+        actorType: "student",
+        actorStudentId: linked.id,
+        entityType: "student",
+        entityId: linked.id,
+        metadata: { timezone: patch.timezone }
+      });
+    }
+
     return this.getTelegramStudentProfile(userId);
   }
 
@@ -361,6 +426,17 @@ export class Store {
       throw new Error("Full name is required");
     }
     await updateStudentRecord(student);
+    recordActivity(ctx.accountId, "student.update", {
+      actorType: "teacher",
+      entityType: "student",
+      entityId: student.id,
+      metadata: {
+        fullName: student.fullName,
+        status: student.status,
+        telegramUserId: student.telegramUserId ?? null,
+        telegramChatId: student.telegramChatId ?? null
+      }
+    });
     return student;
   }
 
@@ -394,6 +470,11 @@ export class Store {
         .filter((lesson) => lesson.participants.length > 0)
         .map((lesson) => replaceLesson(lesson))
     ]);
+    recordActivity(ctx.accountId, "student.delete", {
+      actorType: "teacher",
+      entityType: "student",
+      entityId: id
+    });
   }
 
   private async purgeLesson(accountId: string, db: Database, lesson: Lesson): Promise<void> {
@@ -469,6 +550,17 @@ export class Store {
       updatedAt: timestamp
     };
     await insertLessonPackage(ctx.accountId, lessonPackage);
+    recordActivity(ctx.accountId, "package.create", {
+      actorType: "teacher",
+      entityType: "package",
+      entityId: lessonPackage.id,
+      metadata: {
+        name: lessonPackage.name,
+        lessonCount: lessonPackage.lessonCount,
+        price: lessonPackage.price,
+        currency: lessonPackage.currency
+      }
+    });
     return lessonPackage;
   }
 
@@ -476,6 +568,11 @@ export class Store {
     const db = await loadAccountDatabase(ctx.accountId);
     mustFind(db.lessonPackages, id, "LessonPackage");
     await deleteLessonPackageRecord(id);
+    recordActivity(ctx.accountId, "package.delete", {
+      actorType: "teacher",
+      entityType: "package",
+      entityId: id
+    });
   }
 
   async updateSettings(
@@ -501,6 +598,16 @@ export class Store {
         : {})
     };
     await updateAppSettings(ctx.accountId, settings);
+    recordActivity(ctx.accountId, "settings.update", {
+      actorType: "teacher",
+      entityType: "settings",
+      entityId: ctx.accountId,
+      metadata: {
+        currency: settings.currency,
+        lessonReminderMinutes: settings.lessonReminderMinutes,
+        googleCalendarSyncEnabled: input.googleCalendarSyncEnabled
+      }
+    });
     return settings;
   }
 
@@ -522,6 +629,16 @@ export class Store {
     await insertVacationPeriod(ctx.accountId, period);
     db.vacationPeriods.push(period);
     const cancelledLessons = await this.applyVacationCancellations(ctx.accountId, db, period);
+    recordActivity(ctx.accountId, "vacation.create", {
+      actorType: "teacher",
+      entityType: "vacation",
+      entityId: period.id,
+      metadata: {
+        startsOn: period.startsOn,
+        endsOn: period.endsOn,
+        cancelledLessons
+      }
+    });
 
     return { period, cancelledLessons };
   }
@@ -530,6 +647,11 @@ export class Store {
     const db = await loadAccountDatabase(ctx.accountId);
     mustFind(db.vacationPeriods, id, "VacationPeriod");
     await deleteVacationPeriodById(id);
+    recordActivity(ctx.accountId, "vacation.delete", {
+      actorType: "teacher",
+      entityType: "vacation",
+      entityId: id
+    });
   }
 
   async getGoogleCalendarStatus(ctx: AuthContext): Promise<GoogleCalendarStatus> {
@@ -543,10 +665,20 @@ export class Store {
   async completeGoogleCalendarConnect(accountId: string, code: string): Promise<void> {
     const tokens = await exchangeGoogleCalendarCode(code);
     await saveGoogleCalendarTokens(accountId, tokens);
+    recordActivity(accountId, "gcal.connect", {
+      actorType: "teacher",
+      entityType: "account",
+      entityId: accountId
+    });
   }
 
   async disconnectGoogleCalendar(ctx: AuthContext): Promise<void> {
     await disconnectGoogleCalendar(ctx.accountId);
+    recordActivity(ctx.accountId, "gcal.disconnect", {
+      actorType: "teacher",
+      entityType: "account",
+      entityId: ctx.accountId
+    });
   }
 
   async syncGoogleCalendar(ctx: AuthContext): Promise<{ synced: number; failed: number }> {
@@ -625,6 +757,18 @@ export class Store {
     });
     await insertLessons(ctx.accountId, toInsert);
     scheduleGoogleCalendarSync(ctx.accountId, toInsert);
+    recordActivity(ctx.accountId, "lesson.create", {
+      actorType: "teacher",
+      entityType: "lesson",
+      entityId: lesson.id,
+      metadata: {
+        startsAt: lesson.startsAt,
+        lessonType: lesson.effectiveType,
+        studentIds: uniqueStudentIds,
+        repeatWeekly: Boolean(input.repeatWeekly),
+        recurringScheduleId: lesson.recurringScheduleId ?? null
+      }
+    });
     return lesson;
   }
 
@@ -704,6 +848,12 @@ export class Store {
       ...(schedule ? [updateRecurringScheduleRecord(schedule)] : [])
     ]);
     scheduleGoogleCalendarSync(ctx.accountId, [lesson]);
+    recordActivity(ctx.accountId, "lesson.update", {
+      actorType: "teacher",
+      entityType: "lesson",
+      entityId: lesson.id,
+      metadata: { startsAt: lesson.startsAt, durationMinutes: lesson.durationMinutes }
+    });
     return lesson;
   }
 
@@ -733,6 +883,12 @@ export class Store {
       recalculateLesson(lesson, db.settings.individualDurationMinutes, db.settings.groupDurationMinutes);
       await replaceLesson(lesson);
       scheduleGoogleCalendarSync(ctx.accountId, [lesson]);
+      recordActivity(ctx.accountId, "lesson.participant.status", {
+        actorType: "teacher",
+        entityType: "lesson",
+        entityId: lessonId,
+        metadata: { studentId, status }
+      });
       return lesson;
     }
 
@@ -747,6 +903,13 @@ export class Store {
         studentId,
         action,
         createdAt: now()
+      });
+      recordActivity(ctx.accountId, action === "attend" ? "lesson.rsvp.attend" : "lesson.rsvp.decline", {
+        actorType: "student",
+        actorStudentId: studentId,
+        entityType: "lesson",
+        entityId: lessonId,
+        metadata: { studentId, status, action }
       });
     }
 
@@ -818,6 +981,12 @@ export class Store {
     recalculateLesson(lesson, db.settings.individualDurationMinutes, db.settings.groupDurationMinutes);
     await replaceLesson(lesson);
     scheduleGoogleCalendarSync(ctx.accountId, [lesson]);
+    recordActivity(ctx.accountId, "lesson.participant.add", {
+      actorType: "teacher",
+      entityType: "lesson",
+      entityId: lessonId,
+      metadata: { studentIds: uniqueStudentIds }
+    });
     return lesson;
   }
 
@@ -841,6 +1010,12 @@ export class Store {
 
     if (!lesson.participants.length) {
       await this.purgeLesson(ctx.accountId, db, lesson);
+      recordActivity(ctx.accountId, "lesson.participant.remove", {
+        actorType: "teacher",
+        entityType: "lesson",
+        entityId: lessonId,
+        metadata: { studentId, lessonDeleted: true }
+      });
       return null;
     }
 
@@ -848,6 +1023,12 @@ export class Store {
     recalculateLesson(lesson, db.settings.individualDurationMinutes, db.settings.groupDurationMinutes);
     await replaceLesson(lesson);
     scheduleGoogleCalendarSync(ctx.accountId, [lesson]);
+    recordActivity(ctx.accountId, "lesson.participant.remove", {
+      actorType: "teacher",
+      entityType: "lesson",
+      entityId: lessonId,
+      metadata: { studentId }
+    });
     return lesson;
   }
 
@@ -862,6 +1043,11 @@ export class Store {
     recalculateLesson(lesson, db.settings.individualDurationMinutes, db.settings.groupDurationMinutes);
     await replaceLesson(lesson);
     scheduleGoogleCalendarSync(ctx.accountId, [lesson]);
+    recordActivity(ctx.accountId, "lesson.complete", {
+      actorType: "teacher",
+      entityType: "lesson",
+      entityId: lessonId
+    });
     return lesson;
   }
 
@@ -877,6 +1063,11 @@ export class Store {
     lesson.updatedAt = now();
     await replaceLesson(lesson);
     scheduleGoogleCalendarSync(ctx.accountId, [lesson]);
+    recordActivity(ctx.accountId, "lesson.cancel", {
+      actorType: "teacher",
+      entityType: "lesson",
+      entityId: lessonId
+    });
     return lesson;
   }
 
@@ -887,6 +1078,12 @@ export class Store {
     if (!lesson.recurringScheduleId) {
       await removeLessonFromGoogleCalendar(ctx.accountId, lesson);
       await deleteLessonsByIds([lessonId]);
+      recordActivity(ctx.accountId, "lesson.delete", {
+        actorType: "teacher",
+        entityType: "lesson",
+        entityId: lessonId,
+        metadata: { scope: "single" }
+      });
       return;
     }
 
@@ -895,6 +1092,12 @@ export class Store {
 
     if (scope === "single") {
       await this.purgeLesson(ctx.accountId, db, lesson);
+      recordActivity(ctx.accountId, "lesson.delete", {
+        actorType: "teacher",
+        entityType: "lesson",
+        entityId: lessonId,
+        metadata: { scope: "single", recurringScheduleId: schedule.id }
+      });
       return;
     }
 
@@ -912,6 +1115,12 @@ export class Store {
         await removeLessonFromGoogleCalendar(ctx.accountId, item);
       }
       await deleteLessonsByIds(lessonsToRemove.map((item) => item.id));
+      recordActivity(ctx.accountId, "lesson.delete", {
+        actorType: "teacher",
+        entityType: "lesson",
+        entityId: lessonId,
+        metadata: { scope: "following", recurringScheduleId: schedule.id, deletedCount: lessonsToRemove.length }
+      });
       return;
     }
 
@@ -921,6 +1130,12 @@ export class Store {
     }
     await deleteLessonsByIds(lessonsToRemove.map((item) => item.id));
     await deleteRecurringScheduleRecord(schedule.id);
+    recordActivity(ctx.accountId, "lesson.delete", {
+      actorType: "teacher",
+      entityType: "lesson",
+      entityId: lessonId,
+      metadata: { scope: "all", recurringScheduleId: schedule.id, deletedCount: lessonsToRemove.length }
+    });
   }
 
   async createPayment(
@@ -987,6 +1202,19 @@ export class Store {
         .map((lesson) => replaceLesson(lesson))
     );
 
+    recordActivity(ctx.accountId, "payment.create", {
+      actorType: "teacher",
+      entityType: "payment",
+      entityId: payment.id,
+      metadata: {
+        studentId: payment.studentId,
+        amount: payment.amount,
+        currency: payment.currency,
+        lessonCount: payment.lessonCount,
+        method: payment.method,
+        packageId: payment.packageId ?? null
+      }
+    });
     return payment;
   }
 
@@ -1008,6 +1236,12 @@ export class Store {
         .filter((lesson) => lesson.participants.some((participant) => participant.studentId === studentId))
         .map((lesson) => replaceLesson(lesson))
     );
+    recordActivity(ctx.accountId, "payment.delete", {
+      actorType: "teacher",
+      entityType: "payment",
+      entityId: paymentId,
+      metadata: { studentId }
+    });
   }
 
   async createAdjustment(
@@ -1039,6 +1273,16 @@ export class Store {
         .map((lesson) => replaceLesson(lesson))
     );
 
+    recordActivity(ctx.accountId, "balance.adjust", {
+      actorType: "teacher",
+      entityType: "balance_adjustment",
+      entityId: adjustment.id,
+      metadata: {
+        studentId: adjustment.studentId,
+        lessonDelta: adjustment.lessonDelta,
+        reason: adjustment.reason
+      }
+    });
     return adjustment;
   }
 
@@ -1058,11 +1302,38 @@ export class Store {
     return created;
   }
 
-  async updateReminder(accountId: string, id: string, patch: Partial<Reminder>): Promise<Reminder> {
+  async updateReminder(accountId: string, id: string, patch: ReminderUpdatePatch): Promise<Reminder> {
     const db = await loadAccountDatabase(accountId);
     const reminder = mustFind(db.reminders, id, "Reminder");
-    Object.assign(reminder, patch);
+    const { telegramChatId, leadMinutes, ...reminderPatch } = patch;
+    Object.assign(reminder, reminderPatch);
     await updateReminderRecord(reminder);
+
+    if (reminder.status === "sent" || reminder.status === "failed" || reminder.status === "skipped") {
+      const deliveryType = reminder.type === "payment" ? "payment_reminder" : "lesson_reminder";
+      await insertNotificationDelivery({
+        accountId,
+        studentId: reminder.studentId,
+        lessonId: reminder.lessonId,
+        reminderId: reminder.id,
+        channel: "telegram",
+        type: deliveryType,
+        status: reminder.status,
+        leadMinutes: deliveryType === "lesson_reminder" ? (leadMinutes ?? null) : null,
+        telegramChatId: telegramChatId ?? null,
+        error: reminder.error ?? null
+      });
+
+      if (deliveryType === "payment_reminder" && reminder.status === "sent") {
+        recordActivity(accountId, "payment.reminder.send", {
+          actorType: "teacher",
+          entityType: "student",
+          entityId: reminder.studentId ?? null,
+          metadata: { reminderId: reminder.id, studentId: reminder.studentId ?? null }
+        });
+      }
+    }
+
     return reminder;
   }
 

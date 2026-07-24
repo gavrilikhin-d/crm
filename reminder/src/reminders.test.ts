@@ -114,7 +114,8 @@ describe("sendManualPaymentReminder", () => {
     expect(sendPaymentReminder).toHaveBeenCalledWith(student, balance.debtLessons);
     expect(updateReminder).toHaveBeenCalledWith("rem-1", {
       status: "sent",
-      sentAt: expect.any(String)
+      sentAt: expect.any(String),
+      telegramChatId: student.telegramChatId
     });
   });
 

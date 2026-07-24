@@ -1,4 +1,16 @@
-import { boolean, date, foreignKey, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  date,
+  foreignKey,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex
+} from "drizzle-orm/pg-core";
 
 export const accounts = pgTable("accounts", {
   id: text("id").primaryKey(),
@@ -228,3 +240,48 @@ export const vacationPeriods = pgTable("vacation_periods", {
   createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" }).notNull()
 });
+
+export const activityEvents = pgTable(
+  "activity_events",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    actorType: text("actor_type").notNull(),
+    actorStudentId: text("actor_student_id").references(() => students.id, { onDelete: "set null" }),
+    action: text("action").notNull(),
+    entityType: text("entity_type"),
+    entityId: text("entity_id"),
+    metadata: jsonb("metadata").$type<Record<string, unknown> | null>(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull()
+  },
+  (table) => [
+    index("activity_events_account_created_idx").on(table.accountId, table.createdAt),
+    index("activity_events_action_created_idx").on(table.action, table.createdAt)
+  ]
+);
+
+export const notificationDeliveries = pgTable(
+  "notification_deliveries",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    studentId: text("student_id").references(() => students.id, { onDelete: "set null" }),
+    lessonId: text("lesson_id").references(() => lessons.id, { onDelete: "set null" }),
+    reminderId: text("reminder_id").references(() => reminders.id, { onDelete: "set null" }),
+    channel: text("channel").notNull(),
+    type: text("type").notNull(),
+    status: text("status").notNull(),
+    leadMinutes: integer("lead_minutes"),
+    telegramChatId: text("telegram_chat_id"),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull()
+  },
+  (table) => [
+    index("notification_deliveries_account_created_idx").on(table.accountId, table.createdAt),
+    index("notification_deliveries_reminder_idx").on(table.reminderId)
+  ]
+);

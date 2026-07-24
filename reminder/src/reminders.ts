@@ -95,14 +95,16 @@ export async function sendManualPaymentReminder(studentId: string): Promise<{ se
         await sendPaymentReminder(student, unpaidLessons);
         await updateReminder(reminder.id, {
           status: "sent",
-          sentAt: new Date().toISOString()
+          sentAt: new Date().toISOString(),
+          telegramChatId: student.telegramChatId ?? null
         });
         log.info("Manual payment reminder sent", { studentId, reminderId: reminder.id, unpaidLessons });
         return { sent: true };
       } catch (error) {
         await updateReminder(reminder.id, {
           status: "failed",
-          error: error instanceof Error ? error.message : "Unknown error"
+          error: error instanceof Error ? error.message : "Unknown error",
+          telegramChatId: student.telegramChatId ?? null
         });
         log.error("Manual payment reminder failed", { studentId, reminderId: reminder.id, err: error });
         throw error;
@@ -156,7 +158,9 @@ async function sendReminderOnce(input: {
         const status = input.student.telegramChatId ? "sent" : "skipped";
         await updateReminder(reminder.id, {
           status,
-          sentAt: input.student.telegramChatId ? new Date().toISOString() : undefined
+          sentAt: input.student.telegramChatId ? new Date().toISOString() : undefined,
+          telegramChatId: input.student.telegramChatId ?? null,
+          leadMinutes: input.leadMinutes
         });
         log.info("Lesson reminder processed", {
           accountId: input.accountId,
@@ -171,7 +175,9 @@ async function sendReminderOnce(input: {
       } catch (error) {
         await updateReminder(reminder.id, {
           status: "failed",
-          error: error instanceof Error ? error.message : "Unknown error"
+          error: error instanceof Error ? error.message : "Unknown error",
+          telegramChatId: input.student.telegramChatId ?? null,
+          leadMinutes: input.leadMinutes
         });
         log.error("Lesson reminder failed", {
           accountId: input.accountId,

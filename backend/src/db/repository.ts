@@ -19,11 +19,13 @@ import type {
 import { db } from "./client";
 import {
   accounts,
+  activityEvents,
   appSettings,
   balanceAdjustments,
   lessonPackages,
   lessonParticipants,
   lessons,
+  notificationDeliveries,
   payments,
   recurringScheduleStudents,
   recurringSchedules,
@@ -34,6 +36,31 @@ import {
   vacationPeriods
 } from "./schema";
 import { createDefaultSettings } from "../store-logic";
+
+export type ActivityActorType = "teacher" | "student" | "system";
+
+export type ActivityEventInsert = {
+  accountId: string;
+  actorType: ActivityActorType;
+  actorStudentId?: string | null;
+  action: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+export type NotificationDeliveryInsert = {
+  accountId: string;
+  studentId?: string | null;
+  lessonId?: string | null;
+  reminderId?: string | null;
+  channel: "telegram";
+  type: "lesson_reminder" | "payment_reminder";
+  status: "sent" | "failed" | "skipped";
+  leadMinutes?: number | null;
+  telegramChatId?: string | null;
+  error?: string | null;
+};
 
 export async function getReminderAccountId(id: string): Promise<string | null> {
   const rows = await db.select({ accountId: reminders.accountId }).from(reminders).where(eq(reminders.id, id)).limit(1);
@@ -675,6 +702,37 @@ export async function insertTelegramInteraction(accountId: string, interaction: 
     studentId: interaction.studentId,
     action: interaction.action,
     createdAt: interaction.createdAt
+  });
+}
+
+export async function insertActivityEvent(input: ActivityEventInsert): Promise<void> {
+  await db.insert(activityEvents).values({
+    id: nanoid(),
+    accountId: input.accountId,
+    actorType: input.actorType,
+    actorStudentId: input.actorStudentId ?? null,
+    action: input.action,
+    entityType: input.entityType ?? null,
+    entityId: input.entityId ?? null,
+    metadata: input.metadata ?? null,
+    createdAt: new Date().toISOString()
+  });
+}
+
+export async function insertNotificationDelivery(input: NotificationDeliveryInsert): Promise<void> {
+  await db.insert(notificationDeliveries).values({
+    id: nanoid(),
+    accountId: input.accountId,
+    studentId: input.studentId ?? null,
+    lessonId: input.lessonId ?? null,
+    reminderId: input.reminderId ?? null,
+    channel: input.channel,
+    type: input.type,
+    status: input.status,
+    leadMinutes: input.leadMinutes ?? null,
+    telegramChatId: input.telegramChatId ?? null,
+    error: input.error ?? null,
+    createdAt: new Date().toISOString()
   });
 }
 

@@ -34,7 +34,12 @@ export async function upsertReminder(reminder: Omit<Reminder, "id" | "createdAt"
   });
 }
 
-export async function updateReminder(id: string, patch: Partial<Reminder>): Promise<Reminder> {
+export type ReminderUpdatePatch = Partial<Reminder> & {
+  telegramChatId?: string | null;
+  leadMinutes?: number | null;
+};
+
+export async function updateReminder(id: string, patch: ReminderUpdatePatch): Promise<Reminder> {
   return api<Reminder>(`/internal/reminders/${id}`, {
     method: "PATCH",
     body: patch

@@ -129,6 +129,8 @@ Under advanced options, restrict schemas to **`analytics`** only.
 
 Build dashboards in the Metabase UI (**New → SQL query** or the visual query builder) using tables in the `analytics` schema.
 
+After CRM migrations that add analytics views (e.g. `activity_events`, `notification_deliveries`, `reminders`), open **Admin → Databases → CRM → Sync database schema** so Metabase picks them up. Query those via `analytics.*` only — `metabase_readonly` cannot read `public.*`.
+
 ---
 
 ## Update Metabase

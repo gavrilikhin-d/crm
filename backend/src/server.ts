@@ -24,8 +24,14 @@ import {
   authenticateRequest,
   type AuthContext
 } from "./auth";
-import { getAccountById, getLessonAccountId, getReminderAccountId, listAccountIds } from "./db/repository";
-import { PlanLimitError, StoreValidationError, store } from "./store";
+import {
+  findStudentById,
+  getAccountById,
+  getLessonAccountId,
+  getReminderAccountId,
+  listAccountIds
+} from "./db/repository";
+import { PlanLimitError, StoreValidationError, store, type ReminderUpdatePatch } from "./store";
 import { verifyGoogleCalendarOAuthState } from "./google-calendar/oauth-state";
 
 type Handler = (
@@ -774,15 +780,26 @@ function parseScheduleDaysParam(value: string | null): number | undefined {
 
 async function upsertReminder(request: IncomingMessage, response: ServerResponse) {
   const body = (await readJson(request)) as Omit<Reminder, "id" | "createdAt">;
-  const accountId = body.lessonId ? await getLessonAccountId(body.lessonId) : null;
-  if (!accountId) {
-    throw new Error("Lesson not found");
+  let accountId: string | null = null;
+  if (body.lessonId) {
+    accountId = await getLessonAccountId(body.lessonId);
+    if (!accountId) {
+      throw new Error("Lesson not found");
+    }
+  } else if (body.studentId) {
+    const student = await findStudentById(body.studentId);
+    accountId = student?.accountId ?? null;
+    if (!accountId) {
+      throw new Error("Student not found");
+    }
+  } else {
+    throw new Error("Lesson or student is required");
   }
   jsonOk(response, await store.upsertReminder(accountId, body), 201);
 }
 
 async function updateReminder(request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray) {
-  const body = await readJson(request);
+  const body = (await readJson(request)) as ReminderUpdatePatch;
   const accountId = await getReminderAccountId(match[1]);
   if (!accountId) {
     jsonError(response, new Error("Reminder not found"), 404);
