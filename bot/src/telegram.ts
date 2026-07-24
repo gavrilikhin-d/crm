@@ -157,7 +157,6 @@ export function getTelegramBot(): Telegraf | null {
             ];
 
         await replyWithCommandMenu(ctx, interaction, connectedLines.join("\n"), {
-          userId: ctx.from.id,
           showTeacherSwitch: profile ? hasMultipleTeachers(profile) : false
         });
         interaction.meta.linked = true;
