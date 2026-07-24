@@ -123,14 +123,13 @@ describe.skipIf(!databaseAvailable)("activity events + notification deliveries",
         studentId: student.id,
         scheduledFor: new Date().toISOString(),
         status: "pending",
-        dedupeKey: `lesson:${lesson.id}:${student.id}:60:test`
+        leadMinutes: 60
       });
 
       await store.updateReminder(ctx.accountId, reminder.id, {
         status: "sent",
         sentAt: new Date().toISOString(),
-        telegramChatId: "12345",
-        leadMinutes: 60
+        telegramChatId: "12345"
       });
 
       const deliveries = await db
@@ -167,8 +166,7 @@ describe.skipIf(!databaseAvailable)("activity events + notification deliveries",
         type: "payment",
         studentId: student.id,
         scheduledFor: new Date().toISOString(),
-        status: "pending",
-        dedupeKey: `payment:${student.id}:test-activity`
+        status: "pending"
       });
 
       await store.updateReminder(ctx.accountId, reminder.id, {

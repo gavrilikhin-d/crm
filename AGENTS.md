@@ -11,18 +11,19 @@
 - Production images are distroless: do not suggest `printenv`, `psql`, or an interactive shell inside running app containers.
 - When implementing an attached plan, do not edit the plan file; reuse existing todos and mark them in progress as work proceeds.
 - Use TDD: start implementation with writing RED tests. When you finished tests should be GREEN
+- Activity/event recording must not block request paths; use fire-and-forget writes and log failures without awaiting them in handlers.
 
 ## Learned Workspace Facts
 
-- Vocal Teacher CRM is a Bun workspace monorepo with `frontend` (Next.js), `backend` (HTTP API + Drizzle/Postgres), `bot` (Telegraf Telegram webhook), `reminder`, and `shared`.
+- Vocal Teacher CRM is a Bun workspace monorepo with `frontend` (Next.js), `backend` (HTTP API + Drizzle/Postgres), `bot` (Telegraf inbound Telegram webhook), `reminder` (outbound Telegram worker), and `shared`.
 - Production app host is `vocalcrm.site` on AWS `eu-central-1`: Helm on k3s/EC2, images from ECR, deploys via SSM; keep resource usage modest for a small instance.
 - Production database is AWS RDS Postgres (not a container on the EC2/k3s host); ad-hoc SQL from the EC2 deploy host via a short-lived Docker `postgres` client and `DATABASE_URL` from `~/crm/.env`, not from app containers.
 - Teacher/student avatars and similar uploads are stored in S3, not on the backend filesystem; deleting teachers/students should remove their S3 objects.
-- Local full stack is `bun run dev:all`; the Telegram bot uses webhooks in prod and a separate test bot for local development. For local test bot to work, TELEGRAM_DEV_WEBHOOK_BASE_URL should point to a started ngrok
-- Platform analytics are served by Metabase (e.g. `analytics.vocalcrm.site`) with `metabase_readonly` limited to `analytics.*` views (custom SQL must use those, not `public.*`); deploy notes live under `deploy/analytics`.
+- Local full stack is `bun run dev:all`; the Telegram bot uses webhooks in prod and a separate test bot for local development. `dev:all` starts ngrok on `BOT_PORT` (4002) and injects `TELEGRAM_DEV_WEBHOOK_BASE_URL` when `TELEGRAM_DEV_BOT_TOKEN` is set
+- Platform analytics are served by Metabase (e.g. `analytics.vocalcrm.site`) with `metabase_readonly` limited to `analytics.*` views (including `activity_events` and `notification_deliveries`; custom SQL must use `analytics.*`, not `public.*`); deploy notes live under `deploy/analytics`.
 - Visual coverage uses Storybook plus Chromatic in CI; Chromatic project tokens belong in GitHub secrets/envs, not the repo.
 - CI skips Tests/Deploy for docs-only changes (`*.md`, `AGENTS.md`, etc.); Chromatic runs only for UI-related paths (`frontend/`, `shared/`, root lockfiles/deps, or the Chromatic workflow).
-- Auth is Google OAuth via Auth.js; accounts are multi-tenant with plan limits (free tier is deliberately constrained, including recurring-lesson caps).
+- Auth is Google OAuth via Auth.js; accounts are multi-tenant with plan limits (`free` / `standard` / `premium`; free tier is deliberately constrained, including recurring-lesson caps).
 - UI locales include Russian and English with browser-based default selection; time formatting goes through shared i18n helpers with `hour12: false`.
 - Calendar data syncs to the client over WebSocket with month-paged snapshots and incremental updates rather than full resends on every change.
-- Bot lesson RSVP (attend/decline) is handled from `/schedule` via inline buttons or text, not separate `/attend` or `/decline` commands.
+- Reminder owns outbound Telegram sends (write-time scheduled lesson rows claimed via `SKIP LOCKED`, plus payment nudges); bot is inbound-only and handles lesson RSVP from `/schedule` via inline buttons or text, not separate `/attend` or `/decline` commands.

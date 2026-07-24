@@ -6,7 +6,8 @@ import { sendManualPaymentReminder, startReminderScheduler } from "./reminders";
 import { waitForBackend } from "./backend-client";
 import { log } from "./logger";
 
-const port = Number(process.env.PORT ?? 4001);
+// Prefer REMINDER_PORT so a root .env PORT=3000 (frontend) does not steal this service.
+const port = Number(process.env.REMINDER_PORT ?? process.env.PORT ?? 4001);
 
 void initSentryNode("reminder", process.env.REMINDER_SENTRY_DSN).then(() => bootstrap());
 

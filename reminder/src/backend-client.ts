@@ -1,17 +1,11 @@
-import type { Database, Lesson, Reminder, StudentBalance } from "@crm/shared";
+import type { Reminder } from "@crm/shared";
+import type { ClaimedLessonReminder, PaymentReminderContext } from "@crm/shared/lesson-reminder";
 import { fetchWithSentryTrace } from "@crm/shared/sentry-tracing";
 import { fetchWithRetry, isBackendUnreachableError, sleep } from "./fetch-retry";
 import { log } from "./logger";
 
 const backendUrl = process.env.BACKEND_INTERNAL_URL ?? "http://localhost:4000";
 const internalToken = process.env.INTERNAL_API_TOKEN ?? "";
-
-type WorkerSnapshot = {
-  accountId: string;
-  snapshot: Database;
-  balances: StudentBalance[];
-  settings: Database["settings"];
-};
 
 function internalHeaders(body?: unknown): HeadersInit {
   const headers: Record<string, string> = {
@@ -23,8 +17,22 @@ function internalHeaders(body?: unknown): HeadersInit {
   return headers;
 }
 
-export async function getWorkerSnapshots(): Promise<WorkerSnapshot[]> {
-  return api<WorkerSnapshot[]>("/internal/worker/snapshots");
+export async function claimDueLessonReminders(limit = 50): Promise<ClaimedLessonReminder[]> {
+  return api<ClaimedLessonReminder[]>("/internal/reminders/claim", {
+    method: "POST",
+    body: { limit }
+  });
+}
+
+export async function backfillLessonReminders(): Promise<{ accounts: number; lessons: number }> {
+  return api<{ accounts: number; lessons: number }>("/internal/reminders/backfill", {
+    method: "POST",
+    body: {}
+  });
+}
+
+export async function getPaymentReminderContext(studentId: string): Promise<PaymentReminderContext> {
+  return api<PaymentReminderContext>(`/internal/payment-reminder-context/${studentId}`);
 }
 
 export async function upsertReminder(reminder: Omit<Reminder, "id" | "createdAt">): Promise<Reminder> {
@@ -43,17 +51,6 @@ export async function updateReminder(id: string, patch: ReminderUpdatePatch): Pr
   return api<Reminder>(`/internal/reminders/${id}`, {
     method: "PATCH",
     body: patch
-  });
-}
-
-export async function setParticipantStatus(input: {
-  lesson: Lesson;
-  studentId: string;
-  status: string;
-}): Promise<Lesson> {
-  return api<Lesson>(`/internal/lessons/${input.lesson.id}/participants/${input.studentId}/status`, {
-    method: "POST",
-    body: { status: input.status }
   });
 }
 

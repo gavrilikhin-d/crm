@@ -196,17 +196,11 @@ NEXT_PUBLIC_TELEGRAM_BOT_USERNAME=VocalLessonBot
 Use a separate test bot so local development does not re-register the production webhook.
 
 1. Create a test bot with BotFather.
-2. Expose the local bot service through an HTTPS tunnel:
-
-```bash
-ngrok http 4002
-```
-
+2. Install [ngrok](https://ngrok.com/download) and ensure `ngrok` is on your `PATH`.
 3. Add local bot variables:
 
 ```bash
 TELEGRAM_DEV_BOT_TOKEN=123456:test-token
-TELEGRAM_DEV_WEBHOOK_BASE_URL=https://your-ngrok-domain.ngrok-free.app
 TELEGRAM_DEV_WEBHOOK_SECRET=replace-with-url-safe-random-value
 NEXT_PUBLIC_TELEGRAM_BOT_USERNAME=YourTestBot
 BOT_PORT=4002
@@ -214,11 +208,15 @@ BOT_PORT=4002
 
 4. Run `bun run dev:all`.
 
+`dev:all` starts `ngrok http $BOT_PORT` (default `4002`) and injects `TELEGRAM_DEV_WEBHOOK_BASE_URL` with the public HTTPS URL before starting the bot. If an ngrok agent is already running, that tunnel is reused.
+
 Outside `NODE_ENV=production`, `TELEGRAM_DEV_BOT_TOKEN` overrides `TELEGRAM_BOT_TOKEN` for the bot and reminder services.
 
 ### Reminder Timing
 
-Lesson reminders are resolved in this order:
+Pending lesson reminder rows are scheduled at write time (lesson create/update/cancel, participant changes, and reminder preference updates). The reminder service claims due rows (`FOR UPDATE SKIP LOCKED`) every minute and sends Telegram messages.
+
+Lead times are resolved in this order:
 
 1. Student-specific Telegram preferences.
 2. Teacher/account defaults from CRM settings.
@@ -345,13 +343,15 @@ Authenticated CRM routes:
 
 Internal worker/bot routes are protected by `INTERNAL_API_TOKEN`:
 
-- `GET /internal/worker/snapshots`
 - `POST /internal/lessons/:id/participants/:studentId/status`
 - `POST /internal/telegram/bind`
 - `GET /internal/telegram/profile`
 - `PATCH /internal/telegram/preferences`
 - `POST /internal/reminders`
+- `POST /internal/reminders/claim`
+- `POST /internal/reminders/backfill`
 - `PATCH /internal/reminders/:id`
+- `GET /internal/payment-reminder-context/:studentId`
 
 ## Production database (RDS)
 
