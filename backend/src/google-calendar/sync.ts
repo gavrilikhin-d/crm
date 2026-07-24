@@ -1,7 +1,8 @@
-import type { Lesson, Student } from "@crm/shared";
+import type { Database, Lesson, Student } from "@crm/shared";
 import { captureSentryLog } from "@crm/shared/sentry-node";
 import { withSentrySpan } from "@crm/shared/sentry-tracing";
 import * as Sentry from "@sentry/node";
+import { nanoid } from "nanoid";
 import {
   getAccountGoogleCalendar,
   loadAccountDatabase,
@@ -9,12 +10,31 @@ import {
   updateLessonGoogleEventId
 } from "../db/repository";
 import type { AuthContext } from "../auth";
-import { withGoogleCalendarClient } from "./client";
+import { withGoogleCalendarAccessToken, withGoogleCalendarClient } from "./client";
+import {
+  GOOGLE_CALENDAR_BATCH_URL,
+  buildGoogleCalendarBatchBody,
+  calendarEventsPath,
+  chunkGoogleCalendarBatchParts,
+  extractMultipartBoundary,
+  parseGoogleCalendarBatchResponse,
+  type GoogleCalendarBatchPart,
+  type GoogleCalendarBatchPartResult
+} from "./batch";
 import { buildGoogleCalendarEvent, shouldSyncLessonToGoogleCalendar } from "./event";
 
 function studentsById(students: Student[]): Map<string, Student> {
   return new Map(students.map((student) => [student.id, student]));
 }
+
+type GoogleCalendarSyncDatabase = Pick<Database, "students" | "lessons" | "payments">;
+
+type LessonBatchOperation = {
+  lesson: Lesson;
+  contentId: string;
+  kind: "insert" | "update" | "delete";
+  part: GoogleCalendarBatchPart;
+};
 
 function reportGoogleCalendarSyncError(
   message: string,
@@ -40,10 +60,212 @@ export async function setGoogleCalendarSyncEnabled(accountId: string, enabled: b
   await setAccountGoogleCalendarSyncEnabled(accountId, enabled);
 }
 
+function buildLessonBatchOperations(
+  lessons: Lesson[],
+  db: GoogleCalendarSyncDatabase,
+  calendarId: string
+): LessonBatchOperation[] {
+  const studentMap = studentsById(db.students);
+  const progressContext = { lessons: db.lessons, payments: db.payments };
+  const operations: LessonBatchOperation[] = [];
+
+  for (const lesson of lessons) {
+    if (shouldSyncLessonToGoogleCalendar(lesson)) {
+      const event = buildGoogleCalendarEvent(lesson, studentMap, progressContext);
+      if (lesson.googleCalendarEventId) {
+        const contentId = `update:${lesson.id}`;
+        operations.push({
+          lesson,
+          contentId,
+          kind: "update",
+          part: {
+            contentId,
+            method: "PUT",
+            path: calendarEventsPath(calendarId, lesson.googleCalendarEventId),
+            body: event
+          }
+        });
+      } else {
+        const contentId = `insert:${lesson.id}`;
+        operations.push({
+          lesson,
+          contentId,
+          kind: "insert",
+          part: {
+            contentId,
+            method: "POST",
+            path: calendarEventsPath(calendarId),
+            body: event
+          }
+        });
+      }
+      continue;
+    }
+
+    if (lesson.googleCalendarEventId) {
+      const contentId = `delete:${lesson.id}`;
+      operations.push({
+        lesson,
+        contentId,
+        kind: "delete",
+        part: {
+          contentId,
+          method: "DELETE",
+          path: calendarEventsPath(calendarId, lesson.googleCalendarEventId)
+        }
+      });
+    }
+  }
+
+  return operations;
+}
+
+function isSuccessfulBatchStatus(status: number, kind: LessonBatchOperation["kind"]): boolean {
+  if (kind === "delete") {
+    return (status >= 200 && status < 300) || status === 404;
+  }
+  return status >= 200 && status < 300;
+}
+
+async function executeGoogleCalendarBatch(
+  accountId: string,
+  parts: GoogleCalendarBatchPart[]
+): Promise<GoogleCalendarBatchPartResult[]> {
+  if (!parts.length) {
+    return [];
+  }
+
+  return withGoogleCalendarAccessToken(
+    accountId,
+    async (accessToken) => {
+      const results: GoogleCalendarBatchPartResult[] = [];
+
+      for (const chunk of chunkGoogleCalendarBatchParts(parts)) {
+        const chunkResults = await withSentrySpan(
+          "events.batch",
+          "google.calendar",
+          async () => {
+            const boundary = `batch_${nanoid()}`;
+            const body = buildGoogleCalendarBatchBody(chunk, boundary);
+            const response = await fetch(GOOGLE_CALENDAR_BATCH_URL, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "Content-Type": `multipart/mixed; boundary=${boundary}`
+              },
+              body
+            });
+
+            const text = await response.text();
+            if (!response.ok) {
+              throw new Error(`Google Calendar batch failed (${response.status}): ${text.slice(0, 500)}`);
+            }
+
+            const responseBoundary =
+              extractMultipartBoundary(response.headers.get("content-type")) ?? boundary;
+            return parseGoogleCalendarBatchResponse(text, responseBoundary);
+          },
+          { "account.id": accountId, "batch.size": chunk.length }
+        );
+
+        results.push(...chunkResults);
+      }
+
+      return results;
+    },
+    "google_calendar.batch_auth"
+  );
+}
+
+async function applyBatchOperationResults(
+  accountId: string,
+  operations: LessonBatchOperation[],
+  results: GoogleCalendarBatchPartResult[]
+): Promise<{ synced: number; failed: number }> {
+  const resultsByContentId = new Map(results.map((result) => [result.contentId, result]));
+  let synced = 0;
+  let failed = 0;
+
+  await Promise.all(
+    operations.map(async (operation) => {
+      const result = resultsByContentId.get(operation.contentId);
+      if (!result || !isSuccessfulBatchStatus(result.status, operation.kind)) {
+        failed += 1;
+        reportGoogleCalendarSyncError("[google-calendar] Failed to sync lesson", result?.body ?? "missing batch result", {
+          accountId,
+          lessonId: operation.lesson.id,
+          status: result?.status ?? 0,
+          operation: operation.kind
+        });
+        return;
+      }
+
+      try {
+        if (operation.kind === "insert") {
+          const eventId =
+            result.body && typeof result.body === "object" && "id" in result.body
+              ? String((result.body as { id?: unknown }).id ?? "")
+              : "";
+          if (!eventId) {
+            throw new Error("Google Calendar insert response missing event id");
+          }
+          await updateLessonGoogleEventId(operation.lesson.id, eventId);
+        } else if (operation.kind === "delete") {
+          await updateLessonGoogleEventId(operation.lesson.id, null);
+        }
+        synced += 1;
+      } catch (error) {
+        failed += 1;
+        reportGoogleCalendarSyncError("[google-calendar] Failed to persist Google Calendar sync result", error, {
+          accountId,
+          lessonId: operation.lesson.id,
+          operation: operation.kind
+        });
+      }
+    })
+  );
+
+  return { synced, failed };
+}
+
+async function syncLessonOperationsInBatch(
+  accountId: string,
+  lessons: Lesson[],
+  db: GoogleCalendarSyncDatabase
+): Promise<{ synced: number; failed: number }> {
+  if (!lessons.length) {
+    return { synced: 0, failed: 0 };
+  }
+
+  return withSentrySpan(
+    "google_calendar.sync_lessons_batch",
+    "task",
+    async () => {
+      const credentials = await getAccountGoogleCalendar(accountId);
+      const calendarId = credentials?.calendarId ?? "primary";
+      const operations = buildLessonBatchOperations(lessons, db, calendarId);
+
+      if (!operations.length) {
+        return { synced: lessons.length, failed: 0 };
+      }
+
+      const results = await executeGoogleCalendarBatch(
+        accountId,
+        operations.map((operation) => operation.part)
+      );
+
+      const outcome = await applyBatchOperationResults(accountId, operations, results);
+      const skipped = lessons.length - operations.length;
+      return { synced: outcome.synced + skipped, failed: outcome.failed };
+    },
+    { "account.id": accountId, "lesson.count": lessons.length }
+  );
+}
+
 export async function syncLessonToGoogleCalendar(
   accountId: string,
   lesson: Lesson,
-  students: Student[]
+  db: GoogleCalendarSyncDatabase
 ): Promise<void> {
   return withSentrySpan(
     "google_calendar.sync_lesson",
@@ -53,35 +275,7 @@ export async function syncLessonToGoogleCalendar(
         return;
       }
 
-      if (!shouldSyncLessonToGoogleCalendar(lesson)) {
-        await removeLessonFromGoogleCalendar(accountId, lesson);
-        return;
-      }
-
-      const event = buildGoogleCalendarEvent(lesson, studentsById(students));
-
-      if (lesson.googleCalendarEventId) {
-        await withGoogleCalendarClient(accountId, async (calendar, calendarId) => {
-          await calendar.events.update({
-            calendarId,
-            eventId: lesson.googleCalendarEventId!,
-            requestBody: event
-          });
-        }, "events.update");
-        return;
-      }
-
-      const created = await withGoogleCalendarClient(accountId, async (calendar, calendarId) => {
-        const response = await calendar.events.insert({
-          calendarId,
-          requestBody: event
-        });
-        return response.data.id ?? null;
-      }, "events.insert");
-
-      if (created) {
-        await updateLessonGoogleEventId(lesson.id, created);
-      }
+      await syncLessonOperationsInBatch(accountId, [lesson], db);
     },
     { "account.id": accountId, "lesson.id": lesson.id }
   );
@@ -126,21 +320,7 @@ export async function syncLessonsToGoogleCalendar(accountId: string, lessons: Le
       }
 
       const db = await loadAccountDatabase(accountId);
-
-      for (const lesson of lessons) {
-        try {
-          if (shouldSyncLessonToGoogleCalendar(lesson)) {
-            await syncLessonToGoogleCalendar(accountId, lesson, db.students);
-          } else {
-            await removeLessonFromGoogleCalendar(accountId, lesson);
-          }
-        } catch (error) {
-          reportGoogleCalendarSyncError("[google-calendar] Failed to sync lesson", error, {
-            accountId,
-            lessonId: lesson.id
-          });
-        }
-      }
+      await syncLessonOperationsInBatch(accountId, lessons, db);
     },
     { "account.id": accountId, "lesson.count": lessons.length }
   );
@@ -156,27 +336,7 @@ export async function syncAllLessonsToGoogleCalendar(ctx: AuthContext): Promise<
       }
 
       const db = await loadAccountDatabase(ctx.accountId);
-      let synced = 0;
-      let failed = 0;
-
-      for (const lesson of db.lessons) {
-        try {
-          if (shouldSyncLessonToGoogleCalendar(lesson)) {
-            await syncLessonToGoogleCalendar(ctx.accountId, lesson, db.students);
-          } else if (lesson.googleCalendarEventId) {
-            await removeLessonFromGoogleCalendar(ctx.accountId, lesson);
-          }
-          synced += 1;
-        } catch (error) {
-          failed += 1;
-          reportGoogleCalendarSyncError("[google-calendar] Failed to sync lesson", error, {
-            accountId: ctx.accountId,
-            lessonId: lesson.id
-          });
-        }
-      }
-
-      return { synced, failed };
+      return syncLessonOperationsInBatch(ctx.accountId, db.lessons, db);
     },
     { "account.id": ctx.accountId }
   );

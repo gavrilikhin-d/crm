@@ -6,7 +6,11 @@ import { ParticipantCardAvatar, ParticipantCardLabel } from "@/components/partic
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/context";
-import type { Lesson, Student } from "@crm/shared";
+import type { Lesson, Payment, Student } from "@crm/shared";
+import {
+  formatParticipantNameWithPackageProgress,
+  getPackageLessonProgress
+} from "@crm/shared/package-progress";
 import type { CalendarRange } from "@/screens/dashboard/types";
 import { formatTimeRange, getLessonPosition } from "@/screens/schedule/utils/calendar";
 
@@ -18,6 +22,8 @@ export function CalendarLesson({
   calendarRange,
   lane = 0,
   lanes = 1,
+  packageProgressLessons = [],
+  payments = [],
   getStudent,
   onSelect,
   onDragStart,
@@ -29,6 +35,8 @@ export function CalendarLesson({
   calendarRange: CalendarRange;
   lane?: number;
   lanes?: number;
+  packageProgressLessons?: Lesson[];
+  payments?: Payment[];
   getStudent: (studentId: string) => Student | undefined;
   onSelect: () => void;
   onDragStart?: (offsetY: number) => void;
@@ -156,7 +164,19 @@ export function CalendarLesson({
               <ParticipantCardAvatar student={student} status={participant.status} compact={compact} />
               <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden">
                 <div className="min-w-0 flex-1">
-                  <ParticipantCardLabel name={student.fullName} studentId={student.id} compact={compact} />
+                  <ParticipantCardLabel
+                    name={formatParticipantNameWithPackageProgress(
+                      student.fullName,
+                      getPackageLessonProgress({
+                        studentId: student.id,
+                        lessonId: lesson.id,
+                        lessons: packageProgressLessons,
+                        payments
+                      })
+                    )}
+                    studentId={student.id}
+                    compact={compact}
+                  />
                 </div>
                 {participant.hasDebt ? (
                   <Badge

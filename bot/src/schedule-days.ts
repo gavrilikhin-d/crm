@@ -1,4 +1,5 @@
 import type { InlineKeyboardMarkup } from "@telegraf/types";
+import { getInlineCallbackData } from "./inline-keyboard";
 
 const DEFAULT_SCHEDULE_DAYS = 7;
 const ATTENDANCE_SCHEDULE_DAYS = 60;
@@ -79,6 +80,25 @@ function resolveScheduleDaysCallback(callbackData: string): number | null {
   return days;
 }
 
+function resolveActiveScheduleDaysFromMarkup(markup: InlineKeyboardMarkup | undefined): number | null {
+  const buttons = markup?.inline_keyboard.flat() ?? [];
+  const hasScheduleDays = buttons.some((button) => getInlineCallbackData(button)?.startsWith("sch:d:"));
+  if (!hasScheduleDays) {
+    return null;
+  }
+
+  const active = buttons.find((button) => {
+    const callbackData = getInlineCallbackData(button);
+    return Boolean(callbackData?.startsWith("sch:d:") && button.text.startsWith("✓ "));
+  });
+  const activeCallbackData = active ? getInlineCallbackData(active) : undefined;
+  if (activeCallbackData) {
+    return resolveScheduleDaysCallback(activeCallbackData);
+  }
+
+  return DEFAULT_SCHEDULE_DAYS;
+}
+
 export {
   ATTENDANCE_SCHEDULE_DAYS,
   DEFAULT_SCHEDULE_DAYS,
@@ -89,6 +109,7 @@ export {
   normalizeScheduleDays,
   parseScheduleDaysFromPhrase,
   parseScheduleDaysFromPayload,
+  resolveActiveScheduleDaysFromMarkup,
   resolveScheduleDaysCallback,
   scheduleDaysKeyboard
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent } from "react";
+import { type FormEvent, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { SnapshotRefreshControl } from "@/components/snapshot-refresh-control";
 import { VacationDialog } from "@/components/vacation-dialog";
@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useI18n } from "@/i18n/context";
 import { formatLongDate, formatMonth, formatWeekRange } from "@/i18n/format";
-import type { Lesson, Student, VacationPeriod } from "@crm/shared";
+import type { Lesson, Payment, Student, VacationPeriod } from "@crm/shared";
 import { pageSectionClass } from "@/screens/dashboard/constants";
 import type { CalendarRange, ScheduleView } from "@/screens/dashboard/types";
 import { getDefaultLessonStartsAt, sameDate } from "@/screens/schedule/utils/calendar";
@@ -32,6 +32,8 @@ export function ScheduleScreen({
   dayLessons,
   weekLessons,
   monthLessons,
+  packageProgressLessons,
+  payments,
   dayCalendarRange,
   dayScrollAnchor,
   weekCalendarRange,
@@ -64,6 +66,8 @@ export function ScheduleScreen({
   dayLessons: Lesson[];
   weekLessons: Lesson[];
   monthLessons: Lesson[];
+  packageProgressLessons: Lesson[];
+  payments: Payment[];
   dayCalendarRange: CalendarRange;
   dayScrollAnchor: number;
   weekCalendarRange: CalendarRange;
@@ -88,6 +92,8 @@ export function ScheduleScreen({
   onLessonSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   const { locale, t } = useI18n();
+  const [createLessonStartsAt, setCreateLessonStartsAt] = useState<string | null>(null);
+  const [createLessonFormKey, setCreateLessonFormKey] = useState(0);
   const scheduleViewLabels: Record<ScheduleView, string> = {
     day: t("calendar.view.day"),
     week: t("calendar.view.week"),
@@ -99,6 +105,25 @@ export function ScheduleScreen({
     todayWeekIndex === -1
       ? undefined
       : weekCalendarTimeAxisWidth + weekDayWidth * todayWeekIndex + weekDayWidth / 2;
+  const lessonFormDefaultStartsAt = createLessonStartsAt ?? getDefaultLessonStartsAt(selectedDate);
+
+  function openCreateLessonAt(startsAt: string) {
+    setCreateLessonStartsAt(startsAt);
+    setCreateLessonFormKey((key) => key + 1);
+    setLessonDialogOpen(true);
+  }
+
+  function handleLessonDialogOpenChange(open: boolean) {
+    setLessonDialogOpen(open);
+    if (!open) {
+      setCreateLessonStartsAt(null);
+      return;
+    }
+
+    if (createLessonStartsAt === null) {
+      setCreateLessonFormKey((key) => key + 1);
+    }
+  }
 
   return (
     <section className={pageSectionClass} id="schedule">
@@ -152,7 +177,7 @@ export function ScheduleScreen({
               defaultDate={selectedDate}
               onChanged={() => refreshNow()}
             />
-            <Dialog open={lessonDialogOpen} onOpenChange={setLessonDialogOpen}>
+            <Dialog open={lessonDialogOpen} onOpenChange={handleLessonDialogOpenChange}>
               <DialogTrigger asChild>
                 <Button size="icon" type="button" className="hidden sm:inline-flex" aria-label={t("calendar.createLesson")}>
                   <Plus className="size-4" />
@@ -163,10 +188,10 @@ export function ScheduleScreen({
                   <DialogTitle>{t("calendar.createLessonTitle")}</DialogTitle>
                 </DialogHeader>
                 <LessonForm
-                  key={lessonFormKey}
+                  key={`${lessonFormKey}-${createLessonFormKey}`}
                   students={students}
                   recurringEnabled={recurringEnabled}
-                  defaultStartsAt={getDefaultLessonStartsAt(selectedDate)}
+                  defaultStartsAt={lessonFormDefaultStartsAt}
                   onSubmit={onLessonSubmit}
                 />
               </DialogContent>
@@ -184,9 +209,12 @@ export function ScheduleScreen({
               calendarRange={dayCalendarRange}
               currentTime={currentTime}
               lessons={dayLessons}
+              packageProgressLessons={packageProgressLessons}
+              payments={payments}
               vacationPeriods={vacationPeriods}
               getStudent={getStudent}
               onSelectLesson={onSelectLesson}
+              onCreateLessonAt={openCreateLessonAt}
               onLessonUpdate={onLessonUpdate}
             />
           </CalendarScrollArea>
@@ -205,9 +233,12 @@ export function ScheduleScreen({
               calendarRange={weekCalendarRange}
               currentTime={currentTime}
               lessons={weekLessons}
+              packageProgressLessons={packageProgressLessons}
+              payments={payments}
               vacationPeriods={vacationPeriods}
               getStudent={getStudent}
               onSelectLesson={onSelectLesson}
+              onCreateLessonAt={openCreateLessonAt}
               onLessonUpdate={onLessonUpdate}
             />
           </CalendarScrollArea>
@@ -219,6 +250,8 @@ export function ScheduleScreen({
             monthDays={monthDays}
             currentTime={currentTime}
             lessons={monthLessons}
+            packageProgressLessons={packageProgressLessons}
+            payments={payments}
             vacationPeriods={vacationPeriods}
             getStudent={getStudent}
             onSelectDay={onSelectDay}

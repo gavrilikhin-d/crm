@@ -51,7 +51,7 @@ function formatScheduleMessage(profile: TelegramStudentProfile): BotReply {
       ...blocks,
       "",
       `<i>Другой период — кнопки ниже</i>`,
-      `<i>Ответ по занятию: /attend или /decline</i>`
+      `<i>Ответ: кнопки 👍/👎 или «буду 1» / «не буду 1»</i>`
     ].join("\n\n"),
     parse_mode: "HTML"
   };

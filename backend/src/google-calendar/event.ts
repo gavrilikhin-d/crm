@@ -1,4 +1,8 @@
-import type { Lesson, LessonParticipant, ParticipantStatus, Student } from "@crm/shared";
+import type { Lesson, LessonParticipant, ParticipantStatus, Payment, Student } from "@crm/shared";
+import {
+  formatParticipantNameWithPackageProgress,
+  getPackageLessonProgress
+} from "@crm/shared/package-progress";
 import type { calendar_v3 } from "googleapis";
 
 export const CALENDAR_TIMEZONE = process.env.APP_TIMEZONE?.trim() || "Europe/Minsk";
@@ -16,6 +20,11 @@ const PARTICIPANT_STATUS_LABEL: Record<ParticipantStatus, string> = {
   declined: "отказался",
   missed: "не пришёл",
   attended: "будет"
+};
+
+export type GoogleCalendarProgressContext = {
+  lessons: Lesson[];
+  payments: Payment[];
 };
 
 export function shouldSyncLessonToGoogleCalendar(lesson: Lesson): boolean {
@@ -41,36 +50,48 @@ export function formatCalendarDateTime(date: Date, timeZone: string): string {
   return `${value("year")}-${value("month")}-${value("day")}T${value("hour")}:${value("minute")}:${value("second")}`;
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
 function participantName(participant: LessonParticipant, studentsById: Map<string, Student>): string | null {
   return studentsById.get(participant.studentId)?.fullName ?? null;
 }
 
+function participantDisplayName(
+  lesson: Lesson,
+  participant: LessonParticipant,
+  studentsById: Map<string, Student>,
+  progressContext?: GoogleCalendarProgressContext
+): string | null {
+  const name = participantName(participant, studentsById);
+  if (!name) {
+    return null;
+  }
+
+  if (!progressContext) {
+    return name;
+  }
+
+  const progress = getPackageLessonProgress({
+    studentId: participant.studentId,
+    lessonId: lesson.id,
+    lessons: progressContext.lessons,
+    payments: progressContext.payments
+  });
+
+  return formatParticipantNameWithPackageProgress(name, progress);
+}
+
 function formatParticipantLine(participant: LessonParticipant, name: string): string {
-  const safeName = escapeHtml(name);
   const statusLabel = PARTICIPANT_STATUS_LABEL[participant.status];
-
-  if (INACTIVE_PARTICIPANT_STATUSES.has(participant.status)) {
-    return `<s>${safeName}</s> — ${statusLabel}`;
-  }
-
-  if (participant.status === "awaiting") {
-    return `${safeName} — ${statusLabel}`;
-  }
-
-  return `${safeName} — ${statusLabel}`;
+  return `${name} — ${statusLabel}`;
 }
 
 export function buildGoogleCalendarSummary(
   lesson: Lesson,
-  studentsById: Map<string, Student>
+  studentsById: Map<string, Student>,
+  progressContext?: GoogleCalendarProgressContext
 ): string {
   const activeNames = lesson.participants
     .filter((participant) => !INACTIVE_PARTICIPANT_STATUSES.has(participant.status))
-    .map((participant) => participantName(participant, studentsById))
+    .map((participant) => participantDisplayName(lesson, participant, studentsById, progressContext))
     .filter(Boolean) as string[];
 
   if (activeNames.length) {
@@ -78,7 +99,7 @@ export function buildGoogleCalendarSummary(
   }
 
   const allNames = lesson.participants
-    .map((participant) => participantName(participant, studentsById))
+    .map((participant) => participantDisplayName(lesson, participant, studentsById, progressContext))
     .filter(Boolean) as string[];
 
   const summary = allNames.join(", ") || "Занятие";
@@ -87,32 +108,34 @@ export function buildGoogleCalendarSummary(
 
 export function buildGoogleCalendarDescription(
   lesson: Lesson,
-  studentsById: Map<string, Student>
+  studentsById: Map<string, Student>,
+  progressContext?: GoogleCalendarProgressContext
 ): string {
   const typeLabel = lesson.effectiveType === "group" ? "Групповое" : "Индивидуальное";
   const statusLine = lesson.status === "cancelled_by_student" ? "Статус: отменено учеником" : null;
   const lines = lesson.participants
     .map((participant) => {
-      const name = participantName(participant, studentsById);
+      const name = participantDisplayName(lesson, participant, studentsById, progressContext);
       return name ? formatParticipantLine(participant, name) : null;
     })
     .filter(Boolean);
 
   return [`Занятие из CRM`, statusLine, `Формат: ${typeLabel}`, "", "Ученики:", ...lines]
     .filter((line) => line !== null)
-    .join("<br>");
+    .join("\n");
 }
 
 export function buildGoogleCalendarEvent(
   lesson: Lesson,
-  studentsById: Map<string, Student>
+  studentsById: Map<string, Student>,
+  progressContext?: GoogleCalendarProgressContext
 ): calendar_v3.Schema$Event {
   const start = new Date(lesson.startsAt);
   const end = new Date(start.getTime() + lesson.durationMinutes * 60_000);
 
   const event: calendar_v3.Schema$Event = {
-    summary: buildGoogleCalendarSummary(lesson, studentsById),
-    description: buildGoogleCalendarDescription(lesson, studentsById),
+    summary: buildGoogleCalendarSummary(lesson, studentsById, progressContext),
+    description: buildGoogleCalendarDescription(lesson, studentsById, progressContext),
     start: {
       dateTime: formatCalendarDateTime(start, CALENDAR_TIMEZONE),
       timeZone: CALENDAR_TIMEZONE

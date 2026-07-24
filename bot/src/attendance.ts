@@ -4,9 +4,7 @@ import { encodeLessonCallback } from "@crm/shared/lesson-callback";
 import { formatAttendanceWhenInTimeZone } from "@crm/shared/timezone";
 import type { Lesson, TelegramStudentProfile } from "@crm/shared";
 import { resolveProfileTimeZone } from "./messages";
-
-const ATTEND_COMMANDS = ["attend"] as const;
-const DECLINE_COMMANDS = ["decline"] as const;
+import { SCHEDULE_DAY_PRESETS } from "./schedule-days";
 
 type AttendanceIntent = "confirmed" | "declined";
 
@@ -18,14 +16,36 @@ function parseLessonIndex(payload?: string): { index?: number; error?: string } 
 
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 1) {
-    return { error: "Укажите номер занятия из списка, например: /attend 1" };
+    return { error: "Укажите номер занятия из расписания, например: буду 1" };
   }
 
   return { index: parsed };
 }
 
-function actionableLessons(profile: TelegramStudentProfile): Lesson[] {
-  return profile.upcomingLessons.filter((lesson) => isActionableLesson(lesson, profile.student.id));
+function parseAttendancePhrase(
+  text: string
+): { intent: AttendanceIntent; index?: number } | null {
+  const trimmed = text.trim();
+  const withIndex = trimmed.match(/^(буду|не\s+буду)\s+(\d+)$/i);
+  if (withIndex) {
+    const index = Number(withIndex[2]);
+    if (!Number.isInteger(index) || index < 1) {
+      return null;
+    }
+    return {
+      intent: /^буду$/i.test(withIndex[1]!) ? "confirmed" : "declined",
+      index
+    };
+  }
+
+  if (/^буду$/i.test(trimmed)) {
+    return { intent: "confirmed" };
+  }
+  if (/^не\s+буду$/i.test(trimmed)) {
+    return { intent: "declined" };
+  }
+
+  return null;
 }
 
 function isActionableLesson(lesson: Lesson, studentId: string): boolean {
@@ -40,61 +60,70 @@ function findLessonByScheduleIndex(profile: TelegramStudentProfile, index: numbe
   return profile.upcomingLessons[index - 1];
 }
 
-function formatAttendancePrompt(profile: TelegramStudentProfile, intent: AttendanceIntent): string {
-  const verb = intent === "confirmed" ? "подтвердить" : "отказаться от";
-
-  if (!profile.upcomingLessons.length) {
-    return "На ближайшие дни нет занятий, для которых можно изменить ответ.";
-  }
+function scheduleKeyboard(profile: TelegramStudentProfile, activeDays: number): InlineKeyboardMarkup {
+  const dayRow = SCHEDULE_DAY_PRESETS.map((days) => ({
+    text: `${activeDays === days ? "✓ " : ""}${days} дн.`,
+    callback_data: `sch:d:${days}`
+  }));
 
   const timeZone = resolveProfileTimeZone(profile);
-  const lines = profile.upcomingLessons.map((lesson, index) => {
-    const participant = lesson.participants.find((item) => item.studentId === profile.student.id);
-    const when = formatAttendanceWhenInTimeZone(lesson.startsAt, timeZone);
-    const status = formatParticipantStatus(participant?.status);
-    const actionable = isActionableLesson(lesson, profile.student.id);
-    const suffix = !actionable ? " — недоступно" : status ? ` — ${status}` : "";
-    return `${index + 1}. ${when}${suffix}`;
-  });
-
-  const hasActionable = actionableLessons(profile).length > 0;
-  return [
-    `Выберите занятие, чтобы ${verb}:`,
-    "",
-    ...lines,
-    "",
-    hasActionable ? "Нажмите кнопку ниже." : "Сейчас нет доступных занятий для ответа."
-  ].join("\n");
-}
-
-function attendanceLessonKeyboard(
-  profile: TelegramStudentProfile,
-  intent: AttendanceIntent
-): InlineKeyboardMarkup | undefined {
-  const action = intent === "confirmed" ? "attend" : "decline";
-  const timeZone = resolveProfileTimeZone(profile);
-  const rows = profile.upcomingLessons.flatMap((lesson, index) => {
+  const lessonRows = profile.upcomingLessons.flatMap((lesson, index) => {
     if (!isActionableLesson(lesson, profile.student.id)) {
       return [];
     }
 
+    const participant = lesson.participants.find((item) => item.studentId === profile.student.id);
+    const status = participant?.status;
     const when = formatAttendanceWhenInTimeZone(lesson.startsAt, timeZone);
-    const prefix = intent === "confirmed" ? "👍" : "👎";
+    const statusThumb = status === "confirmed" ? "👍 " : status === "declined" ? "👎 " : "";
+    // Telegram equalizes buttons in one row, so the label gets its own full-width row.
+    const labelRow = [
+      {
+        text: `${statusThumb}${index + 1}. ${when}`,
+        callback_data: "sch:n"
+      }
+    ];
+
+    if (status === "confirmed") {
+      return [
+        labelRow,
+        [
+          {
+            text: "👎",
+            callback_data: encodeLessonCallback("decline", lesson.id, profile.student.id)
+          }
+        ]
+      ];
+    }
+
+    if (status === "declined") {
+      return [
+        labelRow,
+        [
+          {
+            text: "👍",
+            callback_data: encodeLessonCallback("attend", lesson.id, profile.student.id)
+          }
+        ]
+      ];
+    }
+
     return [
+      labelRow,
       [
         {
-          text: `${prefix} ${index + 1}. ${when}`,
-          callback_data: encodeLessonCallback(action, lesson.id, profile.student.id)
+          text: "👍",
+          callback_data: encodeLessonCallback("attend", lesson.id, profile.student.id)
+        },
+        {
+          text: "👎",
+          callback_data: encodeLessonCallback("decline", lesson.id, profile.student.id)
         }
       ]
     ];
   });
 
-  if (!rows.length) {
-    return undefined;
-  }
-
-  return { inline_keyboard: rows };
+  return { inline_keyboard: [dayRow, ...lessonRows] };
 }
 
 function formatAttendanceResult(
@@ -111,29 +140,12 @@ function formatAttendanceResult(
   return `${when}: ${label}.${debt}`;
 }
 
-function formatParticipantStatus(status: string | undefined): string | undefined {
-  if (status === "confirmed") {
-    return "буду";
-  }
-  if (status === "declined") {
-    return "не буду";
-  }
-  if (status === "awaiting") {
-    return "ожидает ответа";
-  }
-
-  return undefined;
-}
-
 export {
-  ATTEND_COMMANDS,
-  DECLINE_COMMANDS,
-  actionableLessons,
-  attendanceLessonKeyboard,
   findLessonByScheduleIndex,
-  formatAttendancePrompt,
   formatAttendanceResult,
   isActionableLesson,
+  parseAttendancePhrase,
   parseLessonIndex,
+  scheduleKeyboard,
   type AttendanceIntent
 };

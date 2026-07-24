@@ -13,6 +13,7 @@ type PendingLessonReminder = {
   accountId: string;
   student: Student;
   lesson: Lesson;
+  leadMinutes: number;
   scheduledFor: string;
   dedupeKey: string;
   timeZone: string;
@@ -23,7 +24,7 @@ function isSkippedLessonStatus(status: Lesson["status"]): boolean {
 }
 
 function isSkippedParticipantStatus(status: ParticipantStatus): boolean {
-  return status === "declined" || status === "confirmed";
+  return status === "declined";
 }
 
 function isLessonReminderDue(input: {
@@ -71,6 +72,7 @@ function collectPendingLessonReminders(workerSnapshots: WorkerSnapshot[], nowMs:
             accountId: worker.accountId,
             student,
             lesson,
+            leadMinutes,
             scheduledFor,
             dedupeKey: `lesson:${lesson.id}:${student.id}:${leadMinutes}`,
             timeZone: resolveNotificationTimeZone({

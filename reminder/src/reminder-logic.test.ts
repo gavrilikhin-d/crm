@@ -123,10 +123,12 @@ describe("collectPendingLessonReminders", () => {
 
     expect(pending).toHaveLength(1);
     expect(pending[0]?.dedupeKey).toBe("lesson:l1:s1:60");
+    expect(pending[0]?.leadMinutes).toBe(60);
+    expect(pending[0]?.lesson.startsAt).toBe(startsAt);
     expect(pending[0]?.student.id).toBe("s1");
   });
 
-  test("skips cancelled lessons and already answered participants", () => {
+  test("skips cancelled lessons and declined participants", () => {
     const student = createStudent("s1");
     const startsAt = "2026-06-30T18:00:00.000Z";
     const nowMs = Date.parse("2026-06-30T17:10:00.000Z");
@@ -140,10 +142,51 @@ describe("collectPendingLessonReminders", () => {
           studentIds: ["s1"]
         }),
         createLesson({
-          id: "answered",
+          id: "declined",
+          startsAt,
+          studentIds: ["s1"],
+          participantStatuses: ["declined"]
+        })
+      ]
+    });
+
+    expect(collectPendingLessonReminders(snapshots, nowMs)).toHaveLength(0);
+  });
+
+  test("still sends reminders after the student approved the lesson", () => {
+    const student = createStudent("s1");
+    const startsAt = "2026-06-30T18:00:00.000Z";
+    const nowMs = Date.parse("2026-06-30T17:10:00.000Z");
+    const snapshots = createSnapshot({
+      students: [student],
+      lessons: [
+        createLesson({
+          id: "approved",
           startsAt,
           studentIds: ["s1"],
           participantStatuses: ["confirmed"]
+        })
+      ]
+    });
+
+    const pending = collectPendingLessonReminders(snapshots, nowMs);
+
+    expect(pending).toHaveLength(1);
+    expect(pending[0]?.dedupeKey).toBe("lesson:approved:s1:60");
+  });
+
+  test("does not send reminders after the student declined the lesson", () => {
+    const student = createStudent("s1");
+    const startsAt = "2026-06-30T18:00:00.000Z";
+    const nowMs = Date.parse("2026-06-30T17:10:00.000Z");
+    const snapshots = createSnapshot({
+      students: [student],
+      lessons: [
+        createLesson({
+          id: "declined",
+          startsAt,
+          studentIds: ["s1"],
+          participantStatuses: ["declined"]
         })
       ]
     });
@@ -221,7 +264,8 @@ describe("status helpers", () => {
   });
 
   test("isSkippedParticipantStatus", () => {
-    expect(isSkippedParticipantStatus("confirmed")).toBe(true);
+    expect(isSkippedParticipantStatus("declined")).toBe(true);
+    expect(isSkippedParticipantStatus("confirmed")).toBe(false);
     expect(isSkippedParticipantStatus("awaiting")).toBe(false);
   });
 });

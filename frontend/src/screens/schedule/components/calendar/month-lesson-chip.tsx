@@ -5,17 +5,25 @@ import { ParticipantCardAvatar, ParticipantCardLabel } from "@/components/partic
 import { Badge } from "@/components/ui/badge";
 import { useI18n } from "@/i18n/context";
 import { formatTime } from "@/i18n/format";
-import type { Lesson, Student } from "@crm/shared";
+import type { Lesson, Payment, Student } from "@crm/shared";
+import {
+  formatParticipantNameWithPackageProgress,
+  getPackageLessonProgress
+} from "@crm/shared/package-progress";
 import { formatTimeRange } from "@/screens/schedule/utils/calendar";
 
 export function MonthLessonChip({
   lesson,
   compact,
+  packageProgressLessons = [],
+  payments = [],
   getStudent,
   onSelect
 }: {
   lesson: Lesson;
   compact?: boolean;
+  packageProgressLessons?: Lesson[];
+  payments?: Payment[];
   getStudent: (studentId: string) => Student | undefined;
   onSelect: () => void;
 }) {
@@ -23,9 +31,21 @@ export function MonthLessonChip({
   const startsAt = new Date(lesson.startsAt);
 
   if (compact) {
-    const firstStudent = lesson.participants
-      .map((participant) => getStudent(participant.studentId))
-      .find(Boolean);
+    const firstParticipant = lesson.participants[0];
+    const firstStudent = firstParticipant
+      ? getStudent(firstParticipant.studentId)
+      : undefined;
+    const compactName = firstStudent
+      ? formatParticipantNameWithPackageProgress(
+          firstStudent.fullName.split(/\s+/)[0] ?? firstStudent.fullName,
+          getPackageLessonProgress({
+            studentId: firstStudent.id,
+            lessonId: lesson.id,
+            lessons: packageProgressLessons,
+            payments
+          })
+        )
+      : t("calendar.lessonFallback");
 
     return (
       <button
@@ -40,7 +60,7 @@ export function MonthLessonChip({
           {formatTime(startsAt, locale)}
         </span>
         <span className="min-w-0 flex-1 truncate text-[0.625rem] leading-none text-muted-foreground">
-          {firstStudent?.fullName.split(/\s+/)[0] ?? t("calendar.lessonFallback")}
+          {compactName}
         </span>
         <LessonParticipantSummary participants={lesson.participants} compact />
       </button>
@@ -73,7 +93,19 @@ export function MonthLessonChip({
             <div key={participant.id} className="flex min-h-6 min-w-0 shrink-0 items-center gap-1">
               <ParticipantCardAvatar student={student} status={participant.status} compact />
               <div className="min-w-0 flex-1">
-                <ParticipantCardLabel name={student.fullName} studentId={student.id} compact />
+                <ParticipantCardLabel
+                  name={formatParticipantNameWithPackageProgress(
+                    student.fullName,
+                    getPackageLessonProgress({
+                      studentId: student.id,
+                      lessonId: lesson.id,
+                      lessons: packageProgressLessons,
+                      payments
+                    })
+                  )}
+                  studentId={student.id}
+                  compact
+                />
               </div>
               {participant.hasDebt ? (
                 <Badge variant="destructive" className="shrink-0 px-1 py-0 text-[0.5rem]">

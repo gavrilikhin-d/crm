@@ -3,7 +3,7 @@
 import { getWeekdayShortLabels } from "@/i18n/labels";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useI18n } from "@/i18n/context";
-import type { Lesson, Student, VacationPeriod } from "@crm/shared";
+import type { Lesson, Payment, Student, VacationPeriod } from "@crm/shared";
 import { getVacationPeriodForDate } from "@crm/shared/vacation";
 import { cn } from "@/lib/utils";
 import { MonthLessonChip } from "./month-lesson-chip";
@@ -14,6 +14,8 @@ export function MonthCalendar({
   monthDays,
   currentTime,
   lessons,
+  packageProgressLessons = [],
+  payments = [],
   vacationPeriods,
   getStudent,
   onSelectDay,
@@ -23,6 +25,8 @@ export function MonthCalendar({
   monthDays: Date[];
   currentTime: Date | null;
   lessons: Lesson[];
+  packageProgressLessons?: Lesson[];
+  payments?: Payment[];
   vacationPeriods: VacationPeriod[];
   getStudent: (studentId: string) => Student | undefined;
   onSelectDay: (day: Date) => void;
@@ -78,6 +82,8 @@ export function MonthCalendar({
                   key={lesson.id}
                   lesson={lesson}
                   compact={isMobile}
+                  packageProgressLessons={packageProgressLessons}
+                  payments={payments}
                   getStudent={getStudent}
                   onSelect={() => onSelectLesson(lesson)}
                 />

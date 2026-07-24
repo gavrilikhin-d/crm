@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useI18n } from "@/i18n/context";
 import { getWeekdayShortLabels } from "@/i18n/labels";
-import type { Lesson, Student, VacationPeriod } from "@crm/shared";
+import type { Lesson, Payment, Student, VacationPeriod } from "@crm/shared";
 import { getVacationPeriodForDate } from "@crm/shared/vacation";
 import { cn } from "@/lib/utils";
 import { calendarStickyHeaderClass } from "@/screens/dashboard/constants";
@@ -17,18 +17,24 @@ export function WeekCalendar({
   calendarRange,
   currentTime,
   lessons,
+  packageProgressLessons = [],
+  payments = [],
   vacationPeriods,
   getStudent,
   onSelectLesson,
+  onCreateLessonAt,
   onLessonUpdate
 }: {
   weekDays: Date[];
   calendarRange: CalendarRange;
   currentTime: Date | null;
   lessons: Lesson[];
+  packageProgressLessons?: Lesson[];
+  payments?: Payment[];
   vacationPeriods: VacationPeriod[];
   getStudent: (studentId: string) => Student | undefined;
   onSelectLesson: (lesson: Lesson) => void;
+  onCreateLessonAt?: (startsAt: string) => void;
   onLessonUpdate: (lesson: Lesson, patch: { startsAt?: string; durationMinutes?: number }) => Promise<void>;
 }) {
   const { t } = useI18n();
@@ -71,10 +77,13 @@ export function WeekCalendar({
           calendarRange={calendarRange}
           currentTime={currentTime}
           lessons={lessons.filter((lesson) => sameDate(new Date(lesson.startsAt), day))}
+          packageProgressLessons={packageProgressLessons}
+          payments={payments}
           vacationPeriod={getVacationPeriodForDate(day, vacationPeriods)}
           draggedLesson={draggedLesson}
           getStudent={getStudent}
           onSelectLesson={onSelectLesson}
+          onCreateLessonAt={onCreateLessonAt}
           onLessonDragStart={(lesson, offsetY) => setDraggedLesson({ lesson, offsetY })}
           onLessonDragEnd={() => setDraggedLesson(null)}
           onLessonUpdate={onLessonUpdate}

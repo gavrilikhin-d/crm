@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/context";
 import { formatDateTime } from "@/i18n/format";
-import type { Lesson, Student, VacationPeriod } from "@crm/shared";
+import type { Lesson, Payment, Student, VacationPeriod } from "@crm/shared";
 import { getVacationDayOverlay } from "@crm/shared/vacation";
 import type { CalendarRange } from "@/screens/dashboard/types";
 import { hourHeight } from "@/screens/dashboard/constants";
@@ -47,11 +47,14 @@ export function DayColumn({
   calendarRange,
   currentTime,
   lessons,
+  packageProgressLessons = [],
+  payments = [],
   vacationPeriod,
   draggedLesson,
   resizePreview: resizePreviewProp,
   getStudent,
   onSelectLesson,
+  onCreateLessonAt,
   onLessonDragStart,
   onLessonDragEnd,
   onLessonUpdate
@@ -60,11 +63,14 @@ export function DayColumn({
   calendarRange: CalendarRange;
   currentTime: Date | null;
   lessons: Lesson[];
+  packageProgressLessons?: Lesson[];
+  payments?: Payment[];
   vacationPeriod?: VacationPeriod;
   draggedLesson?: DraggedLesson | null;
   resizePreview?: LessonResizePreview | null;
   getStudent: (studentId: string) => Student | undefined;
   onSelectLesson: (lesson: Lesson) => void;
+  onCreateLessonAt?: (startsAt: string) => void;
   onLessonDragStart?: (lesson: Lesson, offsetY: number) => void;
   onLessonDragEnd?: () => void;
   onLessonUpdate?: (lesson: Lesson, patch: { startsAt?: string; durationMinutes?: number }) => Promise<void>;
@@ -179,7 +185,8 @@ export function DayColumn({
         "relative border-l border-stone-100",
         isToday && "bg-primary/5 dark:bg-primary/10",
         vacationOverlay?.isFullDay && "bg-sky-50/70 dark:bg-sky-950/30",
-        draggedLesson && onLessonUpdate && "cursor-copy"
+        draggedLesson && onLessonUpdate && "cursor-copy",
+        !draggedLesson && onCreateLessonAt && "cursor-pointer"
       )}
       style={{
         minHeight: columnHeight,
@@ -189,6 +196,25 @@ export function DayColumn({
             : vacationOverlay
               ? undefined
               : "repeating-linear-gradient(to bottom, transparent 0, transparent 75px, #ebe8e5 75px, #ebe8e5 76px)"
+      }}
+      onClick={(event) => {
+        if (!onCreateLessonAt || !columnRef.current || draggedLesson || resizingLesson) {
+          return;
+        }
+
+        // Only empty-slot clicks — lesson cards handle their own selection.
+        if (event.target !== event.currentTarget) {
+          return;
+        }
+
+        const rect = columnRef.current.getBoundingClientRect();
+        const startsAt = getLessonStartsAtFromOffset(
+          day,
+          event.clientY - rect.top,
+          15,
+          calendarRange
+        );
+        onCreateLessonAt(startsAt);
       }}
       onDragOver={(event) => {
         if (!draggedLesson || !onLessonUpdate || resizingLesson) {
@@ -296,6 +322,8 @@ export function DayColumn({
           calendarRange={calendarRange}
           lane={lane}
           lanes={lanes}
+          packageProgressLessons={packageProgressLessons}
+          payments={payments}
           getStudent={getStudent}
           onSelect={() => onSelectLesson(lesson)}
           onDragStart={

@@ -7,7 +7,6 @@ export type TeacherParticipantStatus = (typeof TEACHER_PARTICIPANT_STATUSES)[num
 const BLOCKED_LESSON_STATUSES = new Set<Lesson["status"]>([
   "completed",
   "cancelled_by_teacher",
-  "cancelled_by_student",
   "missed"
 ]);
 

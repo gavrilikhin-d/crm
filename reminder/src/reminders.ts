@@ -43,6 +43,7 @@ export async function runReminderTick(): Promise<void> {
           accountId: item.accountId,
           student: item.student,
           lesson: item.lesson,
+          leadMinutes: item.leadMinutes,
           scheduledFor: item.scheduledFor,
           dedupeKey: item.dedupeKey,
           timeZone: item.timeZone
@@ -115,10 +116,14 @@ async function sendReminderOnce(input: {
   accountId: string;
   student: Student;
   lesson: Lesson;
+  leadMinutes: number;
   scheduledFor: string;
   dedupeKey: string;
   timeZone: string;
 }): Promise<void> {
+  const lessonStartsAt = input.lesson.startsAt;
+  const leadDuration = formatLeadDuration(input.leadMinutes);
+
   return withSentrySpan(
     "reminder.send_lesson",
     "task",
@@ -137,6 +142,9 @@ async function sendReminderOnce(input: {
           accountId: input.accountId,
           lessonId: input.lesson.id,
           studentId: input.student.id,
+          lessonStartsAt,
+          leadMinutes: input.leadMinutes,
+          leadDuration,
           dedupeKey: input.dedupeKey,
           status: reminder.status
         });
@@ -155,6 +163,9 @@ async function sendReminderOnce(input: {
           lessonId: input.lesson.id,
           studentId: input.student.id,
           reminderId: reminder.id,
+          lessonStartsAt,
+          leadMinutes: input.leadMinutes,
+          leadDuration,
           status
         });
       } catch (error) {
@@ -167,6 +178,9 @@ async function sendReminderOnce(input: {
           lessonId: input.lesson.id,
           studentId: input.student.id,
           reminderId: reminder.id,
+          lessonStartsAt,
+          leadMinutes: input.leadMinutes,
+          leadDuration,
           err: error
         });
       }
@@ -174,7 +188,19 @@ async function sendReminderOnce(input: {
     {
       "account.id": input.accountId,
       "lesson.id": input.lesson.id,
-      "student.id": input.student.id
+      "student.id": input.student.id,
+      "reminder.lead_minutes": input.leadMinutes
     }
   );
+}
+
+function formatLeadDuration(minutes: number): string {
+  if (minutes % 1440 === 0) {
+    const days = minutes / 1440;
+    return days === 1 ? "1d" : `${days}d`;
+  }
+  if (minutes % 60 === 0) {
+    return `${minutes / 60}h`;
+  }
+  return `${minutes}min`;
 }
