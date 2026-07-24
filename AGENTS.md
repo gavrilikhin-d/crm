@@ -10,6 +10,7 @@
 - Prefer Telegram UX via command hints, reply-keyboard shortcuts, and inline keyboards over typing raw commands or timezone strings; accept natural-language durations (e.g. `30 мин`, `3 ч`) and turn them into buttons.
 - Production images are distroless: do not suggest `printenv`, `psql`, or an interactive shell inside running app containers.
 - When implementing an attached plan, do not edit the plan file; reuse existing todos and mark them in progress as work proceeds.
+- Use TDD: start implementation with writing RED tests. When you finished tests should be GREEN
 
 ## Learned Workspace Facts
 
