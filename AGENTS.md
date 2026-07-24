@@ -21,6 +21,7 @@
 - Local full stack is `bun run dev:all`; the Telegram bot uses webhooks in prod and a separate test bot for local development. For local test bot to work, TELEGRAM_DEV_WEBHOOK_BASE_URL should point to a started ngrok
 - Platform analytics are served by Metabase (e.g. `analytics.vocalcrm.site`) with `metabase_readonly` limited to `analytics.*` views (custom SQL must use those, not `public.*`); deploy notes live under `deploy/analytics`.
 - Visual coverage uses Storybook plus Chromatic in CI; Chromatic project tokens belong in GitHub secrets/envs, not the repo.
+- CI skips Tests/Deploy for docs-only changes (`*.md`, `AGENTS.md`, etc.); Chromatic runs only for UI-related paths (`frontend/`, `shared/`, root lockfiles/deps, or the Chromatic workflow).
 - Auth is Google OAuth via Auth.js; accounts are multi-tenant with plan limits (free tier is deliberately constrained, including recurring-lesson caps).
 - UI locales include Russian and English with browser-based default selection; time formatting goes through shared i18n helpers with `hour12: false`.
 - Calendar data syncs to the client over WebSocket with month-paged snapshots and incremental updates rather than full resends on every change.
