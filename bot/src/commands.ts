@@ -43,10 +43,9 @@ function commandReplyKeyboard(): ReplyKeyboardMarkup {
   return {
     keyboard: [
       [{ text: "📅 Расписание" }, { text: "💰 Баланс" }],
-      [{ text: "🔔 Напоминания" }, { text: "🌍 Часовой пояс" }],
+      [{ text: "🔔 Напоминания" }, { text: "🌍 Часовой пояс" }]
     ],
-    resize_keyboard: true,
-    is_persistent: true
+    resize_keyboard: true
   };
 }
 

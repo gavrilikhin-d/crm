@@ -20,14 +20,14 @@ describe("command suggestions", () => {
     expect(callbacks).toContain("cmd:help");
   });
 
-  test("builds persistent reply keyboard under the text input", () => {
+  test("builds hidable reply keyboard under the text input", () => {
     const keyboard = commandReplyKeyboard();
     const labels = keyboard.keyboard.flat().map((button) =>
       typeof button === "string" ? button : (button as { text: string }).text
     );
 
     expect(keyboard.resize_keyboard).toBe(true);
-    expect(keyboard.is_persistent).toBe(true);
+    expect(keyboard.is_persistent).not.toBe(true);
     expect(labels).toContain("📅 Расписание");
     expect(labels).toContain("💰 Баланс");
     expect(labels).not.toContain("👍 Буду");
