@@ -7,7 +7,47 @@ on:
   workflow_dispatch:
 
 jobs:
-  chromatic:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      ui: ${{ steps.check.outputs.ui }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Detect UI-related changes
+        id: check
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "ui=true" >> "$GITHUB_OUTPUT"
+            echo "Manual dispatch; Chromatic will run."
+            exit 0
+          fi
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            RANGE="${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }}"
+          else
+            # push to main: compare against previous commit on the branch
+            RANGE="${{ github.event.before }} ${{ github.sha }}"
+          fi
+
+          # Frontend, shared UI helpers/types, lockfiles/deps, or this workflow.
+          if git diff --name-only $RANGE | grep -qE \
+            '^(frontend/|shared/|package\.json$|bun\.lockb?$|\.github/workflows/chromatic\.yml$)'; then
+            echo "ui=true" >> "$GITHUB_OUTPUT"
+            echo "UI-related changes detected; Chromatic will run."
+          else
+            echo "ui=false" >> "$GITHUB_OUTPUT"
+            echo "No UI-related changes; Chromatic will be skipped."
+          fi
+
+  chromatic-run:
+    needs: changes
+    if: needs.changes.outputs.ui == 'true'
     runs-on: ubuntu-latest
     environment: chromatic
     permissions:
@@ -52,3 +92,22 @@ jobs:
           CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
           NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: ${{ vars.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'VocalLessonBot' }}
         run: bunx chromatic --auto-accept-changes main
+
+  # Job id stays `chromatic` so required checks keep working when skipped.
+  chromatic:
+    needs: [changes, chromatic-run]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Evaluate Chromatic outcome
+        run: |
+          if [ "${{ needs.changes.outputs.ui }}" != "true" ]; then
+            echo "Skipped Chromatic (no UI-related changes)."
+            exit 0
+          fi
+          if [ "${{ needs['chromatic-run'].result }}" = "success" ]; then
+            exit 0
+          fi
+          echo "chromatic-run result: ${{ needs['chromatic-run'].result }}"
+          exit 1

@@ -353,6 +353,82 @@ Internal worker/bot routes are protected by `INTERNAL_API_TOKEN`:
 - `POST /internal/reminders`
 - `PATCH /internal/reminders/:id`
 
+## Production database (RDS)
+
+Prod Postgres is AWS RDS (not a container on the EC2/k3s host). App images are distroless — do **not** try `psql`, shells, or `printenv` inside running pods.
+
+### Prefer safer read paths first
+
+1. **Metabase** (`https://analytics.vocalcrm.site`) — connects as `metabase_readonly`, which can only `SELECT` from `analytics.*` views. Use this for exploration and custom SQL when the data is already exposed there. See [`deploy/analytics/README.md`](deploy/analytics/README.md).
+2. **Admin SQL** — only when you need `public.*` or writes. Connect from the EC2 deploy host with a short-lived Docker client and `DATABASE_URL` from `~/crm/.env`.
+
+### Connect for admin SQL (EC2)
+
+```bash
+cd ~/crm
+source .env
+
+docker run --rm -it --network host \
+  -e PGURL="$DATABASE_URL" \
+  postgres:16-alpine \
+  sh -c 'psql "$PGURL" -v ON_ERROR_STOP=1'
+```
+
+### Safe write workflow
+
+Treat every write as dangerous until proven otherwise:
+
+1. Open an interactive `psql` session (above), not a one-shot heredoc for multi-step edits.
+2. Start a transaction and **do not COMMIT until you have checked the result**:
+
+```sql
+BEGIN;
+
+-- 1) Find the exact row(s)
+SELECT id, email, name, plan
+FROM accounts
+WHERE email = 'teacher@example.com';
+
+-- 2) Mutate with a narrow WHERE (prefer primary key / unique email)
+UPDATE accounts
+SET plan = 'premium',
+    updated_at = now()
+WHERE email = 'teacher@example.com'
+RETURNING id, email, plan, updated_at;
+
+-- 3) Confirm: exactly one row, expected values
+-- If anything looks wrong:
+ROLLBACK;
+
+-- Only when the RETURNING row is correct:
+COMMIT;
+```
+
+Rules of thumb:
+
+- Always `BEGIN` … inspect … `COMMIT` or `ROLLBACK`. Prefer `ROLLBACK` if unsure.
+- Never run bare `UPDATE` / `DELETE` without a transaction and a `RETURNING` (or a follow-up `SELECT`).
+- Prefer `WHERE id = '…'` or unique `email`; avoid broad predicates (`WHERE plan = 'free'`, etc.).
+- Use `-v ON_ERROR_STOP=1` so a failed statement aborts instead of continuing.
+- Account plans in DB are `free`, `standard`, or `premium` (paid = `standard` or `premium`).
+
+### Set an account to premium
+
+```sql
+BEGIN;
+
+SELECT id, email, plan FROM accounts WHERE email = 'teacher@example.com';
+
+UPDATE accounts
+SET plan = 'premium',
+    updated_at = now()
+WHERE email = 'teacher@example.com'
+RETURNING id, email, plan, updated_at;
+
+-- COMMIT;   -- only after RETURNING shows exactly one correct row
+-- ROLLBACK; -- if not
+```
+
 ## Legacy Data Import
 
 If you still have a legacy JSON database at `backend/data/db.json`, import it after applying the schema:
