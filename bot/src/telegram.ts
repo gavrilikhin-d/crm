@@ -47,6 +47,15 @@ import {
   timezoneSettingsKeyboard
 } from "./timezone-picker";
 import {
+  formatNotificationSettingsMessage,
+  looksLikeNotificationMinutesInput,
+  mergeNotificationMinutes,
+  notificationSettingsKeyboard,
+  parseNotificationMinutesPayload,
+  resolveActiveNotificationMinutes,
+  resolveNextNotificationMinutes
+} from "./notification-settings";
+import {
   ATTENDANCE_SCHEDULE_DAYS,
   DEFAULT_SCHEDULE_DAYS,
   parseScheduleDaysFromPhrase,
@@ -58,7 +67,6 @@ import {
 
 const DEFAULT_BOT_PORT = 4002;
 const WEBHOOK_PREFIX = "/telegram/webhook";
-const notificationMinutePresets = [15, 60, 120, 1440];
 
 let bot: Telegraf | null = null;
 
@@ -385,6 +393,28 @@ export function getTelegramBot(): Telegraf | null {
       }
 
       await updateNotificationSettingsFromPayload(ctx, interaction, ctx.match[1]);
+    } finally {
+      interaction.flush();
+    }
+  });
+
+  bot.hears(/^\d/, async (ctx) => {
+    const interaction = new BotInteraction("hears:notifications:minutes", ctx);
+
+    try {
+      if (!isPrivateChat(ctx)) {
+        interaction.outcome = "skipped";
+        return;
+      }
+
+      const text =
+        ctx.message && "text" in ctx.message && typeof ctx.message.text === "string" ? ctx.message.text : "";
+      if (!looksLikeNotificationMinutesInput(text)) {
+        interaction.outcome = "skipped";
+        return;
+      }
+
+      await updateNotificationSettingsFromPayload(ctx, interaction, text);
     } finally {
       interaction.flush();
     }
@@ -878,14 +908,19 @@ async function updateNotificationSettingsFromPayload(
     return;
   }
 
-  const minutes = parseNotificationMinutesPayload(payload);
-  if (!minutes.length) {
+  const addedMinutes = parseNotificationMinutesPayload(payload);
+  if (!addedMinutes.length) {
     interaction.outcome = "validation_error";
-    await replyToUser(ctx, interaction, "Укажите минуты до занятия, например: /notifications 45, 120");
+    await replyToUser(ctx, interaction, "Укажите время до занятия, например: 45, 15 мин, 3 ч");
     return;
   }
 
   try {
+    const currentProfile = await getTelegramStudentProfile(userId);
+    const minutes = mergeNotificationMinutes(
+      resolveActiveNotificationMinutes(currentProfile),
+      addedMinutes
+    );
     const profile = await updateTelegramStudentPreferences({
       userId,
       lessonReminderMinutes: minutes
@@ -1088,89 +1123,6 @@ function isPrivateChat(ctx: Context): boolean {
 
 function lessonKeyboard(lessonId: string, studentId: string): InlineKeyboardMarkup {
   return lessonReminderKeyboard(lessonId, studentId);
-}
-
-function resolveActiveNotificationMinutes(profile: TelegramStudentProfile): number[] {
-  return profile.student.lessonReminderMinutes?.length
-    ? profile.student.lessonReminderMinutes
-    : profile.settings.lessonReminderMinutes;
-}
-
-function resolveNextNotificationMinutes(
-  profile: TelegramStudentProfile,
-  callbackData: string
-): number[] | null | "empty" {
-  if (callbackData === "nt:r") {
-    return null;
-  }
-
-  const match = callbackData.match(/^nt:t:(\d+)$/);
-  if (!match) {
-    return profile.student.lessonReminderMinutes ?? null;
-  }
-
-  const minutes = Number(match[1]);
-  const current = new Set(resolveActiveNotificationMinutes(profile));
-  if (current.has(minutes)) {
-    current.delete(minutes);
-  } else {
-    current.add(minutes);
-  }
-
-  if (!current.size) {
-    return "empty";
-  }
-
-  return [...current].sort((a, b) => b - a);
-}
-
-function notificationSettingsKeyboard(profile: TelegramStudentProfile): InlineKeyboardMarkup {
-  const active = new Set(resolveActiveNotificationMinutes(profile));
-  const rows = notificationMinutePresets.map((minutes) => [
-    {
-      text: `${active.has(minutes) ? "✓ " : ""}${formatReminderMinutes(minutes)}`,
-      callback_data: `nt:t:${minutes}`
-    }
-  ]);
-  rows.push([{ text: "Сбросить к настройкам преподавателя", callback_data: "nt:r" }]);
-  return { inline_keyboard: rows };
-}
-
-function formatNotificationSettingsMessage(profile: TelegramStudentProfile): string {
-  const isCustom = Boolean(profile.student.lessonReminderMinutes?.length);
-  const active = resolveActiveNotificationMinutes(profile);
-  const inheritedLine = isCustom
-    ? "Сейчас используются ваши личные настройки."
-    : "Сейчас используются настройки преподавателя.";
-
-  return [
-    "Напоминания о занятиях",
-    inheritedLine,
-    `Отправлять за: ${formatReminderMinutesList(active)}.`,
-    "",
-    "Нажмите на интервал, чтобы включить или выключить его."
-  ].join("\n");
-}
-
-function formatReminderMinutesList(minutes: number[]): string {
-  return minutes.map(formatReminderMinutes).join(", ");
-}
-
-function formatReminderMinutes(minutes: number): string {
-  if (minutes % 1440 === 0) {
-    const days = minutes / 1440;
-    return days === 1 ? "24 часа" : `${days} дн.`;
-  }
-  if (minutes % 60 === 0) {
-    return `${minutes / 60} ч`;
-  }
-  return `${minutes} мин`;
-}
-
-function parseNotificationMinutesPayload(payload: string): number[] {
-  return [...new Set(payload.split(/[,\s]+/).map(Number).filter((item) => Number.isInteger(item) && item > 0))]
-    .sort((a, b) => b - a)
-    .slice(0, 8);
 }
 
 function getStartPayload(message: unknown): string | undefined {

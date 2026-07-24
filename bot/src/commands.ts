@@ -5,7 +5,7 @@ const botCommands: BotCommand[] = [
   { command: "start", description: "Подключить Telegram и открыть меню" },
   { command: "schedule", description: "Расписание — выбрать период кнопкой" },
   { command: "balance", description: "Сколько занятий осталось" },
-  { command: "notifications", description: "Настроить напоминания (/notifications 45, 120)" },
+  { command: "notifications", description: "Настроить напоминания — кнопки или минуты" },
   { command: "timezone", description: "Выбрать часовой пояс кнопкой или городом" },
   { command: "attend", description: "Подтвердить занятие — выбрать кнопкой" },
   { command: "decline", description: "Отказаться от занятия — выбрать кнопкой" },
@@ -76,7 +76,7 @@ function formatHelpMessage(isGroup = false): string {
     ...botCommands.map((item) => `/${item.command} — ${item.description}`),
     "",
     "Расписание: /schedule — период можно выбрать кнопками 7/14/30/60.",
-    "Напоминания: /notifications — выбрать интервалы, /notifications 45, 120 — задать свои минуты.",
+    "Напоминания: /notifications — выбрать интервалы, или напишите: 45, 15 мин, 3 ч.",
     "Часовой пояс: /timezone — выбрать город кнопкой, или напишите «Москва», «Минск».",
     "Работает и /shedule (с опечаткой).",
     "Ответ по занятию: /attend или /decline — выбрать занятие кнопкой.",
@@ -89,7 +89,7 @@ function formatHelpMessage(isGroup = false): string {
   } else {
     lines.push(
       "",
-      "Можно также написать: «расписание», «баланс», «сколько осталось», «буду 1», «не буду 1», «часовой пояс»."
+      "Можно также написать: «расписание», «баланс», «сколько осталось», «буду 1», «не буду 1», «часовой пояс», или время напоминания: «45», «15 мин», «3 ч»."
     );
   }
 

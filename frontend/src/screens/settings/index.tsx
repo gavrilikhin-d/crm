@@ -37,7 +37,7 @@ import { pageSectionClass } from "@/screens/dashboard/constants";
 import { api, clearAccessTokenCache } from "@/lib/api";
 import { PlanUsageRow } from "./components/plan-usage-row";
 
-const reminderMinutePresets = [15, 60, 120, 1440];
+const reminderMinutePresets = [30, 60, 120, 1440];
 
 export function SettingsView({
   accountInfo,
@@ -69,7 +69,9 @@ export function SettingsView({
     .filter((value) => Number.isInteger(value) && value > 0)
     .sort((a, b) => b - a);
   const reminderValuesChanged = reminderValues.join(",") !== lessonReminderMinutes.join(",");
-  const customReminderMinutes = reminderValues.filter((value) => !reminderMinutePresets.includes(value));
+  const reminderMinuteButtons = [
+    ...new Set([...reminderMinutePresets, ...reminderValues.filter((value) => !reminderMinutePresets.includes(value))])
+  ].sort((a, b) => a - b);
 
   async function handleDeleteAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -197,12 +199,7 @@ export function SettingsView({
                     variant="outline"
                     className="flex-wrap"
                   >
-                    {reminderMinutePresets.map((minutes) => (
-                      <ToggleGroupItem key={minutes} value={String(minutes)}>
-                        {formatReminderMinutes(minutes)}
-                      </ToggleGroupItem>
-                    ))}
-                    {customReminderMinutes.map((minutes) => (
+                    {reminderMinuteButtons.map((minutes) => (
                       <ToggleGroupItem key={minutes} value={String(minutes)}>
                         {formatReminderMinutes(minutes)}
                       </ToggleGroupItem>

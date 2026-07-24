@@ -23,7 +23,7 @@ function isSkippedLessonStatus(status: Lesson["status"]): boolean {
 }
 
 function isSkippedParticipantStatus(status: ParticipantStatus): boolean {
-  return status === "declined" || status === "confirmed";
+  return status === "declined";
 }
 
 function isLessonReminderDue(input: {
