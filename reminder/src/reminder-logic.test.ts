@@ -123,6 +123,8 @@ describe("collectPendingLessonReminders", () => {
 
     expect(pending).toHaveLength(1);
     expect(pending[0]?.dedupeKey).toBe("lesson:l1:s1:60");
+    expect(pending[0]?.leadMinutes).toBe(60);
+    expect(pending[0]?.lesson.startsAt).toBe(startsAt);
     expect(pending[0]?.student.id).toBe("s1");
   });
 

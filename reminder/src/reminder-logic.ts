@@ -13,6 +13,7 @@ type PendingLessonReminder = {
   accountId: string;
   student: Student;
   lesson: Lesson;
+  leadMinutes: number;
   scheduledFor: string;
   dedupeKey: string;
   timeZone: string;
@@ -71,6 +72,7 @@ function collectPendingLessonReminders(workerSnapshots: WorkerSnapshot[], nowMs:
             accountId: worker.accountId,
             student,
             lesson,
+            leadMinutes,
             scheduledFor,
             dedupeKey: `lesson:${lesson.id}:${student.id}:${leadMinutes}`,
             timeZone: resolveNotificationTimeZone({
