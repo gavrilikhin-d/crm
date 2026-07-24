@@ -11,6 +11,7 @@
 - Production images are distroless: do not suggest `printenv`, `psql`, or an interactive shell inside running app containers.
 - When implementing an attached plan, do not edit the plan file; reuse existing todos and mark them in progress as work proceeds.
 - Use TDD: start implementation with writing RED tests. When you finished tests should be GREEN
+- Always check lint and types before finishing (`bun run typecheck`, and lint/diagnostics for touched files). For large changes run the full test suite; for small/local changes run only the related tests.
 - Activity/event recording must not block request paths; use fire-and-forget writes and log failures without awaiting them in handlers.
 
 ## Learned Workspace Facts

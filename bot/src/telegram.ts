@@ -10,6 +10,7 @@ import {
   bindTelegramChat,
   getTelegramStudentProfile,
   setParticipantStatus,
+  switchTelegramTeacherContext,
   updateTelegramStudentPreferences
 } from "./backend-client";
 import {
@@ -63,6 +64,13 @@ import {
   scheduleDaysKeyboard,
   SCHEDULE_COMMANDS
 } from "./schedule-days";
+import {
+  formatTeacherContextMessage,
+  formatTeacherSwitchedMessage,
+  hasMultipleTeachers,
+  resolveTeacherContextCallback,
+  teacherContextKeyboard
+} from "./teacher-context";
 
 const DEFAULT_BOT_PORT = 4002;
 const WEBHOOK_PREFIX = "/telegram/webhook";
@@ -106,6 +114,7 @@ export function getTelegramBot(): Telegraf | null {
       interaction.meta.group = isGroup;
 
       if (!payload || !ctx.chat || !ctx.from) {
+        const showTeacherSwitch = await resolveShowTeacherSwitch(ctx.from?.id);
         await replyWithCommandMenu(
           ctx,
           interaction,
@@ -113,8 +122,9 @@ export function getTelegramBot(): Telegraf | null {
             "Здравствуйте! Это бот CRM преподавателя.",
             "Чтобы подключить напоминания, откройте персональную ссылку из CRM преподавателя.",
             "",
-            formatHelpMessage(isGroup)
-          ].join("\n")
+            formatHelpMessage(isGroup, { showTeacherSwitch })
+          ].join("\n"),
+          { showTeacherSwitch }
         );
         return;
       }
@@ -126,20 +136,29 @@ export function getTelegramBot(): Telegraf | null {
           userId: ctx.from.id,
           username: ctx.from.username
         });
+        const profile = await getTelegramStudentProfile(ctx.from.id).catch(() => null);
+        const multiTeacherHint =
+          profile && hasMultipleTeachers(profile)
+            ? ["", `Активный преподаватель: ${profile.teacher.name}. Сменить — /teacher.`]
+            : [];
         const connectedLines = isGroup
           ? [
               `${student.fullName}, ваш Telegram подключен.`,
               "Напоминания и команды будут работать в этом чате для вас лично.",
+              ...multiTeacherHint,
               "",
               "Выберите действие кнопкой ниже."
             ]
           : [
               `${student.fullName}, Telegram подключен. Теперь сюда будут приходить напоминания о занятиях.`,
+              ...multiTeacherHint,
               "",
               "Выберите действие кнопкой ниже."
             ];
 
-        await replyWithCommandMenu(ctx, interaction, connectedLines.join("\n"));
+        await replyWithCommandMenu(ctx, interaction, connectedLines.join("\n"), {
+          showTeacherSwitch: profile ? hasMultipleTeachers(profile) : false
+        });
         interaction.meta.linked = true;
       } catch (error) {
         interaction.outcome = "error";
@@ -228,13 +247,32 @@ export function getTelegramBot(): Telegraf | null {
     }
   });
 
+  bot.command(["teacher", "преподаватель", "учителя"], async (ctx) => {
+    const interaction = new BotInteraction("command:teacher", ctx);
+
+    try {
+      if (!isPrivateChat(ctx)) {
+        interaction.outcome = "skipped";
+        await replyToUser(ctx, interaction, "Смену преподавателя можно сделать в личном чате с ботом.");
+        return;
+      }
+
+      await replyWithTeacherContext(ctx, interaction);
+    } finally {
+      interaction.flush();
+    }
+  });
+
   bot.command(["help", "помощь"], async (ctx) => {
     const interaction = new BotInteraction("command:help", ctx);
 
     try {
       const isGroup = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
       interaction.meta.group = isGroup;
-      await replyWithCommandMenu(ctx, interaction, formatHelpMessage(isGroup));
+      const showTeacherSwitch = await resolveShowTeacherSwitch(ctx.from?.id);
+      await replyWithCommandMenu(ctx, interaction, formatHelpMessage(isGroup, { showTeacherSwitch }), {
+        showTeacherSwitch
+      });
     } finally {
       interaction.flush();
     }
@@ -423,6 +461,79 @@ export function getTelegramBot(): Telegraf | null {
       }
 
       await handleTimezoneCommand(ctx, interaction, ctx.match[1]);
+    } finally {
+      interaction.flush();
+    }
+  });
+
+  bot.hears(/^(?:преподаватель|учителя|сменить преподавателя)$/i, async (ctx) => {
+    const interaction = new BotInteraction("hears:teacher", ctx);
+
+    try {
+      if (!isPrivateChat(ctx)) {
+        interaction.outcome = "skipped";
+        return;
+      }
+
+      await replyWithTeacherContext(ctx, interaction);
+    } finally {
+      interaction.flush();
+    }
+  });
+
+  bot.action(/^tc:.+$/, async (ctx) => {
+    const interaction = new BotInteraction("callback:teacher", ctx);
+
+    try {
+      const userId = ctx.from?.id;
+      if (!userId) {
+        interaction.outcome = "validation_error";
+        await answerCallback(ctx, interaction, "Не удалось определить пользователя.", { show_alert: true });
+        return;
+      }
+
+      const callbackData =
+        "data" in ctx.callbackQuery && typeof ctx.callbackQuery.data === "string"
+          ? ctx.callbackQuery.data
+          : "";
+      const studentId = resolveTeacherContextCallback(callbackData);
+      if (!studentId) {
+        interaction.outcome = "validation_error";
+        await answerCallback(ctx, interaction, "Не удалось выбрать преподавателя.", { show_alert: true });
+        return;
+      }
+
+      const profile = await switchTelegramTeacherContext({ userId, studentId });
+      interaction.meta.teacher = profile.teacher.name;
+      await answerCallback(ctx, interaction, formatTeacherSwitchedMessage(profile));
+      await ctx
+        .editMessageText(formatTeacherContextMessage(profile, formatTeacherSwitchedMessage(profile)), {
+          reply_markup: hasMultipleTeachers(profile) ? teacherContextKeyboard(profile) : undefined
+        })
+        .catch(() => undefined);
+      if (isPrivateChat(ctx)) {
+        await ctx.reply("Меню обновлено.", {
+          reply_markup: commandReplyKeyboard({ showTeacherSwitch: hasMultipleTeachers(profile) })
+        });
+        interaction.noteMessageKind("plain_text");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown teacher context error";
+      if (message.includes("not found") || message.includes("not linked")) {
+        interaction.outcome = "not_linked";
+        await answerCallback(ctx, interaction, "Сначала подключите Telegram по ссылке от преподавателя.", {
+          show_alert: true
+        });
+        return;
+      }
+      interaction.outcome = "error";
+      log.error("Telegram teacher context callback failed", {
+        err: error,
+        handler: interaction.handler,
+        userId: interaction.userId,
+        chatId: interaction.chatId
+      });
+      await answerCallback(ctx, interaction, "Не удалось сменить преподавателя.", { show_alert: true });
     } finally {
       interaction.flush();
     }
@@ -1065,13 +1176,64 @@ async function replyWithAttendance(
   }
 }
 
+async function resolveShowTeacherSwitch(userId?: number): Promise<boolean> {
+  if (!userId) {
+    return false;
+  }
+  const profile = await getTelegramStudentProfile(userId).catch(() => null);
+  return profile ? hasMultipleTeachers(profile) : false;
+}
+
 async function replyWithCommandMenu(
   ctx: Context,
   interaction: BotInteraction,
-  text: string
+  text: string,
+  options?: { showTeacherSwitch?: boolean }
 ): Promise<void> {
-  await ctx.reply(text, { reply_markup: commandReplyKeyboard() });
+  await ctx.reply(text, {
+    reply_markup: commandReplyKeyboard({ showTeacherSwitch: options?.showTeacherSwitch ?? false })
+  });
   interaction.noteMessageKind("plain_text");
+}
+
+async function replyWithTeacherContext(ctx: Context, interaction: BotInteraction): Promise<void> {
+  const userId = ctx.from?.id;
+  if (!userId) {
+    interaction.outcome = "skipped";
+    return;
+  }
+
+  try {
+    const profile = await getTelegramStudentProfile(userId);
+    interaction.meta.teacher = profile.teacher.name;
+    const text = formatTeacherContextMessage(profile);
+    if (hasMultipleTeachers(profile)) {
+      await ctx.reply(text, { reply_markup: teacherContextKeyboard(profile) });
+      await ctx.reply("Меню:", {
+        reply_markup: commandReplyKeyboard({ showTeacherSwitch: true })
+      });
+    } else {
+      await ctx.reply(text, {
+        reply_markup: commandReplyKeyboard({ showTeacherSwitch: false })
+      });
+    }
+    interaction.noteMessageKind("plain_text");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown teacher context error";
+    if (message.includes("not found")) {
+      interaction.outcome = "not_linked";
+      await replyToUser(ctx, interaction, formatNotLinkedMessage());
+      return;
+    }
+    interaction.outcome = "error";
+    log.error("Telegram teacher context query failed", {
+      err: error,
+      handler: interaction.handler,
+      userId: interaction.userId,
+      chatId: interaction.chatId
+    });
+    await replyToUser(ctx, interaction, "Не удалось получить список преподавателей. Попробуйте позже.");
+  }
 }
 
 async function runCommandSuggestion(
@@ -1081,7 +1243,10 @@ async function runCommandSuggestion(
 ): Promise<void> {
   if (command === "help") {
     const isGroup = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
-    await replyWithCommandMenu(ctx, interaction, formatHelpMessage(isGroup));
+    const showTeacherSwitch = await resolveShowTeacherSwitch(ctx.from?.id);
+    await replyWithCommandMenu(ctx, interaction, formatHelpMessage(isGroup, { showTeacherSwitch }), {
+      showTeacherSwitch
+    });
     return;
   }
 
@@ -1113,6 +1278,16 @@ async function runCommandSuggestion(
       return;
     }
     await handleTimezoneCommand(ctx, interaction);
+    return;
+  }
+
+  if (command === "teacher") {
+    if (!isPrivateChat(ctx)) {
+      interaction.outcome = "skipped";
+      await replyToUser(ctx, interaction, "Смену преподавателя можно сделать в личном чате с ботом.");
+      return;
+    }
+    await replyWithTeacherContext(ctx, interaction);
   }
 }
 

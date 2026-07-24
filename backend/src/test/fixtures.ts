@@ -93,7 +93,9 @@ function futureDate(daysFromNow: number, hour = 18, minute = 0): string {
   return date.toISOString();
 }
 
-async function createTestAccount(): Promise<{ ctx: AuthContext; cleanup: () => Promise<void> }> {
+async function createTestAccount(options?: {
+  name?: string;
+}): Promise<{ ctx: AuthContext; cleanup: () => Promise<void> }> {
   const id = nanoid();
   const timestamp = now();
   const email = `test-${id}@test.crm`;
@@ -101,7 +103,7 @@ async function createTestAccount(): Promise<{ ctx: AuthContext; cleanup: () => P
   await db.insert(accounts).values({
     id,
     email,
-    name: "Test Account",
+    name: options?.name ?? "Test Account",
     image: null,
     googleSub: `test-${id}`,
     plan: "premium",

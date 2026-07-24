@@ -301,3 +301,9 @@ export const notificationDeliveries = pgTable(
     index("notification_deliveries_reminder_idx").on(table.reminderId)
   ]
 );
+
+export const telegramUserContexts = pgTable("telegram_user_contexts", {
+  telegramUserId: text("telegram_user_id").primaryKey(),
+  activeStudentId: text("active_student_id").references(() => students.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" }).notNull()
+});

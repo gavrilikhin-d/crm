@@ -11,8 +11,11 @@ import {
 } from "./attendance";
 
 function createProfile(lessons: Lesson[]): TelegramStudentProfile {
+  const teacher = { studentId: "s1", accountId: "a1", name: "Teacher" };
   return {
     student: { id: "s1", fullName: "Alice" },
+    teacher,
+    teachers: [teacher],
     settings: { lessonReminderMinutes: [1440, 120], timezone: "Europe/Minsk" },
     balance: {
       studentId: "s1",

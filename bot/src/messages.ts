@@ -6,6 +6,9 @@ type BotReply = string | { text: string; parse_mode: "HTML" };
 function formatBalanceMessage(profile: TelegramStudentProfile): BotReply {
   const { balance } = profile;
   const lines = [`<b>${escapeHtml(profile.student.fullName)}</b>`];
+  if (profile.teachers.length > 1) {
+    lines.push(`Преподаватель: <b>${escapeHtml(profile.teacher.name)}</b>`);
+  }
 
   if (balance.remainingLessons > 0) {
     lines.push(`Осталось занятий: <b>${balance.remainingLessons}</b>`);
@@ -24,11 +27,16 @@ function formatScheduleMessage(profile: TelegramStudentProfile): BotReply {
   const days = profile.scheduleDays;
   const header = `📅 <b>Занятия на ${days} ${pluralDays(days)}</b>`;
   const timeZone = resolveProfileTimeZone(profile);
+  const identity =
+    profile.teachers.length > 1
+      ? `<i>${escapeHtml(profile.student.fullName)} · ${escapeHtml(profile.teacher.name)}</i>`
+      : `<i>${escapeHtml(profile.student.fullName)}</i>`;
 
   if (!profile.upcomingLessons.length) {
     return {
       text: [
         header,
+        identity,
         "",
         `На ближайшие ${days} ${pluralDays(days)} занятий нет.`,
         "",
@@ -46,7 +54,7 @@ function formatScheduleMessage(profile: TelegramStudentProfile): BotReply {
   return {
     text: [
       header,
-      `<i>${escapeHtml(profile.student.fullName)}</i>`,
+      identity,
       "",
       ...blocks,
       "",

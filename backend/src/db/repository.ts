@@ -33,6 +33,7 @@ import {
   reminders,
   students,
   telegramInteractions,
+  telegramUserContexts,
   vacationPeriods
 } from "./schema";
 import { createDefaultSettings } from "../store-logic";
@@ -523,11 +524,62 @@ export async function findStudentByBindToken(token: string): Promise<(Student & 
 }
 
 export async function findStudentByTelegramUser(userId: string): Promise<(Student & { accountId: string }) | null> {
-  const rows = await db.select().from(students).where(eq(students.telegramUserId, userId)).limit(1);
-  if (!rows[0]) {
-    return null;
-  }
-  return { ...mapStudent(rows[0]), accountId: rows[0].accountId };
+  const linked = await findStudentsByTelegramUser(userId);
+  return linked[0] ?? null;
+}
+
+export async function findStudentsByTelegramUser(
+  userId: string
+): Promise<Array<Student & { accountId: string; accountName: string }>> {
+  const rows = await db
+    .select({
+      student: students,
+      accountName: accounts.name
+    })
+    .from(students)
+    .innerJoin(accounts, eq(students.accountId, accounts.id))
+    .where(eq(students.telegramUserId, userId));
+
+  return rows
+    .map((row) => ({
+      ...mapStudent(row.student),
+      accountId: row.student.accountId,
+      accountName: row.accountName
+    }))
+    .sort((left, right) => {
+      const byName = left.accountName.localeCompare(right.accountName, "ru");
+      if (byName !== 0) {
+        return byName;
+      }
+      return left.createdAt.localeCompare(right.createdAt);
+    });
+}
+
+export async function getTelegramUserActiveStudentId(userId: string): Promise<string | null> {
+  const rows = await db
+    .select({ activeStudentId: telegramUserContexts.activeStudentId })
+    .from(telegramUserContexts)
+    .where(eq(telegramUserContexts.telegramUserId, userId))
+    .limit(1);
+  return rows[0]?.activeStudentId ?? null;
+}
+
+export async function setTelegramUserActiveStudentId(userId: string, studentId: string): Promise<void> {
+  const updatedAt = new Date().toISOString();
+  await db
+    .insert(telegramUserContexts)
+    .values({
+      telegramUserId: userId,
+      activeStudentId: studentId,
+      updatedAt
+    })
+    .onConflictDoUpdate({
+      target: telegramUserContexts.telegramUserId,
+      set: {
+        activeStudentId: studentId,
+        updatedAt
+      }
+    });
 }
 
 export async function updateStudentRecord(student: Student): Promise<void> {

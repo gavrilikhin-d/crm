@@ -36,7 +36,7 @@ afterEach(() => {
 
 describe.skipIf(!databaseAvailable)("account deletion integration", () => {
   test("deletes the account, cascades related data, disconnects Telegram, and removes avatars", async () => {
-    const { ctx, cleanup } = await createTestAccount();
+    const { ctx, cleanup } = await createTestAccount({ name: "Delete Teacher" });
     const fetchMock = mock(async (_input: RequestInfo | URL, _init?: RequestInit) =>
       new Response(JSON.stringify({ ok: true }), { status: 200 })
     );
@@ -109,7 +109,8 @@ describe.skipIf(!databaseAvailable)("account deletion integration", () => {
       expect(await countRows(recurringScheduleStudents, eq(recurringScheduleStudents.scheduleId, scheduleId!))).toBe(0);
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(await fetchRequestBody(fetchMock.mock.calls[0]![1])).toMatchObject({
-        chat_id: "chat-1"
+        chat_id: "chat-1",
+        text: "Аккаунт преподавателя Delete Teacher удалён. Telegram-подключение к CRM отключено, напоминания больше не будут приходить."
       });
     } finally {
       await cleanup();

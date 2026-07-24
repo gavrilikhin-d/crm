@@ -1,6 +1,8 @@
 import type { BotCommand, InlineKeyboardMarkup, ReplyKeyboardMarkup } from "@telegraf/types";
 import type { Telegram } from "telegraf";
 
+const TEACHER_REPLY_LABEL = "👩‍🏫 Преподаватель";
+
 const botCommands: BotCommand[] = [
   { command: "start", description: "Подключить Telegram и открыть меню" },
   { command: "schedule", description: "Расписание — период и ответ по занятию" },
@@ -9,6 +11,11 @@ const botCommands: BotCommand[] = [
   { command: "timezone", description: "Выбрать часовой пояс кнопкой или городом" },
   { command: "help", description: "Список команд" }
 ];
+
+const teacherBotCommand: BotCommand = {
+  command: "teacher",
+  description: "Сменить преподавателя, если их несколько"
+};
 
 type CommandSuggestion = {
   id: string;
@@ -20,16 +27,20 @@ const commandSuggestions: CommandSuggestion[] = [
   { id: "balance", label: "💰 Баланс" },
   { id: "notifications", label: "🔔 Напоминания" },
   { id: "timezone", label: "🌍 Часовой пояс" },
+  { id: "teacher", label: TEACHER_REPLY_LABEL },
   { id: "help", label: "❓ Помощь" }
 ];
 
 const commandSuggestionLabels = commandSuggestions.map((item) => item.label);
 
-function commandSuggestionsKeyboard(): InlineKeyboardMarkup {
+function commandSuggestionsKeyboard(options?: { showTeacherSwitch?: boolean }): InlineKeyboardMarkup {
+  const suggestions = options?.showTeacherSwitch
+    ? commandSuggestions
+    : commandSuggestions.filter((item) => item.id !== "teacher");
   const rows: InlineKeyboardMarkup["inline_keyboard"] = [];
-  for (let index = 0; index < commandSuggestions.length; index += 2) {
-    const left = commandSuggestions[index]!;
-    const right = commandSuggestions[index + 1];
+  for (let index = 0; index < suggestions.length; index += 2) {
+    const left = suggestions[index]!;
+    const right = suggestions[index + 1];
     const row = [{ text: left.label, callback_data: `cmd:${left.id}` }];
     if (right) {
       row.push({ text: right.label, callback_data: `cmd:${right.id}` });
@@ -39,12 +50,16 @@ function commandSuggestionsKeyboard(): InlineKeyboardMarkup {
   return { inline_keyboard: rows };
 }
 
-function commandReplyKeyboard(): ReplyKeyboardMarkup {
+function commandReplyKeyboard(options?: { showTeacherSwitch?: boolean }): ReplyKeyboardMarkup {
+  const keyboard: ReplyKeyboardMarkup["keyboard"] = [
+    [{ text: "📅 Расписание" }, { text: "💰 Баланс" }],
+    [{ text: "🔔 Напоминания" }, { text: "🌍 Часовой пояс" }]
+  ];
+  if (options?.showTeacherSwitch) {
+    keyboard.push([{ text: TEACHER_REPLY_LABEL }]);
+  }
   return {
-    keyboard: [
-      [{ text: "📅 Расписание" }, { text: "💰 Баланс" }],
-      [{ text: "🔔 Напоминания" }, { text: "🌍 Часовой пояс" }]
-    ],
+    keyboard,
     resize_keyboard: true
   };
 }
@@ -63,10 +78,11 @@ function resolveCommandReplyLabel(text: string): string | null {
   return commandSuggestions.find((item) => item.label === normalized)?.id ?? null;
 }
 
-function formatHelpMessage(isGroup = false): string {
+function formatHelpMessage(isGroup = false, options?: { showTeacherSwitch?: boolean }): string {
+  const commands = options?.showTeacherSwitch ? [...botCommands, teacherBotCommand] : botCommands;
   const lines = [
     "Доступные команды:",
-    ...botCommands.map((item) => `/${item.command} — ${item.description}`),
+    ...commands.map((item) => `/${item.command} — ${item.description}`),
     "",
     "Расписание: /schedule — период кнопками 7/14/30/60, ответ по занятию кнопками или «буду 1» / «не буду 1».",
     "Напоминания: /notifications — выбрать интервалы, или напишите: 45, 15 мин, 3 ч.",
@@ -79,10 +95,17 @@ function formatHelpMessage(isGroup = false): string {
   if (isGroup) {
     lines.push("", "В группе используйте команды с упоминанием бота, например /schedule@имя_бота.");
   } else {
-    lines.push(
-      "",
-      "Можно также написать: «расписание», «баланс», «сколько осталось», «буду 1», «не буду 1», «часовой пояс», или время напоминания: «45», «15 мин», «3 ч»."
-    );
+    const natural = [
+      "«расписание»",
+      "«баланс»",
+      "«сколько осталось»",
+      "«буду 1»",
+      "«не буду 1»",
+      "«часовой пояс»",
+      ...(options?.showTeacherSwitch ? ["«преподаватель»"] : []),
+      "или время напоминания: «45», «15 мин», «3 ч»"
+    ];
+    lines.push("", `Можно также написать: ${natural.join(", ")}.`);
   }
 
   return lines.join("\n");
@@ -107,6 +130,7 @@ async function registerBotCommands(telegram: Telegram): Promise<void> {
 }
 
 export {
+  TEACHER_REPLY_LABEL,
   botCommands,
   commandReplyKeyboard,
   commandSuggestionLabels,

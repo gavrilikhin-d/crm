@@ -203,6 +203,12 @@ export interface StudentBalance {
   debtLessons: number;
 }
 
+export interface TelegramTeacherContext {
+  studentId: string;
+  accountId: string;
+  name: string;
+}
+
 export interface TelegramStudentProfile {
   student: {
     id: string;
@@ -210,6 +216,8 @@ export interface TelegramStudentProfile {
     lessonReminderMinutes?: number[] | null;
     timezone?: string | null;
   };
+  teacher: TelegramTeacherContext;
+  teachers: TelegramTeacherContext[];
   settings: Pick<AppSettings, "lessonReminderMinutes" | "timezone">;
   balance: StudentBalance;
   upcomingLessons: Lesson[];

@@ -3,18 +3,24 @@ type TelegramDisconnectTarget = {
 };
 
 const TELEGRAM_API_TIMEOUT_MS = 5_000;
-const DISCONNECT_MESSAGE =
-  "Аккаунт преподавателя удалён. Telegram-подключение к CRM отключено, напоминания больше не будут приходить.";
 
-export async function notifyTelegramDisconnects(targets: TelegramDisconnectTarget[]): Promise<void> {
+function formatTelegramDisconnectMessage(teacherName: string): string {
+  return `Аккаунт преподавателя ${teacherName} удалён. Telegram-подключение к CRM отключено, напоминания больше не будут приходить.`;
+}
+
+export async function notifyTelegramDisconnects(
+  targets: TelegramDisconnectTarget[],
+  teacherName: string
+): Promise<void> {
   const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
   if (!token || !targets.length) {
     return;
   }
 
   const chatIds = [...new Set(targets.map((target) => target.chatId).filter(Boolean))];
+  const text = formatTelegramDisconnectMessage(teacherName);
   const results = await Promise.allSettled(
-    chatIds.map((chatId) => sendTelegramDisconnectMessage(token, chatId))
+    chatIds.map((chatId) => sendTelegramDisconnectMessage(token, chatId, text))
   );
   const failed = results.filter((result) => result.status === "rejected").length;
 
@@ -23,13 +29,13 @@ export async function notifyTelegramDisconnects(targets: TelegramDisconnectTarge
   }
 }
 
-async function sendTelegramDisconnectMessage(token: string, chatId: string): Promise<void> {
+async function sendTelegramDisconnectMessage(token: string, chatId: string, text: string): Promise<void> {
   const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       chat_id: chatId,
-      text: DISCONNECT_MESSAGE
+      text
     }),
     signal: AbortSignal.timeout(TELEGRAM_API_TIMEOUT_MS)
   });
@@ -38,3 +44,5 @@ async function sendTelegramDisconnectMessage(token: string, chatId: string): Pro
     throw new Error(`Telegram disconnect notification failed: ${response.status}`);
   }
 }
+
+export { formatTelegramDisconnectMessage };
