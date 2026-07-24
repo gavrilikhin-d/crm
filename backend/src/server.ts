@@ -122,6 +122,7 @@ const internalRoutes: Array<{ method: string; pattern: RegExp; handler: Handler 
   route("POST", /^\/internal\/telegram\/bind$/, bindTelegram),
   route("GET", /^\/internal\/telegram\/profile$/, getTelegramProfile),
   route("PATCH", /^\/internal\/telegram\/preferences$/, updateTelegramPreferences),
+  route("POST", /^\/internal\/telegram\/teacher-context$/, switchTelegramTeacherContext),
   route("POST", /^\/internal\/reminders$/, upsertReminder),
   route("POST", /^\/internal\/reminders\/claim$/, claimDueReminders),
   route("POST", /^\/internal\/reminders\/backfill$/, backfillReminders),
@@ -764,6 +765,15 @@ async function updateTelegramPreferences(request: IncomingMessage, response: Ser
         : {}),
       ...(Object.prototype.hasOwnProperty.call(body, "timezone") ? { timezone: body.timezone } : {})
     })
+  );
+}
+
+async function switchTelegramTeacherContext(request: IncomingMessage, response: ServerResponse) {
+  const body = await readJson(request);
+  requireFields(body, ["userId", "studentId"]);
+  jsonOk(
+    response,
+    await store.switchTelegramTeacherContext(String(body.userId), String(body.studentId))
   );
 }
 

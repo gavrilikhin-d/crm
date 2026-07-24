@@ -19,6 +19,7 @@ import type {
   StudentBalance,
   TelegramInteraction,
   TelegramStudentProfile,
+  TelegramTeacherContext,
   VacationPeriod
 } from "@crm/shared";
 import { assertStudentCanChangeParticipantStatus, assertTeacherParticipantStatus } from "@crm/shared/lesson-attendance";
@@ -56,8 +57,10 @@ import {
   deleteVacationPeriodById,
   findStudentByBindToken,
   findStudentById,
-  findStudentByTelegramUser,
+  findStudentsByTelegramUser,
   getAccountById,
+  getTelegramUserActiveStudentId,
+  setTelegramUserActiveStudentId,
   insertActivityEvent,
   insertBalanceAdjustment,
   insertLessonPackage,
@@ -195,14 +198,16 @@ export class Store {
   }
 
   async deleteAccount(ctx: AuthContext): Promise<void> {
+    const account = await getAccountById(ctx.accountId);
     const db = await loadAccountDatabase(ctx.accountId);
     const studentIds = db.students.map((student) => student.id);
     const telegramTargets = db.students.flatMap((student) =>
       student.telegramChatId ? [{ chatId: student.telegramChatId }] : []
     );
+    const teacherName = account?.name?.trim() || ctx.email;
 
     await deleteAccountRecord(ctx.accountId);
-    await notifyTelegramDisconnects(telegramTargets);
+    await notifyTelegramDisconnects(telegramTargets, teacherName);
     await deleteStudentAvatars(studentIds);
   }
 
@@ -288,6 +293,7 @@ export class Store {
     student.telegramUsername = optional(username) ?? student.telegramUsername;
     student.updatedAt = now();
     await updateStudentRecord(student);
+    await setTelegramUserActiveStudentId(telegramUserId, student.id);
     recordActivity(linked.accountId, "telegram.bind", {
       actorType: "student",
       actorStudentId: student.id,
@@ -302,10 +308,7 @@ export class Store {
     userId: string | number,
     options?: { days?: number }
   ): Promise<TelegramStudentProfile> {
-    const linked = await findStudentByTelegramUser(String(userId));
-    if (!linked) {
-      throw new Error("Student not found");
-    }
+    const { linked, teachers } = await this.resolveTelegramTeacherContext(String(userId));
 
     const db = await this.getSnapshot({ accountId: linked.accountId, email: "", plan: "free" });
     const student = mustFind(db.students, linked.id, "Student");
@@ -327,6 +330,12 @@ export class Store {
       })
       .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
 
+    const teacher = teachers.find((item) => item.studentId === student.id) ?? {
+      studentId: student.id,
+      accountId: linked.accountId,
+      name: linked.accountName
+    };
+
     return {
       student: {
         id: student.id,
@@ -334,6 +343,8 @@ export class Store {
         lessonReminderMinutes: student.lessonReminderMinutes ?? null,
         timezone: student.timezone ?? null
       },
+      teacher,
+      teachers,
       settings: {
         lessonReminderMinutes: db.settings.lessonReminderMinutes,
         timezone: db.settings.timezone
@@ -344,14 +355,30 @@ export class Store {
     };
   }
 
+  async switchTelegramTeacherContext(
+    userId: string | number,
+    studentId: string
+  ): Promise<TelegramStudentProfile> {
+    const telegramUserId = String(userId);
+    const linkedStudents = await findStudentsByTelegramUser(telegramUserId);
+    if (!linkedStudents.length) {
+      throw new Error("Student not found");
+    }
+
+    const target = linkedStudents.find((item) => item.id === studentId);
+    if (!target) {
+      throw new Error("Student not linked");
+    }
+
+    await setTelegramUserActiveStudentId(telegramUserId, target.id);
+    return this.getTelegramStudentProfile(telegramUserId);
+  }
+
   async updateTelegramStudentPreferences(
     userId: string | number,
     input: { lessonReminderMinutes?: unknown; timezone?: unknown }
   ): Promise<TelegramStudentProfile> {
-    const linked = await findStudentByTelegramUser(String(userId));
-    if (!linked) {
-      throw new Error("Student not found");
-    }
+    const { linked } = await this.resolveTelegramTeacherContext(String(userId));
 
     const db = await loadAccountDatabase(linked.accountId);
     const patch: {
@@ -1594,6 +1621,32 @@ export class Store {
 
   calculateBalanceFor(db: Database, studentId: string): StudentBalance {
     return getStudentBalance(db, studentId);
+  }
+
+  private async resolveTelegramTeacherContext(userId: string): Promise<{
+    linked: Student & { accountId: string; accountName: string };
+    teachers: TelegramTeacherContext[];
+  }> {
+    const linkedStudents = await findStudentsByTelegramUser(userId);
+    if (!linkedStudents.length) {
+      throw new Error("Student not found");
+    }
+
+    const teachers: TelegramTeacherContext[] = linkedStudents.map((item) => ({
+      studentId: item.id,
+      accountId: item.accountId,
+      name: item.accountName
+    }));
+
+    const activeStudentId = await getTelegramUserActiveStudentId(userId);
+    const linked =
+      linkedStudents.find((item) => item.id === activeStudentId) ?? linkedStudents[0]!;
+
+    if (linked.id !== activeStudentId) {
+      await setTelegramUserActiveStudentId(userId, linked.id);
+    }
+
+    return { linked, teachers };
   }
 }
 

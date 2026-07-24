@@ -13,12 +13,15 @@ function createProfile(overrides?: {
   studentMinutes?: number[] | null;
   settingsMinutes?: number[];
 }): TelegramStudentProfile {
+  const teacher = { studentId: "s1", accountId: "a1", name: "Teacher" };
   return {
     student: {
       id: "s1",
       fullName: "Alice",
       lessonReminderMinutes: overrides?.studentMinutes === undefined ? null : overrides.studentMinutes
     },
+    teacher,
+    teachers: [teacher],
     settings: {
       lessonReminderMinutes: overrides?.settingsMinutes ?? [1440, 120],
       timezone: "Europe/Minsk"

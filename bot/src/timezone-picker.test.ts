@@ -9,15 +9,22 @@ import {
 } from "./timezone-picker";
 
 function createProfile(overrides?: Partial<TelegramStudentProfile>): TelegramStudentProfile {
+  const teacher = overrides?.teacher ?? {
+    studentId: "s1",
+    accountId: "a1",
+    name: "Teacher"
+  };
   return {
-    student: { id: "s1", fullName: "Alice", timezone: null, ...overrides?.student },
+    student: { id: teacher.studentId, fullName: "Alice", timezone: null, ...overrides?.student },
+    teacher,
+    teachers: overrides?.teachers ?? [teacher],
     settings: {
       lessonReminderMinutes: [60],
       timezone: "Europe/Minsk",
       ...overrides?.settings
     },
     balance: {
-      studentId: "s1",
+      studentId: teacher.studentId,
       paidLessons: 1,
       chargedLessons: 0,
       remainingLessons: 1,

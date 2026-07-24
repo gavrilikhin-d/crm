@@ -33,6 +33,17 @@ describe("command suggestions", () => {
     expect(labels).not.toContain("👍 Буду");
     expect(labels).not.toContain("👎 Не буду");
     expect(labels).toContain("🔔 Напоминания");
+    expect(labels).not.toContain("👩‍🏫 Преподаватель");
+  });
+
+  test("adds teacher switch button only when multiple teachers are linked", () => {
+    const keyboard = commandReplyKeyboard({ showTeacherSwitch: true });
+    const labels = keyboard.keyboard.flat().map((button) =>
+      typeof button === "string" ? button : (button as { text: string }).text
+    );
+
+    expect(labels).toContain("👩‍🏫 Преподаватель");
+    expect(resolveCommandReplyLabel("👩‍🏫 Преподаватель")).toBe("teacher");
   });
 
   test("resolves known command callbacks and reply labels", () => {

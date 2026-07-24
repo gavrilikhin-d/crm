@@ -3,15 +3,22 @@ import type { Lesson, TelegramStudentProfile } from "@crm/shared";
 import { formatBalanceMessage, formatNotLinkedMessage, formatScheduleMessage } from "./messages";
 
 function createProfile(input?: Partial<TelegramStudentProfile>): TelegramStudentProfile {
+  const teacher = input?.teacher ?? {
+    studentId: input?.student?.id ?? "s1",
+    accountId: "a1",
+    name: "Teacher"
+  };
   return {
     student: {
-      id: "s1",
+      id: teacher.studentId,
       fullName: "Alice <Test>",
       ...input?.student
     },
+    teacher,
+    teachers: input?.teachers ?? [teacher],
     settings: input?.settings ?? { lessonReminderMinutes: [1440, 120], timezone: "Europe/Minsk" },
     balance: {
-      studentId: "s1",
+      studentId: teacher.studentId,
       paidLessons: 2,
       chargedLessons: 1,
       remainingLessons: 1,
@@ -64,6 +71,25 @@ describe("formatBalanceMessage", () => {
     expect(reply.parse_mode).toBe("HTML");
     expect(reply.text).toContain("Alice &lt;Test&gt;");
     expect(reply.text).toContain("Осталось занятий");
+    expect(reply.text).not.toContain("Преподаватель:");
+  });
+
+  test("shows active teacher when multiple teachers are linked", () => {
+    const reply = formatBalanceMessage(
+      createProfile({
+        teacher: { studentId: "s1", accountId: "a1", name: "Alice <Teacher>" },
+        teachers: [
+          { studentId: "s1", accountId: "a1", name: "Alice <Teacher>" },
+          { studentId: "s2", accountId: "a2", name: "Bob Teacher" }
+        ]
+      })
+    );
+
+    if (typeof reply === "string") {
+      throw new Error("expected html reply");
+    }
+
+    expect(reply.text).toContain("Преподаватель: <b>Alice &lt;Teacher&gt;</b>");
   });
 
   test("shows debt when present", () => {

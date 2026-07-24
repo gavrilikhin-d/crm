@@ -50,6 +50,16 @@ export async function updateTelegramStudentPreferences(input: {
   });
 }
 
+export async function switchTelegramTeacherContext(input: {
+  userId: number | string;
+  studentId: string;
+}): Promise<TelegramStudentProfile> {
+  return api<TelegramStudentProfile>("/internal/telegram/teacher-context", {
+    method: "POST",
+    body: input
+  });
+}
+
 export async function setParticipantStatus(input: {
   lessonId: string;
   studentId: string;
