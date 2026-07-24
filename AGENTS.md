@@ -18,7 +18,7 @@
 - Production app host is `vocalcrm.site` on AWS `eu-central-1`: Helm on k3s/EC2, images from ECR, deploys via SSM; keep resource usage modest for a small instance.
 - Production database is AWS RDS Postgres (not a container on the EC2/k3s host); ad-hoc SQL from the EC2 deploy host via a short-lived Docker `postgres` client and `DATABASE_URL` from `~/crm/.env`, not from app containers.
 - Teacher/student avatars and similar uploads are stored in S3, not on the backend filesystem; deleting teachers/students should remove their S3 objects.
-- Local full stack is `bun run dev:all`; the Telegram bot uses webhooks in prod and a separate test bot for local development. For local test bot to work, TELEGRAM_DEV_WEBHOOK_BASE_URL should point to a started ngrok
+- Local full stack is `bun run dev:all`; the Telegram bot uses webhooks in prod and a separate test bot for local development. `dev:all` starts ngrok on `BOT_PORT` (4002) and injects `TELEGRAM_DEV_WEBHOOK_BASE_URL` when `TELEGRAM_DEV_BOT_TOKEN` is set
 - Platform analytics are served by Metabase (e.g. `analytics.vocalcrm.site`) with `metabase_readonly` limited to `analytics.*` views (custom SQL must use those, not `public.*`); deploy notes live under `deploy/analytics`.
 - Visual coverage uses Storybook plus Chromatic in CI; Chromatic project tokens belong in GitHub secrets/envs, not the repo.
 - CI skips Tests/Deploy for docs-only changes (`*.md`, `AGENTS.md`, etc.); Chromatic runs only for UI-related paths (`frontend/`, `shared/`, root lockfiles/deps, or the Chromatic workflow).

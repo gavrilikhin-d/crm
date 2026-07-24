@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   date,
@@ -170,21 +171,30 @@ export const payments = pgTable("payments", {
   createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull()
 });
 
-export const reminders = pgTable("reminders", {
-  id: text("id").primaryKey(),
-  accountId: text("account_id")
-    .notNull()
-    .references(() => accounts.id, { onDelete: "cascade" }),
-  type: text("type").notNull(),
-  lessonId: text("lesson_id").references(() => lessons.id, { onDelete: "cascade" }),
-  studentId: text("student_id").references(() => students.id, { onDelete: "cascade" }),
-  scheduledFor: timestamp("scheduled_for", { withTimezone: true, mode: "string" }).notNull(),
-  status: text("status").notNull(),
-  sentAt: timestamp("sent_at", { withTimezone: true, mode: "string" }),
-  error: text("error"),
-  dedupeKey: text("dedupe_key").notNull().unique(),
-  createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull()
-});
+export const reminders = pgTable(
+  "reminders",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    lessonId: text("lesson_id").references(() => lessons.id, { onDelete: "cascade" }),
+    studentId: text("student_id").references(() => students.id, { onDelete: "cascade" }),
+    scheduledFor: timestamp("scheduled_for", { withTimezone: true, mode: "string" }).notNull(),
+    status: text("status").notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true, mode: "string" }),
+    error: text("error"),
+    claimedAt: timestamp("claimed_at", { withTimezone: true, mode: "string" }),
+    dedupeKey: text("dedupe_key").notNull().unique(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull()
+  },
+  (table) => [
+    index("reminders_pending_scheduled_for_idx")
+      .on(table.scheduledFor)
+      .where(sql`${table.status} = 'pending'`)
+  ]
+);
 
 export const telegramInteractions = pgTable("telegram_interactions", {
   id: text("id").primaryKey(),

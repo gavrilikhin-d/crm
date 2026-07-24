@@ -67,6 +67,75 @@ export async function getReminderAccountId(id: string): Promise<string | null> {
   return rows[0]?.accountId ?? null;
 }
 
+const CLAIM_LEASE_INTERVAL = sql`interval '5 minutes'`;
+
+export type ClaimedReminderRow = Reminder & { accountId: string };
+
+export async function claimPendingLessonReminderRows(limit: number): Promise<ClaimedReminderRow[]> {
+  const capped = Math.max(1, Math.min(Math.trunc(limit) || 50, 100));
+  const result = await db.execute(sql`
+    WITH due AS (
+      SELECT id
+      FROM reminders
+      WHERE type = 'lesson'
+        AND status = 'pending'
+        AND scheduled_for <= now()
+        AND (claimed_at IS NULL OR claimed_at < now() - ${CLAIM_LEASE_INTERVAL})
+      ORDER BY scheduled_for
+      LIMIT ${capped}
+      FOR UPDATE SKIP LOCKED
+    )
+    UPDATE reminders AS r
+    SET claimed_at = now()
+    FROM due
+    WHERE r.id = due.id
+    RETURNING
+      r.id,
+      r.account_id,
+      r.type,
+      r.lesson_id,
+      r.student_id,
+      r.scheduled_for,
+      r.status,
+      r.sent_at,
+      r.error,
+      r.claimed_at,
+      r.dedupe_key,
+      r.created_at
+  `);
+
+  const rows = Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? []);
+  return rows.map((row) => mapClaimedReminderRow(row as Record<string, unknown>));
+}
+
+function mapClaimedReminderRow(row: Record<string, unknown>): ClaimedReminderRow {
+  const get = (snake: string, camel: string) => row[snake] ?? row[camel];
+  const asString = (value: unknown): string | undefined => {
+    if (value == null) {
+      return undefined;
+    }
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+    return String(value);
+  };
+
+  return {
+    id: String(get("id", "id")),
+    accountId: String(get("account_id", "accountId")),
+    type: String(get("type", "type")) as Reminder["type"],
+    lessonId: asString(get("lesson_id", "lessonId")),
+    studentId: asString(get("student_id", "studentId")),
+    scheduledFor: asString(get("scheduled_for", "scheduledFor"))!,
+    status: String(get("status", "status")) as Reminder["status"],
+    sentAt: asString(get("sent_at", "sentAt")),
+    error: asString(get("error", "error")),
+    claimedAt: asString(get("claimed_at", "claimedAt")),
+    dedupeKey: String(get("dedupe_key", "dedupeKey")),
+    createdAt: asString(get("created_at", "createdAt"))!
+  };
+}
+
 export async function listAccountIds(): Promise<string[]> {
   const rows = await db.select({ id: accounts.id }).from(accounts);
   return rows.map((row) => row.id);
@@ -673,6 +742,7 @@ export async function insertReminder(accountId: string, reminder: Reminder): Pro
     status: reminder.status,
     sentAt: reminder.sentAt ?? null,
     error: reminder.error ?? null,
+    claimedAt: reminder.claimedAt ?? null,
     dedupeKey: reminder.dedupeKey,
     createdAt: reminder.createdAt
   });
@@ -689,6 +759,7 @@ export async function updateReminderRecord(reminder: Reminder): Promise<void> {
       status: reminder.status,
       sentAt: reminder.sentAt ?? null,
       error: reminder.error ?? null,
+      claimedAt: reminder.claimedAt ?? null,
       dedupeKey: reminder.dedupeKey
     })
     .where(eq(reminders.id, reminder.id));
@@ -889,6 +960,7 @@ function mapReminder(row: typeof reminders.$inferSelect): Reminder {
     status: row.status as Reminder["status"],
     sentAt: row.sentAt ?? undefined,
     error: row.error ?? undefined,
+    claimedAt: row.claimedAt ?? undefined,
     dedupeKey: row.dedupeKey,
     createdAt: row.createdAt
   };

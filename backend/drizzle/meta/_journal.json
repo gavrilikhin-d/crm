@@ -64,6 +64,13 @@
       "when": 1784908000000,
       "tag": "0008_activity_and_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784910000000,
+      "tag": "0009_reminder_claim",
+      "breakpoints": true
     }
   ]
 }

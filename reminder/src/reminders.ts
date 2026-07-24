@@ -1,12 +1,19 @@
-import { sendLessonReminder, sendPaymentReminder } from "./telegram";
-import { getWorkerSnapshots, updateReminder, upsertReminder } from "./backend-client";
-import { isBackendUnreachableError } from "./fetch-retry";
-import { collectPendingLessonReminders, shouldSendManualPaymentReminder } from "./reminder-logic";
+import type { ClaimedLessonReminder } from "@crm/shared/lesson-reminder";
 import { withSentrySpan } from "@crm/shared/sentry-tracing";
+import {
+  backfillLessonReminders,
+  claimDueLessonReminders,
+  getPaymentReminderContext,
+  updateReminder,
+  upsertReminder
+} from "./backend-client";
+import { isBackendUnreachableError } from "./fetch-retry";
+import { shouldSendManualPaymentReminder } from "./reminder-logic";
+import { sendLessonReminder, sendPaymentReminder } from "./telegram";
 import { log } from "./logger";
-import type { Lesson, Student } from "@crm/shared";
 
 const minuteMs = 60_000;
+let backfillStarted = false;
 
 function logTickFailure(error: unknown): void {
   if (isBackendUnreachableError(error)) {
@@ -19,10 +26,32 @@ function logTickFailure(error: unknown): void {
 
 export function startReminderScheduler(): void {
   log.info("Reminder scheduler started");
-  void runReminderTick().catch(logTickFailure);
+  void (async () => {
+    try {
+      await ensureBackfill();
+    } catch (error) {
+      logTickFailure(error);
+    }
+    await runReminderTick().catch(logTickFailure);
+  })();
   setInterval(() => {
     void runReminderTick().catch(logTickFailure);
   }, minuteMs);
+}
+
+async function ensureBackfill(): Promise<void> {
+  if (backfillStarted) {
+    return;
+  }
+  backfillStarted = true;
+
+  try {
+    const result = await backfillLessonReminders();
+    log.info("Lesson reminder backfill completed", result);
+  } catch (error) {
+    backfillStarted = false;
+    throw error;
+  }
 }
 
 export async function runReminderTick(): Promise<void> {
@@ -30,24 +59,12 @@ export async function runReminderTick(): Promise<void> {
     "reminder.evaluate_pending",
     "task",
     async () => {
-      const workerSnapshots = await getWorkerSnapshots();
-      const pending = collectPendingLessonReminders(workerSnapshots, Date.now());
+      const claimed = await claimDueLessonReminders(50);
 
-      log.debug("Reminder tick evaluated", {
-        accounts: workerSnapshots.length,
-        pending: pending.length
-      });
+      log.debug("Reminder tick claimed", { claimed: claimed.length });
 
-      for (const item of pending) {
-        await sendReminderOnce({
-          accountId: item.accountId,
-          student: item.student,
-          lesson: item.lesson,
-          leadMinutes: item.leadMinutes,
-          scheduledFor: item.scheduledFor,
-          dedupeKey: item.dedupeKey,
-          timeZone: item.timeZone
-        });
+      for (const item of claimed) {
+        await sendClaimedLessonReminder(item);
       }
     },
     undefined
@@ -59,19 +76,8 @@ export async function sendManualPaymentReminder(studentId: string): Promise<{ se
     "reminder.manual_payment",
     "task",
     async () => {
-      const workerSnapshots = await getWorkerSnapshots();
-      const worker = workerSnapshots.find((item) => item.snapshot.students.some((student) => student.id === studentId));
-      if (!worker) {
-        throw new Error("Student not found");
-      }
-
-      const db = worker.snapshot;
-      const student = db.students.find((candidate) => candidate.id === studentId);
-      if (!student) {
-        throw new Error("Student not found");
-      }
-
-      const balance = worker.balances.find((candidate) => candidate.studentId === studentId);
+      const context = await getPaymentReminderContext(studentId);
+      const { student, balance } = context;
       const decision = shouldSendManualPaymentReminder({
         balance,
         telegramChatId: student.telegramChatId
@@ -82,7 +88,7 @@ export async function sendManualPaymentReminder(studentId: string): Promise<{ se
         return { sent: false, reason: decision.reason };
       }
 
-      const unpaidLessons = balance?.debtLessons ?? 0;
+      const unpaidLessons = balance.debtLessons ?? 0;
       const reminder = await upsertReminder({
         type: "payment",
         studentId,
@@ -114,88 +120,81 @@ export async function sendManualPaymentReminder(studentId: string): Promise<{ se
   );
 }
 
-async function sendReminderOnce(input: {
-  accountId: string;
-  student: Student;
-  lesson: Lesson;
-  leadMinutes: number;
-  scheduledFor: string;
-  dedupeKey: string;
-  timeZone: string;
-}): Promise<void> {
-  const lessonStartsAt = input.lesson.startsAt;
-  const leadDuration = formatLeadDuration(input.leadMinutes);
+async function sendClaimedLessonReminder(item: ClaimedLessonReminder): Promise<void> {
+  const lessonStartsAt = item.lesson.startsAt;
+  const leadDuration = formatLeadDuration(item.leadMinutes);
 
   return withSentrySpan(
     "reminder.send_lesson",
     "task",
     async () => {
-      const reminder = await upsertReminder({
-        type: "lesson",
-        lessonId: input.lesson.id,
-        studentId: input.student.id,
-        scheduledFor: input.scheduledFor,
-        status: "pending",
-        dedupeKey: input.dedupeKey
-      });
-
-      if (reminder.status !== "pending") {
-        log.debug("Lesson reminder skipped as duplicate", {
-          accountId: input.accountId,
-          lessonId: input.lesson.id,
-          studentId: input.student.id,
-          lessonStartsAt,
-          leadMinutes: input.leadMinutes,
-          leadDuration,
-          dedupeKey: input.dedupeKey,
-          status: reminder.status
-        });
-        return;
-      }
-
       try {
-        await sendLessonReminder(input.student, input.lesson, input.timeZone);
-        const status = input.student.telegramChatId ? "sent" : "skipped";
-        await updateReminder(reminder.id, {
+        await sendLessonReminder(
+          {
+            id: item.student.id,
+            fullName: item.student.fullName,
+            telegramChatId: item.student.telegramChatId,
+            telegramBindToken: "",
+            status: "active",
+            defaultLessonPrice: 0,
+            createdAt: "",
+            updatedAt: ""
+          },
+          {
+            id: item.lesson.id,
+            startsAt: item.lesson.startsAt,
+            durationMinutes: item.lesson.durationMinutes,
+            originalType: item.lesson.effectiveType,
+            effectiveType: item.lesson.effectiveType,
+            status: "scheduled",
+            participants: item.lesson.participants,
+            createdAt: "",
+            updatedAt: ""
+          },
+          item.timeZone
+        );
+
+        const status = item.student.telegramChatId ? "sent" : "skipped";
+        await updateReminder(item.reminderId, {
           status,
-          sentAt: input.student.telegramChatId ? new Date().toISOString() : undefined,
-          telegramChatId: input.student.telegramChatId ?? null,
-          leadMinutes: input.leadMinutes
+          sentAt: item.student.telegramChatId ? new Date().toISOString() : undefined,
+          telegramChatId: item.student.telegramChatId ?? null,
+          leadMinutes: item.leadMinutes
         });
         log.info("Lesson reminder processed", {
-          accountId: input.accountId,
-          lessonId: input.lesson.id,
-          studentId: input.student.id,
-          reminderId: reminder.id,
+          accountId: item.accountId,
+          lessonId: item.lesson.id,
+          studentId: item.student.id,
+          reminderId: item.reminderId,
           lessonStartsAt,
-          leadMinutes: input.leadMinutes,
+          leadMinutes: item.leadMinutes,
           leadDuration,
           status
         });
       } catch (error) {
-        await updateReminder(reminder.id, {
+        await updateReminder(item.reminderId, {
           status: "failed",
           error: error instanceof Error ? error.message : "Unknown error",
-          telegramChatId: input.student.telegramChatId ?? null,
-          leadMinutes: input.leadMinutes
+          telegramChatId: item.student.telegramChatId ?? null,
+          leadMinutes: item.leadMinutes
         });
         log.error("Lesson reminder failed", {
-          accountId: input.accountId,
-          lessonId: input.lesson.id,
-          studentId: input.student.id,
-          reminderId: reminder.id,
+          accountId: item.accountId,
+          lessonId: item.lesson.id,
+          studentId: item.student.id,
+          reminderId: item.reminderId,
           lessonStartsAt,
-          leadMinutes: input.leadMinutes,
+          leadMinutes: item.leadMinutes,
           leadDuration,
           err: error
         });
       }
     },
     {
-      "account.id": input.accountId,
-      "lesson.id": input.lesson.id,
-      "student.id": input.student.id,
-      "reminder.lead_minutes": input.leadMinutes
+      "account.id": item.accountId,
+      "lesson.id": item.lesson.id,
+      "student.id": item.student.id,
+      "reminder.lead_minutes": item.leadMinutes
     }
   );
 }

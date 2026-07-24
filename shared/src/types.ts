@@ -140,6 +140,7 @@ export interface Reminder {
   status: ReminderStatus;
   sentAt?: string;
   error?: string;
+  claimedAt?: string;
   dedupeKey: string;
   createdAt: string;
 }

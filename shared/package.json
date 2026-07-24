@@ -11,6 +11,7 @@
     "./lesson-callback": "./src/lesson-callback.ts",
     "./lesson-attendance": "./src/lesson-attendance.ts",
     "./lesson-dedupe": "./src/lesson-dedupe.ts",
+    "./lesson-reminder": "./src/lesson-reminder.ts",
     "./package-progress": "./src/package-progress.ts",
     "./vacation": "./src/vacation.ts",
     "./timezone": "./src/timezone.ts",

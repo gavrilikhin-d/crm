@@ -23,10 +23,19 @@ import type {
 } from "@crm/shared";
 import { assertStudentCanChangeParticipantStatus, assertTeacherParticipantStatus } from "@crm/shared/lesson-attendance";
 import { dedupeLessonsByOccurrence } from "@crm/shared/lesson-dedupe";
+import {
+  coalesceLessonReminderDeliveries,
+  desiredLessonReminders,
+  isLessonReminderStillValid,
+  parseLessonReminderDedupeKey,
+  planLessonReminderSync,
+  type ClaimedLessonReminder,
+  type PaymentReminderContext
+} from "@crm/shared/lesson-reminder";
 import { lessonOverlapsVacation, normalizeVacationPeriod } from "@crm/shared/vacation";
 import { getPlanLimits } from "@crm/shared/plans";
 import { isSupportedCurrency } from "@crm/shared/currency";
-import { isValidTimeZone } from "@crm/shared/timezone";
+import { isValidTimeZone, resolveNotificationTimeZone } from "@crm/shared/timezone";
 import type { AuthContext } from "./auth";
 import {
   deleteStudentAvatar,
@@ -37,6 +46,7 @@ import {
   studentAvatarPath
 } from "./avatars";
 import {
+  claimPendingLessonReminderRows,
   deleteLessonsByIds,
   deleteAccountRecord,
   deleteLessonPackageRecord,
@@ -45,6 +55,7 @@ import {
   deleteStudentRecords,
   deleteVacationPeriodById,
   findStudentByBindToken,
+  findStudentById,
   findStudentByTelegramUser,
   getAccountById,
   insertActivityEvent,
@@ -58,6 +69,7 @@ import {
   insertStudent,
   insertTelegramInteraction,
   insertVacationPeriod,
+  listAccountIds,
   loadAccountDatabase,
   replaceLesson,
   replaceParticipantDebtFlags,
@@ -200,6 +212,7 @@ export class Store {
     if (created.length) {
       await insertLessons(ctx.accountId, created);
       scheduleGoogleCalendarSync(ctx.accountId, created);
+      await this.syncLessonReminders(ctx.accountId, created, db);
     }
 
     db.lessons = dedupeLessonsByOccurrence(db.lessons);
@@ -391,6 +404,10 @@ export class Store {
       });
     }
 
+    if ("lessonReminderMinutes" in patch || "timezone" in patch) {
+      await this.syncStudentLessonReminders(linked.accountId, linked.id);
+    }
+
     return this.getTelegramStudentProfile(userId);
   }
 
@@ -426,6 +443,11 @@ export class Store {
       throw new Error("Full name is required");
     }
     await updateStudentRecord(student);
+
+    if ("lessonReminderMinutes" in rest || "timezone" in rest) {
+      await this.syncStudentLessonReminders(ctx.accountId, student.id, db);
+    }
+
     recordActivity(ctx.accountId, "student.update", {
       actorType: "teacher",
       entityType: "student",
@@ -462,14 +484,19 @@ export class Store {
       console.warn(`[student-delete] Failed to delete avatar for ${id}`, error);
     });
 
+    const remainingLessons = db.lessons.filter((lesson) => lesson.participants.length > 0);
+
     await Promise.all([
       avatarDelete,
       deleteStudentRecords(id),
       ...emptyLessons.map((lesson) => this.purgeLesson(ctx.accountId, db, lesson)),
-      ...db.lessons
-        .filter((lesson) => lesson.participants.length > 0)
-        .map((lesson) => replaceLesson(lesson))
+      ...remainingLessons.map((lesson) => replaceLesson(lesson))
     ]);
+
+    if (remainingLessons.length) {
+      await this.syncLessonReminders(ctx.accountId, remainingLessons, db);
+    }
+
     recordActivity(ctx.accountId, "student.delete", {
       actorType: "teacher",
       entityType: "student",
@@ -523,6 +550,7 @@ export class Store {
 
     if (cancelledLessons.length) {
       scheduleGoogleCalendarSync(accountId, cancelledLessons);
+      await this.syncLessonReminders(accountId, cancelledLessons, db);
     }
 
     return cancelledLessons.length;
@@ -598,6 +626,12 @@ export class Store {
         : {})
     };
     await updateAppSettings(ctx.accountId, settings);
+    db.settings = settings;
+
+    if (input.lessonReminderMinutes !== undefined) {
+      await this.syncLessonReminders(ctx.accountId, db.lessons, db);
+    }
+
     recordActivity(ctx.accountId, "settings.update", {
       actorType: "teacher",
       entityType: "settings",
@@ -757,6 +791,7 @@ export class Store {
     });
     await insertLessons(ctx.accountId, toInsert);
     scheduleGoogleCalendarSync(ctx.accountId, toInsert);
+    await this.syncLessonReminders(ctx.accountId, toInsert, db);
     recordActivity(ctx.accountId, "lesson.create", {
       actorType: "teacher",
       entityType: "lesson",
@@ -848,6 +883,7 @@ export class Store {
       ...(schedule ? [updateRecurringScheduleRecord(schedule)] : [])
     ]);
     scheduleGoogleCalendarSync(ctx.accountId, [lesson]);
+    await this.syncLessonReminders(ctx.accountId, [lesson], db);
     recordActivity(ctx.accountId, "lesson.update", {
       actorType: "teacher",
       entityType: "lesson",
@@ -883,6 +919,7 @@ export class Store {
       recalculateLesson(lesson, db.settings.individualDurationMinutes, db.settings.groupDurationMinutes);
       await replaceLesson(lesson);
       scheduleGoogleCalendarSync(ctx.accountId, [lesson]);
+      await this.syncLessonReminders(ctx.accountId, [lesson], db);
       recordActivity(ctx.accountId, "lesson.participant.status", {
         actorType: "teacher",
         entityType: "lesson",
@@ -916,6 +953,7 @@ export class Store {
     recalculateLesson(lesson, db.settings.individualDurationMinutes, db.settings.groupDurationMinutes);
     await replaceLesson(lesson);
     scheduleGoogleCalendarSync(ctx.accountId, [lesson]);
+    await this.syncLessonReminders(ctx.accountId, [lesson], db);
     return lesson;
   }
 
@@ -981,6 +1019,7 @@ export class Store {
     recalculateLesson(lesson, db.settings.individualDurationMinutes, db.settings.groupDurationMinutes);
     await replaceLesson(lesson);
     scheduleGoogleCalendarSync(ctx.accountId, [lesson]);
+    await this.syncLessonReminders(ctx.accountId, [lesson], db);
     recordActivity(ctx.accountId, "lesson.participant.add", {
       actorType: "teacher",
       entityType: "lesson",
@@ -1023,6 +1062,7 @@ export class Store {
     recalculateLesson(lesson, db.settings.individualDurationMinutes, db.settings.groupDurationMinutes);
     await replaceLesson(lesson);
     scheduleGoogleCalendarSync(ctx.accountId, [lesson]);
+    await this.syncLessonReminders(ctx.accountId, [lesson], db);
     recordActivity(ctx.accountId, "lesson.participant.remove", {
       actorType: "teacher",
       entityType: "lesson",
@@ -1043,6 +1083,7 @@ export class Store {
     recalculateLesson(lesson, db.settings.individualDurationMinutes, db.settings.groupDurationMinutes);
     await replaceLesson(lesson);
     scheduleGoogleCalendarSync(ctx.accountId, [lesson]);
+    await this.syncLessonReminders(ctx.accountId, [lesson], db);
     recordActivity(ctx.accountId, "lesson.complete", {
       actorType: "teacher",
       entityType: "lesson",
@@ -1063,6 +1104,7 @@ export class Store {
     lesson.updatedAt = now();
     await replaceLesson(lesson);
     scheduleGoogleCalendarSync(ctx.accountId, [lesson]);
+    await this.syncLessonReminders(ctx.accountId, [lesson], db);
     recordActivity(ctx.accountId, "lesson.cancel", {
       actorType: "teacher",
       entityType: "lesson",
@@ -1286,6 +1328,188 @@ export class Store {
     return adjustment;
   }
 
+  async syncLessonReminders(accountId: string, lessons: Lesson[], dbInput?: Database): Promise<void> {
+    if (!lessons.length) {
+      return;
+    }
+
+    const db = dbInput ?? (await loadAccountDatabase(accountId));
+    const studentsById = new Map(db.students.map((student) => [student.id, student]));
+
+    for (const lesson of lessons) {
+      const desired = desiredLessonReminders({
+        lesson,
+        studentsById,
+        settings: db.settings
+      });
+      const actions = planLessonReminderSync({
+        existing: db.reminders,
+        desired,
+        lessonId: lesson.id
+      });
+
+      for (const action of actions) {
+        if (action.type === "insert") {
+          const created: Reminder = {
+            id: nanoid(),
+            type: "lesson",
+            lessonId: action.desired.lessonId,
+            studentId: action.desired.studentId,
+            scheduledFor: action.desired.scheduledFor,
+            status: "pending",
+            dedupeKey: action.desired.dedupeKey,
+            createdAt: now()
+          };
+          await insertReminder(accountId, created);
+          db.reminders.push(created);
+          continue;
+        }
+
+        const reminder = db.reminders.find((item) => item.id === action.reminderId);
+        if (!reminder) {
+          continue;
+        }
+
+        if (action.type === "skip") {
+          reminder.status = "skipped";
+          reminder.claimedAt = undefined;
+          reminder.error = undefined;
+          await updateReminderRecord(reminder);
+          continue;
+        }
+
+        reminder.scheduledFor = action.desired.scheduledFor;
+        reminder.claimedAt = undefined;
+        if (action.reArm) {
+          reminder.status = "pending";
+          reminder.sentAt = undefined;
+          reminder.error = undefined;
+        }
+        await updateReminderRecord(reminder);
+      }
+    }
+  }
+
+  async syncStudentLessonReminders(accountId: string, studentId: string, dbInput?: Database): Promise<void> {
+    const db = dbInput ?? (await loadAccountDatabase(accountId));
+    const lessons = db.lessons.filter((lesson) =>
+      lesson.participants.some((participant) => participant.studentId === studentId)
+    );
+    await this.syncLessonReminders(accountId, lessons, db);
+  }
+
+  async backfillLessonReminders(): Promise<{ accounts: number; lessons: number }> {
+    const accountIds = await listAccountIds();
+    let lessons = 0;
+
+    for (const accountId of accountIds) {
+      const db = await loadAccountDatabase(accountId);
+      const created = materializeRecurringLessons(db);
+      if (created.length) {
+        await insertLessons(accountId, created);
+        db.lessons.push(...created);
+      }
+      await this.syncLessonReminders(accountId, db.lessons, db);
+      lessons += db.lessons.length;
+    }
+
+    return { accounts: accountIds.length, lessons };
+  }
+
+  async claimDueLessonReminders(limit = 50): Promise<ClaimedLessonReminder[]> {
+    const claimedRows = await claimPendingLessonReminderRows(limit);
+    const payloads: ClaimedLessonReminder[] = [];
+    const dbByAccount = new Map<string, Database>();
+
+    for (const reminder of claimedRows) {
+      if (!reminder.lessonId || !reminder.studentId) {
+        await this.updateReminder(reminder.accountId, reminder.id, {
+          status: "skipped",
+          error: "Reminder missing lesson or student"
+        });
+        continue;
+      }
+
+      let db = dbByAccount.get(reminder.accountId);
+      if (!db) {
+        db = await loadAccountDatabase(reminder.accountId);
+        dbByAccount.set(reminder.accountId, db);
+      }
+
+      const lesson = db.lessons.find((item) => item.id === reminder.lessonId);
+      const student = db.students.find((item) => item.id === reminder.studentId);
+      const parsed = parseLessonReminderDedupeKey(reminder.dedupeKey);
+      const leadMinutes = parsed?.leadMinutes;
+
+      if (!lesson || !student || leadMinutes == null || !isLessonReminderStillValid({ lesson, studentId: student.id })) {
+        await this.updateReminder(reminder.accountId, reminder.id, {
+          status: "skipped",
+          error: "Reminder no longer valid",
+          leadMinutes: leadMinutes ?? null,
+          telegramChatId: student?.telegramChatId ?? null
+        });
+        continue;
+      }
+
+      payloads.push({
+        reminderId: reminder.id,
+        accountId: reminder.accountId,
+        dedupeKey: reminder.dedupeKey,
+        leadMinutes,
+        scheduledFor: reminder.scheduledFor,
+        timeZone: resolveNotificationTimeZone({
+          studentTimeZone: student.timezone,
+          teacherTimeZone: db.settings.timezone
+        }),
+        student: {
+          id: student.id,
+          fullName: student.fullName,
+          telegramChatId: student.telegramChatId
+        },
+        lesson: {
+          id: lesson.id,
+          startsAt: lesson.startsAt,
+          durationMinutes: lesson.durationMinutes,
+          effectiveType: lesson.effectiveType,
+          participants: lesson.participants
+        }
+      });
+    }
+
+    const { deliver, skip } = coalesceLessonReminderDeliveries(payloads);
+    for (const item of skip) {
+      await this.updateReminder(item.accountId, item.reminderId, {
+        status: "skipped",
+        error: "Superseded by closer lesson reminder",
+        leadMinutes: item.leadMinutes,
+        telegramChatId: item.student.telegramChatId ?? null
+      });
+    }
+
+    return deliver;
+  }
+
+  async getPaymentReminderContext(studentId: string): Promise<PaymentReminderContext> {
+    const linked = await findStudentById(studentId);
+    if (!linked) {
+      throw new Error("Student not found");
+    }
+
+    const db = await loadAccountDatabase(linked.accountId);
+    const student = mustFind(db.students, studentId, "Student");
+    const balance = getStudentBalance(db, studentId);
+
+    return {
+      accountId: linked.accountId,
+      student,
+      balance: {
+        studentId: balance.studentId,
+        remainingLessons: balance.remainingLessons,
+        debtLessons: balance.debtLessons
+      }
+    };
+  }
+
   async upsertReminder(accountId: string, reminder: Omit<Reminder, "id" | "createdAt">): Promise<Reminder> {
     const db = await loadAccountDatabase(accountId);
     const existing = db.reminders.find((item) => item.dedupeKey === reminder.dedupeKey);
@@ -1307,6 +1531,9 @@ export class Store {
     const reminder = mustFind(db.reminders, id, "Reminder");
     const { telegramChatId, leadMinutes, ...reminderPatch } = patch;
     Object.assign(reminder, reminderPatch);
+    if (reminder.status === "sent" || reminder.status === "failed" || reminder.status === "skipped") {
+      reminder.claimedAt = undefined;
+    }
     await updateReminderRecord(reminder);
 
     if (reminder.status === "sent" || reminder.status === "failed" || reminder.status === "skipped") {

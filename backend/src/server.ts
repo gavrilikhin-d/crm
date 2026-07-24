@@ -28,8 +28,7 @@ import {
   findStudentById,
   getAccountById,
   getLessonAccountId,
-  getReminderAccountId,
-  listAccountIds
+  getReminderAccountId
 } from "./db/repository";
 import { PlanLimitError, StoreValidationError, store, type ReminderUpdatePatch } from "./store";
 import { verifyGoogleCalendarOAuthState } from "./google-calendar/oauth-state";
@@ -119,13 +118,15 @@ const protectedRoutes: Array<{ method: string; pattern: RegExp; handler: Handler
 ];
 
 const internalRoutes: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
-  route("GET", /^\/internal\/worker\/snapshots$/, getWorkerSnapshots),
   route("POST", /^\/internal\/lessons\/([^/]+)\/participants\/([^/]+)\/status$/, setParticipantStatusInternal),
   route("POST", /^\/internal\/telegram\/bind$/, bindTelegram),
   route("GET", /^\/internal\/telegram\/profile$/, getTelegramProfile),
   route("PATCH", /^\/internal\/telegram\/preferences$/, updateTelegramPreferences),
   route("POST", /^\/internal\/reminders$/, upsertReminder),
-  route("PATCH", /^\/internal\/reminders\/([^/]+)$/, updateReminder)
+  route("POST", /^\/internal\/reminders\/claim$/, claimDueReminders),
+  route("POST", /^\/internal\/reminders\/backfill$/, backfillReminders),
+  route("PATCH", /^\/internal\/reminders\/([^/]+)$/, updateReminder),
+  route("GET", /^\/internal\/payment-reminder-context\/([^/]+)$/, getPaymentReminderContext)
 ];
 
 void startServer().catch((error) => {
@@ -596,21 +597,22 @@ async function deleteVacationPeriod(_request: IncomingMessage, response: ServerR
   broadcastSnapshotMessage(ctx!, { type: "calendar:invalidate" });
 }
 
-async function getWorkerSnapshots(_request: IncomingMessage, response: ServerResponse) {
-  const accountIds = await listAccountIds();
-  const snapshots = await Promise.all(
-    accountIds.map(async (accountId) => {
-      const account = await getAccountById(accountId);
-      if (!account) {
-        return null;
-      }
-      const ctx = { accountId, email: account.email, plan: account.plan };
-      const snapshot = await store.getSnapshot(ctx);
-      const balances = await store.getBalances(ctx);
-      return { accountId, snapshot, balances, settings: snapshot.settings };
-    })
-  );
-  jsonOk(response, snapshots.filter(Boolean));
+async function claimDueReminders(request: IncomingMessage, response: ServerResponse) {
+  const body = (await readJson(request)) as { limit?: number };
+  const limit = typeof body.limit === "number" ? body.limit : 50;
+  jsonOk(response, await store.claimDueLessonReminders(limit));
+}
+
+async function backfillReminders(_request: IncomingMessage, response: ServerResponse) {
+  jsonOk(response, await store.backfillLessonReminders());
+}
+
+async function getPaymentReminderContext(
+  _request: IncomingMessage,
+  response: ServerResponse,
+  match: RegExpMatchArray
+) {
+  jsonOk(response, await store.getPaymentReminderContext(match[1]!));
 }
 
 async function setParticipantStatusInternal(request: IncomingMessage, response: ServerResponse, match: RegExpMatchArray) {

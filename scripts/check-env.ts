@@ -43,7 +43,10 @@ const profiles: Record<
       { key: "BOT_SENTRY_DSN", hint: sentryHints.BOT_SENTRY_DSN },
       { key: "REMINDER_SENTRY_DSN", hint: sentryHints.REMINDER_SENTRY_DSN },
       { key: "TELEGRAM_DEV_BOT_TOKEN", hint: "optional; local test bot token for bun dev:all" },
-      { key: "TELEGRAM_DEV_WEBHOOK_BASE_URL", hint: "required when TELEGRAM_DEV_BOT_TOKEN is set" },
+      {
+        key: "TELEGRAM_DEV_WEBHOOK_BASE_URL",
+        hint: "optional for bun dev:all (auto-started ngrok); required for bun run dev:bot alone"
+      },
       { key: "TELEGRAM_DEV_WEBHOOK_SECRET", hint: "required when TELEGRAM_DEV_BOT_TOKEN is set" }
     ],
     checkPostgres: true
@@ -80,7 +83,10 @@ const profiles: Record<
       { key: "BOT_SENTRY_DSN", hint: sentryHints.BOT_SENTRY_DSN },
       { key: "TELEGRAM_BOT_TOKEN", hint: "optional; bot skips Telegram without it" },
       { key: "TELEGRAM_DEV_BOT_TOKEN", hint: "optional; local test bot token" },
-      { key: "TELEGRAM_DEV_WEBHOOK_BASE_URL", hint: "required when TELEGRAM_DEV_BOT_TOKEN is set" },
+      {
+        key: "TELEGRAM_DEV_WEBHOOK_BASE_URL",
+        hint: "required when TELEGRAM_DEV_BOT_TOKEN is set (or use bun run dev:all to auto-start ngrok)"
+      },
       { key: "TELEGRAM_DEV_WEBHOOK_SECRET", hint: "required when TELEGRAM_DEV_BOT_TOKEN is set" },
       { key: "TELEGRAM_WEBHOOK_BASE_URL", hint: "required when TELEGRAM_BOT_TOKEN is set" },
       { key: "TELEGRAM_WEBHOOK_SECRET", hint: "required when TELEGRAM_BOT_TOKEN is set" }
@@ -164,7 +170,15 @@ async function main() {
   if ((profile === "dev" || profile === "bot") && (isSet("TELEGRAM_DEV_BOT_TOKEN") || isSet("TELEGRAM_BOT_TOKEN"))) {
     const webhookEnv = isSet("TELEGRAM_DEV_BOT_TOKEN")
       ? [
-          { key: "TELEGRAM_DEV_WEBHOOK_BASE_URL", hint: "public HTTPS tunnel origin, e.g. https://example.ngrok-free.app" },
+          // bun dev:all starts ngrok and injects TELEGRAM_DEV_WEBHOOK_BASE_URL.
+          ...(profile === "bot"
+            ? [
+                {
+                  key: "TELEGRAM_DEV_WEBHOOK_BASE_URL",
+                  hint: "public HTTPS tunnel origin, e.g. https://example.ngrok-free.app (or use bun run dev:all)"
+                }
+              ]
+            : []),
           { key: "TELEGRAM_DEV_WEBHOOK_SECRET", hint: "generate a URL-safe random value for local dev" }
         ]
       : [
