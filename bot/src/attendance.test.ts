@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { getInlineCallbackData } from "./inline-keyboard";
 import type { Lesson, TelegramStudentProfile } from "@crm/shared";
 import {
   findLessonByScheduleIndex,
@@ -143,18 +144,18 @@ describe("scheduleKeyboard", () => {
     const keyboard = scheduleKeyboard(profile, 7);
     const labelRow = keyboard.inline_keyboard[1] ?? [];
     const actionRow = keyboard.inline_keyboard[2] ?? [];
-    const callbacks = keyboard.inline_keyboard.flat().map((button) => button.callback_data);
+    const callbacks = keyboard.inline_keyboard.flat().map((button) => getInlineCallbackData(button));
 
     expect(callbacks).toContain("sch:d:7");
     expect(callbacks).toContain("sch:d:14");
     expect(labelRow).toHaveLength(1);
-    expect(labelRow[0]?.callback_data).toBe("sch:n");
+    expect(labelRow[0] ? getInlineCallbackData(labelRow[0]) : undefined).toBe("sch:n");
     expect(labelRow[0]?.text).toMatch(/^1\./);
     expect(actionRow).toHaveLength(2);
     expect(actionRow[0]?.text).toBe("👍");
-    expect(actionRow[0]?.callback_data?.startsWith("la:l1:")).toBe(true);
+    expect(actionRow[0] ? getInlineCallbackData(actionRow[0])?.startsWith("la:l1:") : false).toBe(true);
     expect(actionRow[1]?.text).toBe("👎");
-    expect(actionRow[1]?.callback_data?.startsWith("ld:l1:")).toBe(true);
+    expect(actionRow[1] ? getInlineCallbackData(actionRow[1])?.startsWith("ld:l1:") : false).toBe(true);
     expect(callbacks.some((item) => item?.includes("l2"))).toBe(false);
   });
 
@@ -182,12 +183,16 @@ describe("scheduleKeyboard", () => {
     expect(approvedLabel?.text.startsWith("👍 1.")).toBe(true);
     expect(approvedAction).toHaveLength(1);
     expect(approvedAction[0]?.text).toBe("👎");
-    expect(approvedAction[0]?.callback_data?.startsWith("ld:approved:")).toBe(true);
+    expect(approvedAction[0] ? getInlineCallbackData(approvedAction[0])?.startsWith("ld:approved:") : false).toBe(
+      true
+    );
 
     expect(declinedLabel?.text.startsWith("👎 2.")).toBe(true);
     expect(declinedAction).toHaveLength(1);
     expect(declinedAction[0]?.text).toBe("👍");
-    expect(declinedAction[0]?.callback_data?.startsWith("la:declined:")).toBe(true);
+    expect(declinedAction[0] ? getInlineCallbackData(declinedAction[0])?.startsWith("la:declined:") : false).toBe(
+      true
+    );
   });
 });
 

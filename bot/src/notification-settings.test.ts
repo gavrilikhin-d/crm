@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { TelegramStudentProfile } from "@crm/shared";
+import { getInlineCallbackData } from "./inline-keyboard";
 import {
   looksLikeNotificationMinutesInput,
   mergeNotificationMinutes,
@@ -85,8 +86,8 @@ describe("notificationSettingsKeyboard", () => {
     );
     const minuteButtons = keyboard.inline_keyboard
       .flat()
-      .filter((button) => button.callback_data?.startsWith("nt:t:"))
-      .map((button) => button.callback_data);
+      .map((button) => getInlineCallbackData(button))
+      .filter((callbackData): callbackData is string => Boolean(callbackData?.startsWith("nt:t:")));
 
     expect(minuteButtons).toEqual(["nt:t:30", "nt:t:45", "nt:t:60", "nt:t:120", "nt:t:1440"]);
     expect(
@@ -98,7 +99,7 @@ describe("notificationSettingsKeyboard", () => {
 
   test("keeps preset buttons even when inactive", () => {
     const keyboard = notificationSettingsKeyboard(createProfile({ studentMinutes: [45] }));
-    const callbacks = keyboard.inline_keyboard.flat().map((button) => button.callback_data);
+    const callbacks = keyboard.inline_keyboard.flat().map((button) => getInlineCallbackData(button));
 
     expect(callbacks).toContain("nt:t:30");
     expect(callbacks).toContain("nt:t:45");
