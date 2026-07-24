@@ -98,6 +98,7 @@ jobs:
     needs: [changes, chromatic-run]
     if: always()
     runs-on: ubuntu-latest
+    permissions: {}
     steps:
       - name: Evaluate Chromatic outcome
         run: |

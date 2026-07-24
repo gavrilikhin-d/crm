@@ -108,6 +108,8 @@ jobs:
     needs: [changes, test-run]
     if: always()
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Evaluate test outcome
         run: |
