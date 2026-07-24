@@ -22,6 +22,7 @@ export function DayCalendar({
   vacationPeriods,
   getStudent,
   onSelectLesson,
+  onCreateLessonAt,
   onLessonUpdate
 }: {
   day: Date;
@@ -33,6 +34,7 @@ export function DayCalendar({
   vacationPeriods: VacationPeriod[];
   getStudent: (studentId: string) => Student | undefined;
   onSelectLesson: (lesson: Lesson) => void;
+  onCreateLessonAt?: (startsAt: string) => void;
   onLessonUpdate: (lesson: Lesson, patch: { startsAt?: string; durationMinutes?: number }) => Promise<void>;
 }) {
   const { locale } = useI18n();
@@ -73,6 +75,7 @@ export function DayCalendar({
         draggedLesson={draggedLesson}
         getStudent={getStudent}
         onSelectLesson={onSelectLesson}
+        onCreateLessonAt={onCreateLessonAt}
         onLessonDragStart={(lesson, offsetY) => setDraggedLesson({ lesson, offsetY })}
         onLessonDragEnd={() => setDraggedLesson(null)}
         onLessonUpdate={onLessonUpdate}

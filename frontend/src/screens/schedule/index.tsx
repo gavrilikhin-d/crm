@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent } from "react";
+import { type FormEvent, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { SnapshotRefreshControl } from "@/components/snapshot-refresh-control";
 import { VacationDialog } from "@/components/vacation-dialog";
@@ -92,6 +92,8 @@ export function ScheduleScreen({
   onLessonSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   const { locale, t } = useI18n();
+  const [createLessonStartsAt, setCreateLessonStartsAt] = useState<string | null>(null);
+  const [createLessonFormKey, setCreateLessonFormKey] = useState(0);
   const scheduleViewLabels: Record<ScheduleView, string> = {
     day: t("calendar.view.day"),
     week: t("calendar.view.week"),
@@ -103,6 +105,25 @@ export function ScheduleScreen({
     todayWeekIndex === -1
       ? undefined
       : weekCalendarTimeAxisWidth + weekDayWidth * todayWeekIndex + weekDayWidth / 2;
+  const lessonFormDefaultStartsAt = createLessonStartsAt ?? getDefaultLessonStartsAt(selectedDate);
+
+  function openCreateLessonAt(startsAt: string) {
+    setCreateLessonStartsAt(startsAt);
+    setCreateLessonFormKey((key) => key + 1);
+    setLessonDialogOpen(true);
+  }
+
+  function handleLessonDialogOpenChange(open: boolean) {
+    setLessonDialogOpen(open);
+    if (!open) {
+      setCreateLessonStartsAt(null);
+      return;
+    }
+
+    if (createLessonStartsAt === null) {
+      setCreateLessonFormKey((key) => key + 1);
+    }
+  }
 
   return (
     <section className={pageSectionClass} id="schedule">
@@ -156,7 +177,7 @@ export function ScheduleScreen({
               defaultDate={selectedDate}
               onChanged={() => refreshNow()}
             />
-            <Dialog open={lessonDialogOpen} onOpenChange={setLessonDialogOpen}>
+            <Dialog open={lessonDialogOpen} onOpenChange={handleLessonDialogOpenChange}>
               <DialogTrigger asChild>
                 <Button size="icon" type="button" className="hidden sm:inline-flex" aria-label={t("calendar.createLesson")}>
                   <Plus className="size-4" />
@@ -167,10 +188,10 @@ export function ScheduleScreen({
                   <DialogTitle>{t("calendar.createLessonTitle")}</DialogTitle>
                 </DialogHeader>
                 <LessonForm
-                  key={lessonFormKey}
+                  key={`${lessonFormKey}-${createLessonFormKey}`}
                   students={students}
                   recurringEnabled={recurringEnabled}
-                  defaultStartsAt={getDefaultLessonStartsAt(selectedDate)}
+                  defaultStartsAt={lessonFormDefaultStartsAt}
                   onSubmit={onLessonSubmit}
                 />
               </DialogContent>
@@ -193,6 +214,7 @@ export function ScheduleScreen({
               vacationPeriods={vacationPeriods}
               getStudent={getStudent}
               onSelectLesson={onSelectLesson}
+              onCreateLessonAt={openCreateLessonAt}
               onLessonUpdate={onLessonUpdate}
             />
           </CalendarScrollArea>
@@ -216,6 +238,7 @@ export function ScheduleScreen({
               vacationPeriods={vacationPeriods}
               getStudent={getStudent}
               onSelectLesson={onSelectLesson}
+              onCreateLessonAt={openCreateLessonAt}
               onLessonUpdate={onLessonUpdate}
             />
           </CalendarScrollArea>

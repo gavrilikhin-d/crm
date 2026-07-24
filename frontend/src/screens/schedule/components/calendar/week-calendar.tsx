@@ -22,6 +22,7 @@ export function WeekCalendar({
   vacationPeriods,
   getStudent,
   onSelectLesson,
+  onCreateLessonAt,
   onLessonUpdate
 }: {
   weekDays: Date[];
@@ -33,6 +34,7 @@ export function WeekCalendar({
   vacationPeriods: VacationPeriod[];
   getStudent: (studentId: string) => Student | undefined;
   onSelectLesson: (lesson: Lesson) => void;
+  onCreateLessonAt?: (startsAt: string) => void;
   onLessonUpdate: (lesson: Lesson, patch: { startsAt?: string; durationMinutes?: number }) => Promise<void>;
 }) {
   const { t } = useI18n();
@@ -81,6 +83,7 @@ export function WeekCalendar({
           draggedLesson={draggedLesson}
           getStudent={getStudent}
           onSelectLesson={onSelectLesson}
+          onCreateLessonAt={onCreateLessonAt}
           onLessonDragStart={(lesson, offsetY) => setDraggedLesson({ lesson, offsetY })}
           onLessonDragEnd={() => setDraggedLesson(null)}
           onLessonUpdate={onLessonUpdate}
